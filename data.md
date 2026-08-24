@@ -1,6 +1,9 @@
 # MTO Smart Analytics — data.md
 
 > Парный документ к `spec.md`. Конфигурация, схема персистентных данных, контракт промпта и шаблона.
+> **Ревизия от 24.08.2026** по итогам ревью `MTO_Review_2026-08-24.md`: обновлены §1.1 (новый ключ
+> и контракт `RESULT_FOLDER`), §2.1 (`yearWeek`, формула `Key`), §2.2 (новый контракт
+> `fnNormalizeFields`), §2.4 (все блоки без PivotTable), §3.1–§3.2 (JSON-промпт и двухшаговый разбор).
 
 ---
 
@@ -17,11 +20,19 @@
 | `REPORT/WEEKS_WINDOW` | `8` | Окно недель для Блока 3 (KPI) |
 | `REPORT/SYNC_THRESHOLD_MIN` | `5` | Порог (в минутах?) для оценки синхронности дирекций, Блоки 7–8 — ⚠️ единица измерения не подтверждена, требует проверки при реализации |
 | `REPORT/TOPN` | `10` | Размер топ/антитоп-списка инженеров, Блок 6 |
-| `OUTPUT/RESULT_FOLDER` | `%проект%\result\` | Путь сохранения готового отчёта |
+| `REPORT/MIN_RECORDS` | `5` | **Новый ключ (24.08.2026).** Минимальное число записей сотрудника для попадания в рейтинг Блока 6. Без порога инженер с одной записью на ПК даёт 0,0 % и занимает верх «Требуют внимания». Ключ необязательный: при отсутствии код применяет 5 |
+| `OUTPUT/RESULT_FOLDER` | `%проект%\result\` | Путь сохранения готового отчёта. **Контракт значения:** `%проект%` → папка книги (`ThisWorkbook.Path`); поддерживаются `.\result`, `..\out`, абсолютный путь, UNC (`\\server\share\...`) и переменные окружения (`%TEMP%`). Разворачивание — `modHTMLEngine.ResolveOutputFolder`; если папки нет, предпринимается попытка её создать |
 
 **Lifecycle:** все ключи заполняются один раз при настройке книги под пилот и меняются вручную;
 рантайм-логика их не перезаписывает. `AI/API_KEY` — единственное поле, для которого лист защищается
 паролем отдельно от остальных ключей.
+
+> ⚠️ Защита листа Excel не шифрует содержимое и снимается общедоступными средствами: `AI/API_KEY`
+> фактически доступен всем, у кого есть файл. Зафиксировано как известный риск в `spec.md` §7.2;
+> целевое решение — держать значение вне книги, а в `Variable` хранить ссылку.
+
+**Чтение ключей:** `modMain.GetVariable(key)` (обязательный ключ, при отсутствии — ошибка) и
+`modMain.GetVariableDef(key, default)` (необязательный ключ со значением по умолчанию).
 
 ### 1.2 Параметр `prmSourcePath` (НЕ лист `Variable`, НЕ именованный диапазон Excel)
 
@@ -108,10 +119,15 @@ Parameter через Manage Parameters. Она живёт в коллекции 
       "description": "Вычисляемое поле. Нормализация post: содержит «стк» (любой регистр) → «СТК»; содержит «прк» → «ПРК»; иначе — post без изменений",
       "computed_by": "fnNormalizeFields"
     },
+    "yearWeek": {
+      "type": "integer",
+      "description": "Вычисляемое поле. year_status * 100 + week_status (например 202643). Ключ группировки и сортировки по неделям во всех блоках; на экран выводится номер недели (при данных за несколько лет — «неделя/год»). Введено 24.08.2026: week_status без года схлопывал неделю 43/2025 и 43/2026 в одну колонку и ломал арифметику окна KPI на границе года",
+      "computed_by": "fnNormalizeFields"
+    },
     "Key": {
       "type": "string",
-      "description": "Вычисляемое поле. Уникальный ключ строки для upsert",
-      "formula": "Text.From([number]) & \"|\" & Text.From([date]) & \"|\" & [ready_for] & \"|\" & [direction]",
+      "description": "Вычисляемое поле. Уникальный ключ строки для upsert. Дата приводится к тексту с ЯВНЫМ форматом и культурой — Text.From от datetime локалезависим и делает ключ нестабильным между машинами (тихие дубли в tbDATA)",
+      "formula": "Text.From([number] ?? \"\") & \"|\" & DateTime.ToText([date], [Format=\"yyyy-MM-ddTHH:mm:ss\", Culture=\"en-US\"]) & \"|\" & ([ready_for] ?? \"\") & \"|\" & ([direction] ?? \"\")",
       "computed_by": "fnComputeKey"
     },
     "deltaHours": {
@@ -120,55 +136,92 @@ Parameter через Manage Parameters. Она живёт в коллекции 
       "computed_by": "fnComputeGroupMetrics"
     }
   },
-  "required": ["number", "date", "ready_for", "direction", "status_date", "employee", "arm", "week_status", "postN", "Key"]
+  "required": ["number", "date", "ready_for", "direction", "status_date", "employee", "arm", "week_status", "postN", "yearWeek", "Key"]
 }
 ```
 
 ### 2.2 Реализация вычисляемых полей (Power Query Custom Functions)
 
+Рабочий код — в `src/powerquery/`; ниже приведена суть контрактов (при расхождении верен код).
+
+> ⚠️ **Контракт `fnNormalizeFields` изменён 24.08.2026: `(table) → table`** (Core §5.1).
+> Функция отвечает не только за `postN`, но и за **типизацию** — без неё `date`/`status_date`
+> оставались текстом, `deltaHours` не вычислялся никогда, а VBA-разбор дат падал с `Type mismatch`.
+
 ```m
-// fnNormalizeFields — вход: запись строки, выход: запись с доп. полем postN
-(row as record) as record =>
+// fnNormalizeFields — вход: таблица после разворачивания JSON; выход: та же таблица
+// + postN + yearWeek, с приведёнными типами. Culture "en-US" обязательна.
+(tbl as table) as table =>
     let
-        post = row[post],
-        postN =
-            if Text.Contains(post, "стк", Comparer.OrdinalIgnoreCase) then "СТК"
-            else if Text.Contains(post, "прк", Comparer.OrdinalIgnoreCase) then "ПРК"
-            else post
+        Existing = Table.ColumnNames(tbl),
+        TypeSpec = { {"date", type datetime}, {"status_date", type datetime},
+                     {"week_status", Int64.Type}, {"year_status", Int64.Type},
+                     {"in_bounds", type logical}, {"number", type text}, {"post", type text}
+                     /* ... остальные поля — см. src/powerquery/fnNormalizeFields.pq ... */ },
+        TypeSpecPresent = List.Select(TypeSpec, each List.Contains(Existing, _{0})),
+        Typed = Table.TransformColumnTypes(tbl, TypeSpecPresent, "en-US"),
+
+        PostNormalize = (p as nullable text) as text =>
+            let s = p ?? ""            // post может быть null (см. §2.1)
+            in  if Text.Contains(s, "стк", Comparer.OrdinalIgnoreCase) then "СТК"
+                else if Text.Contains(s, "прк", Comparer.OrdinalIgnoreCase) then "ПРК"
+                else s,
+
+        WithPostN   = Table.AddColumn(Typed, "postN", each PostNormalize([post]), type text),
+        WithYearWeek = Table.AddColumn(WithPostN, "yearWeek",
+            each (try Number.From([year_status]) otherwise 0) * 100
+               + (try Number.From([week_status]) otherwise 0), Int64.Type)
     in
-        Record.AddField(row, "postN", postN)
+        WithYearWeek
 ```
 
 ```m
-// fnComputeKey — вход: запись строки (уже с postN), выход: текст ключа
+// fnComputeKey — вход: запись строки (типизированная, с postN), выход: текст ключа
 (row as record) as text =>
-    Text.From(row[number]) & "|" & Text.From(row[date]) & "|" & row[ready_for] & "|" & row[direction]
+    Text.From(row[number] ?? "") & "|"
+  & (if row[date] = null then ""
+     else DateTime.ToText(row[date], [Format="yyyy-MM-ddTHH:mm:ss", Culture="en-US"])) & "|"
+  & (row[ready_for] ?? "") & "|" & (row[direction] ?? "")
 ```
 
 ```m
 // fnComputeGroupMetrics — вход/выход: вся таблица (после добавления Key)
 (tbl as table) as table =>
     let
-        Grouped = Table.Group(tbl, {"number", "direction"}, {
-            {"GroupRows", each _, type table}
-        }),
+        Grouped = Table.Group(tbl, {"number", "direction"}, {{"GroupRows", each _, type table}}),
         WithDelta = Table.TransformColumns(Grouped, {"GroupRows", each
             let
                 g = _,
-                startRows = Table.SelectRows(g, each [ready_for] = "Готов к приёмке"),
-                endRows   = Table.SelectRows(g, each [ready_for] = "Готов к выбытию"),
+                startRows = Table.SelectRows(g, each [ready_for] = "Готов к приёмке" and [status_date] <> null),
+                endRows   = Table.SelectRows(g, each [ready_for] = "Готов к выбытию" and [status_date] <> null),
                 tStart = if Table.IsEmpty(startRows) then null else List.Min(startRows[status_date]),
                 tEnd   = if Table.IsEmpty(endRows)   then null else List.Max(endRows[status_date]),
-                delta  = if tStart = null or tEnd = null then null else Duration.TotalHours(tEnd - tStart)
+                delta  = if tStart = null or tEnd = null then null
+                         else try Duration.TotalHours(tEnd - tStart) otherwise null
             in
-                Table.AddColumn(g, "deltaHours", each if [ready_for] = "Готов к выбытию" then delta else null)
+                Table.AddColumn(g, "deltaHours",
+                    each if [ready_for] = "Готов к выбытию" then delta else null, type nullable number)
         }),
         Result = Table.Combine(WithDelta[GroupRows])
     in
         Result
 ```
 
-> ⚠️ Код иллюстративный, не прогонялся в редакторе Power Query — при внедрении проверить типы и синтаксис.
+```m
+// fnUpsert — CORE, generic. Полная замена совпавших по Key строк (не anti-join новых).
+(newData as table, existingData as table) as table =>
+    let
+        NewBuf = Table.Buffer(newData),
+        Aligned = Table.SelectColumns(existingData, Table.ColumnNames(NewBuf), MissingField.UseNull),
+        UnmatchedOld = Table.NestedJoin(Aligned, {"Key"}, NewBuf, {"Key"}, "m", JoinKind.LeftAnti),
+        Cleaned = Table.RemoveColumns(UnmatchedOld, {"m"}),
+        Result = Table.Combine({NewBuf, Cleaned})
+    in
+        Result
+```
+
+> ⚠️ Код не прогонялся целиком в редакторе Power Query — при внедрении проверить синтаксис
+> `Table.Group`/`Table.TransformColumns`/`Table.NestedJoin` в реальном редакторе запросов.
 
 ### 2.3 `Logs` (ListObject `tbLogs`) — JSON Schema
 
@@ -188,24 +241,29 @@ Parameter через Manage Parameters. Она живёт в коллекции 
 
 ### 2.4 Аналитические блоки (агрегаты над `tbDATA`)
 
-| Блок | Строки | Столбцы | Значения | Фильтр (доп. к базовому `in_bounds=ИСТИНА, arm<>""`) | Реализация |
+**Базовый фильтр всех блоков:** `in_bounds = ИСТИНА`, `arm <> ""`. Фильтр применяется в коде
+агрегации (`modAggregate`, параметр `filters`), а не областью страницы сводной.
+
+| Блок | Строки | Столбцы | Значения | Доп. фильтр | Реализация |
 |---|---|---|---|---|---|
-| 1 | `direction → arm` | `week_status` | `Count(Key)` + строка `% планшет` | `arm ∈ {ПК, ПЛАНШЕТ}` | PivotTable (`ptBlock1`) + `modAggregate.GroupCount` для строки % |
-| 2 | `direction → postN` | — | `Count(Distinct number)` | — | `modAggregate.GroupCountDistinct` (не Pivot) |
-| 3 | (KPI, не Pivot) | — | Всего ЗН за окно `WEEKS_WINDOW`, `% планшет` ДГМ/ДЭНТ текущей недели, Δ к предыдущей неделе | — | `modAggregate.GroupCount`/`GroupCountDistinct` внутри `BuildBlock3KPI` |
-| 4 | `direction` | `week_status` | `% планшет` | — | PivotTable (`ptBlock4`) + `modAggregate.GroupCount` для строки % |
-| 5 | `postN` | `week_status` | `% планшет` | — | PivotTable (`ptBlock5`) + `modAggregate.GroupCount` для строки % |
-| 6 | `employee` | — | `% планшет`, `Count(number)`, `Average(deltaHours)`, сортировка по убыв. `% планшет` | — | `modAggregate.GroupCount`/`GroupAverage`/`SortDictionaryKeysByValue` (не Pivot) |
-| 7 | сопоставление ДГМ/ДЭНТ по одному `number` | по неделям | разница `status_date` «Готов к выбытию» между дирекциями (часы), среднее | — | `modContentMTO.BuildSyncPairs` + `Block7ToCompactText` (не Pivot) |
-| 8 | то же, что Блок 7 | по неделям × постам | то же | — | `BuildSyncPairs` + `Block8ToCompactText` (не Pivot) |
-| 9 | `zn_type` (+ `defekt_type` как доп. срез) | — | `Count(number)` | — | PivotTable (`ptBlock9`) |
+| 1 | `direction → arm` | `yearWeek` | `Count(Key)` + строка `% планшет` по каждой неделе и дирекции | `arm ∈ {ПК, ПЛАНШЕТ}` | `modAggregate.GroupCount` + `BuildBlock1Table` |
+| 2 | `direction → postN` | — | `Count(Distinct number)` | — | `modAggregate.GroupCountDistinct` |
+| 3 | (KPI) | — | Всего ЗН за `WEEKS_WINDOW` последних недель, присутствующих в данных; `% планшет` ДГМ/ДЭНТ текущей недели; Δ к предыдущей | `arm ∈ {ПК, ПЛАНШЕТ}` для долей | `GroupCount`/`GroupCountDistinct` в `BuildBlock3KPI` |
+| 4 | `direction` | `yearWeek` | `% планшет` (доля, не Count) | `arm ∈ {ПК, ПЛАНШЕТ}` | `BuildPctMatrixTable("direction")` |
+| 5 | `postN` | `yearWeek` | `% планшет` (доля, не Count) | `arm ∈ {ПК, ПЛАНШЕТ}` | `BuildPctMatrixTable("postN")` |
+| 6 | `employee` | — | `% планшет`, `Count(number)`, `Average(deltaHours)`, сортировка по `% планшет` | `Count ≥ REPORT/MIN_RECORDS`; для `deltaHours` дополнительно `ready_for = «Готов к выбытию»` | `GroupCount`/`GroupAverage`/`SortDictionaryKeysByValue` |
+| 7 | пары ДГМ↔ДЭНТ по одному `number` | `yearWeek` | средняя разница `status_date` «Готов к выбытию», часы + число пар | — | `BuildSyncPairs` + `SyncAggregate(False)` |
+| 8 | то же | `yearWeek × postN` | то же | — | `BuildSyncPairs` + `SyncAggregate(True)` |
+| 9 | `zn_type` | `defekt_type` | `Count` | — | `modAggregate.GroupCount` + `BuildBlock9Table` |
 
-> Блоки 2/3/6/7/8 изначально планировались как PivotTable, но классический Pivot без Data Model не
-> умеет Distinct Count/% от группы/сортировку по значению/попарные разницы дат — поэтому они считаются
-> напрямую по `tbDATA` через generic-модуль Core `modAggregate.bas` (see `MTO_Architecture_Core_v3.md`
-> §4, паттерн In-Memory Aggregator). Подробности реализации — `src/vba/modContentMTO.bas`.
+> **PivotTable в направлении МТО не используется** (с 24.08.2026). Все девять блоков считаются
+> через generic-модуль Core `modAggregate.bas` (снимок `DataBodyRange.Value2`, карта колонок,
+> фильтры, группировки) и рендерятся в HTML generic-функциями матрицы в `modContentMTO.bas`.
+> Причины отказа от Pivot — `MTO_Content_Spec_v3.md` §5. Скрытый лист `Pivots` больше не нужен.
 
----
+**Формат ключей словарей `modAggregate`:** значения группировки, соединённые `|`, с завершающим
+разделителем: `GroupCount(Array("direction","yearWeek"))` → `"ДГМ|202643|"`. Булевы значения
+нормализуются к `True`/`False` независимо от локали.
 
 ## 3. Маппинг промптов/шаблонов
 
@@ -223,9 +281,30 @@ JSON. Ответ строго в формате JSON: {"slide3_conclusions": "..
 "slide5_conclusions": "..."}, без markdown-разметки вокруг JSON.
 ```
 
-**Пользовательское сообщение:** агрегаты Блоков 4, 5, 7, 8, 9 (по ДГМ и ДЭНТ), сериализованные из
-`DataBodyRange`/текстовых сводок соответствующих блоков в компактный текст. **Блок 6 (employee, ФИО) в
-запрос не включается никогда.**
+Дополнительные поля тела запроса: `"temperature": 0.2`, `"response_format": {"type": "json_object"}`.
+
+**Пользовательское сообщение** — JSON, собранный из словарей `modAggregate` **по белому списку полей**:
+
+```json
+{
+  "block4_percent_by_direction": [{"row":"ДГМ","week":"43","total":120,"tablet":50,"pct":0.417}],
+  "block5_percent_by_post":      [{"row":"СТК","week":"43","total":80,"tablet":31,"pct":0.388}],
+  "block7_sync_by_week":         [{"week":"43","avg_hours":7.20,"pairs":34}],
+  "block8_sync_by_week_post":    [{"week":"43","post":"СТК","avg_hours":9.10,"pairs":12}],
+  "block9_defect_types":         [{"zn_type":"Внеплановый ремонт","defekt_type":"","count":57}]
+}
+```
+
+**Белый список полей промпта:** `direction`, `postN`, подпись недели, счётчики, доли, `zn_type`,
+`defekt_type`, часы расхождения, число пар. **Блок 6 (`employee`, ФИО) и поле `defect_desc`
+не включаются никогда** (см. `MTO_Content_Spec_v3.md` §8).
+
+Экранирование строк — полный `JsonEscape`: `\\`, `\"`, `\n`, `\r`, `\t`, `\b`, `\f` и все
+управляющие символы < 0x20 в виде `\uXXXX`. Названия постов/дефектов из 1С могут содержать перевод
+строки — без этого тело запроса становилось невалидным и провайдер отвечал HTTP 400.
+
+**Транспорт:** заголовок `Content-Type: application/json; charset=utf-8`, тело отправляется байтовым
+массивом UTF-8, ответ читается из `responseBody` как UTF-8.
 
 ### 3.2 Контракт ответа DeepSeek (обязателен, часто пропускается)
 
@@ -241,7 +320,17 @@ JSON. Ответ строго в формате JSON: {"slide3_conclusions": "..
 }
 ```
 
-**Разбор ответа:** строковыми функциями (`InStr`/`Mid`/`Split`) по трём ключам, без сторонних библиотек.
+**Разбор ответа — двухшаговый** (иначе не работает вовсе): у Chat Completions ответ имеет вид
+`{"choices":[{"message":{"content":"{\"slide3_conclusions\": \"...\"}"}}]}`, то есть целевой JSON
+лежит строкой внутри `content` и все его кавычки экранированы.
+
+1. `content = ExtractJsonStringValue(responseText, "content")` — внешний уровень;
+2. `content = JsonUnescape(content)` — развернуть `\"`, `\\`, `\n`, `\r`, `\t`, `\uXXXX`;
+   при необходимости снимается обёртка ```` ```json ````;
+3. три ключа `slideN_conclusions` ищутся уже в развёрнутом тексте.
+
+Поиск закрывающей кавычки учитывает чётность предшествующих обратных слэшей. Если `content`
+не найден — предпринимается попытка разобрать `responseText` как целевой JSON напрямую.
 **Деградация:** если по ключу `"slideN_conclusions"` не находится закрывающая кавычка/скобка (ответ обрезан
 по лимиту токенов и т.п.) — для этого слайда подставляется заглушка «Внешний ИИ недоступен, показатели
 см. в таблицах выше»; остальные распознанные слайды используют полученный текст.
@@ -265,7 +354,15 @@ JSON. Ответ строго в формате JSON: {"slide3_conclusions": "..
 | `{{BLOCK_6_TOP}}`, `{{BLOCK_6_BOTTOM}}` | Блок 6, первые/последние `Variable/REPORT/TOPN` строк | 6 (Рейтинг инженеров) |
 
 > ⚠️ Имена зафиксированы 1:1 между кодом и шаблоном, но сами имена — разумное развёртывание по
-> количеству блоков/слайдов, не сверялось с заказчиком дословно (см. `next-steps.md`, Приоритет 3).
+> количеству блоков/слайдов, не сверялось с заказчиком дословно (см. `next-steps.md`).
+>
+> ⚠️ `{{BLOCK_4_GAUGE}}` содержит **раскрашенную матрицу «дирекция × неделя»**, а не круговой
+> gauge: gauge из Content Spec §6 не реализован, вопрос о его необходимости открыт. Имя
+> плейсхолдера сохранено, чтобы не ломать сверку 1:1.
+>
+> **Экранирование:** все значения плейсхолдеров (данные 1С и текст ИИ) проходят через
+> `modHTMLEngine.HtmlEscape`; шаблон читается и результат пишется в UTF-8. `tmp_index.html` —
+> полноценный HTML-документ (`<!DOCTYPE html>`, `<meta charset="utf-8">`, `<title>`), а не фрагмент.
 
 ### 3.4 Цветовая шкала (используется в `{{BLOCK_1_TABLE}}`, `{{BLOCK_4_GAUGE}}`, `{{BLOCK_5_TABLE}}`, строка «% планшет»)
 

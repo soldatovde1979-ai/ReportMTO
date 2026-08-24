@@ -1,0 +1,13 @@
+records 25000
+keys ['number', 'date', 'ready_for', 'direction', 'status_date', 'employee', 'arm', 'post', 'day_status', 'month_status', 'year_status', 'week_status', 'zn_type', 'emp_dep', 'model_type', 'in_bounds', 'defekt_type', 'defect_desc']
+ready_for {'Готов к приемке': 12500, 'Готов к выбытию': 12500}
+direction {'ДГМ': 12500, 'ДЭНТ': 12500}
+arm {'НЕ ПОДПИСАНО': 5570, 'ПК': 6766, 'ПЛАНШЕТ': 12664}
+emp_dep {'': 5448, 'ДЭНТ': 10206, 'ДГМ': 9346}
+status_date empty {True: 5570, False: 19430}
+in_bounds {False: 25000}
+employee distinct non-empty 90
+post distinct 9
+number distinct 6250
+model_type {'Автотранспорт': 25000}
+zn_type {'Внеплановый ремонт': 18692, 'ТО4': 212, 'ТО3': 364, 'Omnicomm': 904, 'ТО5': 24, 'Обслуживание при выпуске': 2236, 'ТО1': 1268, 'СТО1': 448, 'ТО2': 532, 'ЧТО': 4, 'Замена стартера': 4, 'ТО(ВЛП/ОЗП)': 8, 'ПТО': 8, 'ГТО Технический осмотр ТС/спецмашин': 16, 'ТО6': 20, 'СТО3': 92, 'СТО2': 116, 'СТО5': 20, 'СТО4': 32}

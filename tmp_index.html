@@ -1,68 +1,144 @@
-<div id="mto-report" style="
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>МТО — использование планшетов (ДГМ/ДЭНТ)</title>
+<style>
+  :root {
     --bg:#eaf3fb; --card:#ffffff; --border:#cfe4f5; --ink:#10283e; --ink-muted:#5a7793;
     --accent:#0b6bcb; --dgm:#0b6bcb; --dent:#0f8f8a; --bad:#ef4444; --warn:#f59e0b; --good:#10b981;
-    font-family:'Segoe UI', sans-serif; background:var(--bg); color:var(--ink); padding:24px;">
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; }
+  body {
+    font-family:'Segoe UI', Tahoma, sans-serif;
+    background:var(--bg); color:var(--ink); padding:24px;
+  }
+  #mto-report { max-width:1280px; margin:0 auto; }
 
-  <nav style="display:flex; gap:8px; margin-bottom:20px;">
-    <button class="tab" data-slide="1" style="background:var(--accent); color:#fff; border:none; border-radius:6px; padding:8px 14px;">01</button>
-    <button class="tab" data-slide="2" style="background:var(--card); color:var(--ink); border:1px solid var(--border); border-radius:6px; padding:8px 14px;">02</button>
-    <button class="tab" data-slide="3" style="background:var(--card); color:var(--ink); border:1px solid var(--border); border-radius:6px; padding:8px 14px;">03</button>
-    <button class="tab" data-slide="4" style="background:var(--card); color:var(--ink); border:1px solid var(--border); border-radius:6px; padding:8px 14px;">04</button>
-    <button class="tab" data-slide="5" style="background:var(--card); color:var(--ink); border:1px solid var(--border); border-radius:6px; padding:8px 14px;">05</button>
-    <button class="tab" data-slide="6" style="background:var(--card); color:var(--ink); border:1px solid var(--border); border-radius:6px; padding:8px 14px;">06</button>
+  nav { display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; }
+  .tab {
+    background:var(--card); color:var(--ink); border:1px solid var(--border);
+    border-radius:6px; padding:8px 14px; cursor:pointer; font:inherit;
+  }
+  .tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+  .slide {
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:20px; margin-bottom:16px;
+  }
+  .slide h2 { margin-top:0; font-size:20px; }
+  .slide h3 { font-size:16px; margin-bottom:8px; }
+
+  /* KPI (Блок 3) */
+  .kpi-grid { display:flex; gap:12px; flex-wrap:wrap; }
+  .kpi {
+    flex:1 1 220px; background:var(--bg); border:1px solid var(--border);
+    border-radius:8px; padding:14px; display:flex; flex-direction:column; gap:4px;
+  }
+  .kpi-cap { color:var(--ink-muted); font-size:13px; }
+  .kpi-val { font-family:Consolas, 'Courier New', monospace; font-size:26px; font-variant-numeric:tabular-nums; }
+  .kpi-delta { color:var(--ink-muted); font-size:13px; font-family:Consolas, monospace; }
+
+  /* Таблицы блоков */
+  table.block-table {
+    border-collapse:collapse; width:100%; margin:12px 0 4px; font-size:14px;
+  }
+  table.block-table th, table.block-table td {
+    border:1px solid var(--border); padding:6px 10px; text-align:left;
+  }
+  table.block-table thead th { background:var(--bg); color:var(--ink-muted); font-weight:600; white-space:nowrap; }
+  table.block-table td.num, table.block-table td.pct, table.matrix td {
+    text-align:right; font-family:Consolas, 'Courier New', monospace; font-variant-numeric:tabular-nums;
+  }
+  table.block-table th.row-head { background:var(--card); white-space:nowrap; }
+  table.block-table td.total { font-weight:600; }
+  table.block-table tr.pct-row td:first-child { color:var(--ink-muted); }
+  table.block-table td.pct.empty { background:transparent; color:var(--ink-muted); }
+  table.block-table td.warn { color:var(--bad); font-weight:600; }
+  table.block-table tbody tr:hover td { background:rgba(11,107,203,0.04); }
+
+  .empty-note { color:var(--ink-muted); font-style:italic; margin:12px 0; }
+
+  .ai-insight {
+    margin-top:16px; padding:12px; border-left:4px solid var(--accent);
+    background:var(--bg); border-radius:6px;
+  }
+  .ai-insight strong { color:var(--accent); }
+  .ai-insight p { margin:6px 0 0; color:var(--ink-muted); white-space:pre-wrap; }
+
+  @media print { .tab { display:none; } .slide { display:block !important; page-break-after:always; } }
+</style>
+</head>
+<body>
+<div id="mto-report">
+
+  <nav>
+    <button class="tab active" data-slide="1">01</button>
+    <button class="tab" data-slide="2">02</button>
+    <button class="tab" data-slide="3">03</button>
+    <button class="tab" data-slide="4">04</button>
+    <button class="tab" data-slide="5">05</button>
+    <button class="tab" data-slide="6">06</button>
   </nav>
 
   <!-- Слайд 1: Обзор -->
-  <section class="slide" data-slide="1" style="background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:16px;">
-    <h2 style="margin-top:0;">Обзор</h2>
+  <section class="slide" data-slide="1">
+    <h2>Обзор</h2>
     {{BLOCK_3_KPI}}
   </section>
 
   <!-- Слайд 2: Свод по неделям и постам (Отчёт №4) -->
-  <section class="slide" data-slide="2" style="background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:16px;">
-    <h2 style="margin-top:0;">Свод по неделям и постам</h2>
+  <section class="slide" data-slide="2">
+    <h2>Свод по неделям и постам</h2>
     {{BLOCK_1_TABLE}}
   </section>
 
   <!-- Слайд 3: % планшет по дирекциям -->
-  <section class="slide" data-slide="3" style="background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:16px;">
-    <h2 style="margin-top:0;">% планшет по дирекциям</h2>
+  <section class="slide" data-slide="3">
+    <h2>% планшет по дирекциям</h2>
     {{BLOCK_4_GAUGE}}
-    <div class="ai-insight" style="margin-top:16px; padding:12px; border-left:4px solid var(--accent); background:var(--bg); border-radius:6px;">
-      <strong style="color:var(--accent);">AI</strong>
-      <p style="margin:6px 0 0; color:var(--ink-muted);">{{AI_INSIGHT_SLIDE_3}}</p>
+    <div class="ai-insight">
+      <strong>AI</strong>
+      <p>{{AI_INSIGHT_SLIDE_3}}</p>
     </div>
   </section>
 
   <!-- Слайд 4: Ремонты по постам (Отчёт №3) -->
-  <section class="slide" data-slide="4" style="background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:16px;">
-    <h2 style="margin-top:0;">Ремонты по постам ремзоны</h2>
+  <section class="slide" data-slide="4">
+    <h2>Ремонты по постам ремзоны</h2>
+    <h3>Количество ремонтов (уникальных ЗН)</h3>
     {{BLOCK_2_TABLE}}
+    <h3>% планшет по постам, по неделям</h3>
     {{BLOCK_5_TABLE}}
-    <div class="ai-insight" style="margin-top:16px; padding:12px; border-left:4px solid var(--accent); background:var(--bg); border-radius:6px;">
-      <strong style="color:var(--accent);">AI</strong>
-      <p style="margin:6px 0 0; color:var(--ink-muted);">{{AI_INSIGHT_SLIDE_4}}</p>
+    <div class="ai-insight">
+      <strong>AI</strong>
+      <p>{{AI_INSIGHT_SLIDE_4}}</p>
     </div>
   </section>
 
   <!-- Слайд 5: Синхронность дирекций (Отчёт №2) -->
-  <section class="slide" data-slide="5" style="background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:16px;">
-    <h2 style="margin-top:0;">Синхронность дирекций</h2>
+  <section class="slide" data-slide="5">
+    <h2>Синхронность дирекций</h2>
+    <h3>По неделям</h3>
     {{BLOCK_7_TABLE}}
+    <h3>По неделям и постам</h3>
     {{BLOCK_8_TABLE}}
+    <h3>Виды ремонта и дефектов</h3>
     {{BLOCK_9_TABLE}}
-    <div class="ai-insight" style="margin-top:16px; padding:12px; border-left:4px solid var(--accent); background:var(--bg); border-radius:6px;">
-      <strong style="color:var(--accent);">AI</strong>
-      <p style="margin:6px 0 0; color:var(--ink-muted);">{{AI_INSIGHT_SLIDE_5}}</p>
+    <div class="ai-insight">
+      <strong>AI</strong>
+      <p>{{AI_INSIGHT_SLIDE_5}}</p>
     </div>
   </section>
 
   <!-- Слайд 6: Рейтинг инженеров (Отчёты №1, №5) -->
-  <section class="slide" data-slide="6" style="background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px;">
-    <h2 style="margin-top:0;">Рейтинг инженеров</h2>
+  <section class="slide" data-slide="6">
+    <h2>Рейтинг инженеров</h2>
     <h3 style="color:var(--good);">Топ по использованию планшетов</h3>
     {{BLOCK_6_TOP}}
-    <h3 style="color:var(--bad); margin-top:20px;">Требуют внимания</h3>
+    <h3 style="color:var(--bad);">Требуют внимания</h3>
     {{BLOCK_6_BOTTOM}}
   </section>
 
@@ -73,15 +149,20 @@
       var tabs = root.querySelectorAll('.tab');
       var slides = root.querySelectorAll('.slide');
       function show(n) {
-        slides.forEach(function (s) { s.style.display = (s.dataset.slide === n) ? 'block' : 'none'; });
-        tabs.forEach(function (t) {
-          var active = t.dataset.slide === n;
-          t.style.background = active ? 'var(--accent)' : 'var(--card)';
-          t.style.color = active ? '#fff' : 'var(--ink)';
+        Array.prototype.forEach.call(slides, function (s) {
+          s.style.display = (s.getAttribute('data-slide') === n) ? 'block' : 'none';
+        });
+        Array.prototype.forEach.call(tabs, function (t) {
+          if (t.getAttribute('data-slide') === n) { t.classList.add('active'); }
+          else { t.classList.remove('active'); }
         });
       }
-      tabs.forEach(function (t) { t.addEventListener('click', function () { show(t.dataset.slide); }); });
+      Array.prototype.forEach.call(tabs, function (t) {
+        t.addEventListener('click', function () { show(t.getAttribute('data-slide')); });
+      });
       show('1');
     })();
   </script>
 </div>
+</body>
+</html>
