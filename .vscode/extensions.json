@@ -1,6 +1,8 @@
-﻿{
+{
   "recommendations": [
     "powerquery.vscode-powerquery",
-    "davidanson.vscode-markdownlint"
+    "davidanson.vscode-markdownlint",
+    "jimmyzjx.ripgrep",
+    "kilocode.kilo-code"
   ]
 }
