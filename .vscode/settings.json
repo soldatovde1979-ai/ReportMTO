@@ -1,0 +1,4 @@
+﻿{
+  "files.associations": { "*.bas": "vb", "*.pq": "powerquery" },
+  "markdown.extension.toc.levels": "2..4"
+}

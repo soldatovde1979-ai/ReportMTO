@@ -1,0 +1,429 @@
+<title>Архитектура ReportMTO</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --bg:#F5F6FA; --surface:#FFFFFF; --surface-2:#FBFBFE;
+    --text:#1C1F2A; --text-muted:#5A5F72; --border:#DCE0EA;
+    --core:#3E5AE0; --core-soft:#E8EAFC; --core-text:#2B3FAE;
+    --mto:#C97324; --mto-soft:#FBEDD9; --mto-text:#8C551A;
+    --contract:#7A4FC4; --contract-soft:#EFE7FB;
+    --danger:#B23A32; --danger-soft:#FBE6E4;
+    --shadow: 0 1px 2px rgba(28,31,42,.06), 0 8px 24px -12px rgba(28,31,42,.12);
+    --font-display:'Golos Text', 'Segoe UI', sans-serif;
+    --font-body:'IBM Plex Sans', 'Segoe UI', sans-serif;
+    --font-mono:'IBM Plex Mono', ui-monospace, 'Consolas', monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#13151C; --surface:#1B1E28; --surface-2:#20232F;
+      --text:#E7E9F2; --text-muted:#9AA0B4; --border:#2C303E;
+      --core:#8EA1FF; --core-soft:#232A4A; --core-text:#B7C2FF;
+      --mto:#F0A84E; --mto-soft:#3A2E1A; --mto-text:#F5C284;
+      --contract:#B79AE8; --contract-soft:#2E2440;
+      --danger:#E88079; --danger-soft:#3A2220;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 28px -14px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#13151C; --surface:#1B1E28; --surface-2:#20232F;
+    --text:#E7E9F2; --text-muted:#9AA0B4; --border:#2C303E;
+    --core:#8EA1FF; --core-soft:#232A4A; --core-text:#B7C2FF;
+    --mto:#F0A84E; --mto-soft:#3A2E1A; --mto-text:#F5C284;
+    --contract:#B79AE8; --contract-soft:#2E2440;
+    --danger:#E88079; --danger-soft:#3A2220;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 28px -14px rgba(0,0,0,.6);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--font-body); font-size:16px; line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  .page{max-width:1080px; margin:0 auto; padding:56px 28px 96px}
+
+  header.hero{margin-bottom:44px}
+  .eyebrow{
+    font-family:var(--font-mono); font-size:12.5px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--text-muted); margin:0 0 10px;
+  }
+  h1{
+    font-family:var(--font-display); font-weight:700; font-size:clamp(28px,4vw,40px);
+    line-height:1.12; margin:0 0 14px; text-wrap:balance; letter-spacing:-.01em;
+  }
+  .lede{font-size:17px; color:var(--text-muted); max-width:66ch; margin:0}
+  .lede code{color:var(--text)}
+
+  h2{
+    font-family:var(--font-display); font-weight:600; font-size:22px;
+    margin:64px 0 6px; letter-spacing:-.005em;
+  }
+  .section-note{color:var(--text-muted); font-size:15px; max-width:70ch; margin:0 0 24px}
+
+  code, .mono{font-family:var(--font-mono); font-size:.92em}
+  p code, li code, td code{
+    background:var(--surface-2); border:1px solid var(--border); border-radius:4px;
+    padding:.05em .35em; font-size:.85em;
+  }
+
+  /* legend */
+  .legend{
+    display:flex; flex-wrap:wrap; gap:10px 22px; padding:16px 20px;
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    box-shadow:var(--shadow); margin-bottom:8px;
+  }
+  .legend-item{display:flex; align-items:center; gap:9px; font-size:13.5px; color:var(--text-muted)}
+  .swatch{width:14px; height:14px; border-radius:4px; flex:none}
+  .swatch.core{background:var(--core)}
+  .swatch.mto{background:var(--mto)}
+  .swatch.contract{background:var(--contract)}
+  .swatch.danger{background:var(--danger); border-radius:50%}
+  .swatch.line{width:20px; height:0; border-top:2px dashed var(--core); background:none; border-radius:0}
+
+  /* figure / diagram frame */
+  figure.diagram{
+    margin:28px 0 12px; background:var(--surface); border:1px solid var(--border);
+    border-radius:14px; box-shadow:var(--shadow); padding:8px;
+    overflow-x:auto;
+  }
+  figure.diagram svg{display:block; width:100%; height:auto; min-width:640px}
+  figcaption{
+    font-size:13.5px; color:var(--text-muted); padding:14px 10px 4px; max-width:74ch;
+  }
+
+  svg text{font-family:var(--font-body); fill:var(--text)}
+  svg .mono-lbl{font-family:var(--font-mono)}
+  svg .cluster-label{font-family:var(--font-mono); font-weight:600; letter-spacing:.04em}
+  svg .stage-title{font-family:var(--font-display); font-weight:600}
+  svg .muted{fill:var(--text-muted)}
+  svg .edge-lbl{fill:var(--text-muted); font-size:11px}
+
+  /* module reference table */
+  .tbl-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow)}
+  table{width:100%; border-collapse:collapse; background:var(--surface); font-size:14.5px; min-width:760px}
+  thead th{
+    text-align:left; font-family:var(--font-mono); font-size:11.5px; letter-spacing:.06em;
+    text-transform:uppercase; color:var(--text-muted); font-weight:500;
+    padding:12px 16px; border-bottom:1px solid var(--border); background:var(--surface-2);
+  }
+  tbody td{padding:12px 16px; border-bottom:1px solid var(--border); vertical-align:top}
+  tbody tr:last-child td{border-bottom:none}
+  .owner-pill{
+    display:inline-block; padding:2px 9px; border-radius:100px; font-family:var(--font-mono);
+    font-size:11.5px; font-weight:500; white-space:nowrap;
+  }
+  .owner-pill.core{background:var(--core-soft); color:var(--core-text)}
+  .owner-pill.mto{background:var(--mto-soft); color:var(--mto-text)}
+  td.name{font-family:var(--font-mono); font-size:13.5px; white-space:nowrap}
+
+  footer{margin-top:64px; padding-top:20px; border-top:1px solid var(--border); color:var(--text-muted); font-size:13px}
+</style>
+
+<div class="page">
+
+  <header class="hero">
+    <p class="eyebrow">ReportMTO · справочная схема</p>
+    <h1>Бизнес-процесс, модули и граница Core / Content&nbsp;Spec</h1>
+    <p class="lede">
+      Как заказ-наряд из 1С превращается в HTML-отчёт: какие модули включаются на каждом шаге,
+      и какая часть кода — переиспользуемая платформа (<strong>Core</strong>), а какая — специфика
+      направления МТО (<strong>Content&nbsp;Spec</strong>), связанные через фиксированный
+      <em>Function&nbsp;Contract</em>.
+    </p>
+  </header>
+
+  <div class="legend">
+    <div class="legend-item"><span class="swatch core"></span>Core — платформа (модуль ниже применим и к другим направлениям)</div>
+    <div class="legend-item"><span class="swatch mto"></span>Content Spec — специфика МТО (9 блоков, промпт, JSON-поля)</div>
+    <div class="legend-item"><span class="swatch line"></span>Function Contract — вызов по фиксированному имени через границу</div>
+    <div class="legend-item"><span class="swatch danger"></span>PII-граница — <code>employee</code> (ФИО) дальше не проходит</div>
+  </div>
+
+  <h2>1. Бизнес-процесс: от статуса в 1С до файла в <code>result\</code></h2>
+  <p class="section-note">
+    Шесть шагов сверху вниз; чипы под каждым шагом — модули, которые в нём участвуют, окрашенные
+    по владельцу (Core / Content Spec). Слева — сквозной вызов <code>modLog.WriteLogEntry</code>,
+    он не привязан к одному шагу.
+  </p>
+
+  <figure class="diagram">
+    <svg viewBox="0 0 920 1060" role="img" aria-label="Процесс формирования отчёта МТО: выгрузка из 1С, импорт с upsert по Key, агрегация и сводные таблицы, построение промпта и обращение к DeepSeek с исключением ФИО, сборка HTML-шаблона, сохранение в папку result. Слева отмечено сквозное логирование modLog на шагах 2–5.">
+      <defs>
+        <marker id="arrCore" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#3E5AE0"/>
+        </marker>
+        <marker id="arrNeutral" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <!-- connecting arrows between stages -->
+      <line x1="400" y1="100" x2="400" y2="128" stroke="currentColor" stroke-width="2" marker-end="url(#arrNeutral)"/>
+      <line x1="400" y1="290" x2="400" y2="318" stroke="currentColor" stroke-width="2" marker-end="url(#arrNeutral)"/>
+      <line x1="400" y1="480" x2="400" y2="508" stroke="currentColor" stroke-width="2" marker-end="url(#arrNeutral)"/>
+      <line x1="400" y1="700" x2="400" y2="728" stroke="currentColor" stroke-width="2" marker-end="url(#arrNeutral)"/>
+      <line x1="400" y1="890" x2="400" y2="918" stroke="currentColor" stroke-width="2" marker-end="url(#arrNeutral)"/>
+
+      <!-- modLog side bracket -->
+      <line x1="52" y1="130" x2="52" y2="890" stroke="var(--text-muted)" stroke-width="1.5" stroke-dasharray="2 4"/>
+      <line x1="45" y1="130" x2="59" y2="130" stroke="var(--text-muted)" stroke-width="1.5"/>
+      <line x1="45" y1="320" x2="59" y2="320" stroke="var(--text-muted)" stroke-width="1.5"/>
+      <line x1="45" y1="510" x2="59" y2="510" stroke="var(--text-muted)" stroke-width="1.5"/>
+      <line x1="45" y1="730" x2="59" y2="730" stroke="var(--text-muted)" stroke-width="1.5"/>
+      <line x1="45" y1="890" x2="59" y2="890" stroke="var(--text-muted)" stroke-width="1.5"/>
+      <text class="mono-lbl muted" font-size="11" transform="rotate(-90 32 510)" x="32" y="510" text-anchor="middle">modLog.WriteLogEntry — лист Logs, шаги 2–5</text>
+
+      <!-- S1 -->
+      <rect x="90" y="30" width="620" height="70" rx="12" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.5" stroke-dasharray="4 4"/>
+      <text class="stage-title" x="112" y="58" font-size="16">1 · 1С: инженер меняет статус заказ-наряда</text>
+      <text class="muted" x="112" y="80" font-size="12.5">выгрузка → <tspan class="mono-lbl">Data/*.json</tspan> на диске — вне книги и вне периметра ReportMTO</text>
+
+      <!-- S2 -->
+      <rect x="90" y="130" width="620" height="160" rx="12" fill="var(--surface)" stroke="var(--border)" stroke-width="1.5"/>
+      <text class="stage-title" x="112" y="160" font-size="16">2 · Импорт и upsert по Key</text>
+      <text class="muted mono-lbl" x="112" y="180" font-size="11.5">modMain.LoadSourceFile → prmSourcePath → Refresh</text>
+
+      <rect x="112" y="196" width="150" height="34" rx="8" fill="var(--core-soft)"/>
+      <text x="187" y="217" text-anchor="middle" class="mono-lbl" font-size="11.5" fill="var(--core-text)">Query-ImportJSON.pq</text>
+
+      <rect x="272" y="196" width="160" height="34" rx="8" fill="var(--mto-soft)"/>
+      <text x="352" y="217" text-anchor="middle" class="mono-lbl" font-size="11.5" fill="var(--mto-text)">fnNormalizeFields.pq</text>
+
+      <rect x="442" y="196" width="150" height="34" rx="8" fill="var(--mto-soft)"/>
+      <text x="517" y="217" text-anchor="middle" class="mono-lbl" font-size="11.5" fill="var(--mto-text)">fnComputeKey.pq</text>
+
+      <rect x="602" y="196" width="90" height="34" rx="8" fill="var(--core-soft)"/>
+      <text x="647" y="217" text-anchor="middle" class="mono-lbl" font-size="11" fill="var(--core-text)">fnUpsert.pq</text>
+
+      <text class="muted" x="112" y="252" font-size="12">Полная замена совпавших строк по <tspan class="mono-lbl">Key</tspan> — не anti-join.</text>
+      <text class="muted" x="112" y="270" font-size="12">Результат: таблица <tspan class="mono-lbl">tbDATA</tspan> (лист tbDATA).</text>
+
+      <!-- S3 -->
+      <rect x="90" y="320" width="620" height="160" rx="12" fill="var(--surface)" stroke="var(--border)" stroke-width="1.5"/>
+      <text class="stage-title" x="112" y="350" font-size="16">3 · Синхронизация и агрегация</text>
+      <text class="muted mono-lbl" x="112" y="370" font-size="11.5">modMain.GenerateReport</text>
+
+      <rect x="112" y="386" width="110" height="34" rx="8" fill="var(--core-soft)"/>
+      <text x="167" y="407" text-anchor="middle" class="mono-lbl" font-size="11" fill="var(--core-text)">modPQSync</text>
+
+      <rect x="230" y="386" width="140" height="34" rx="8" fill="var(--core-soft)"/>
+      <text x="300" y="407" text-anchor="middle" class="mono-lbl" font-size="11" fill="var(--core-text)">modPivotBuilder</text>
+
+      <rect x="378" y="386" width="130" height="34" rx="8" fill="var(--core-soft)"/>
+      <text x="443" y="407" text-anchor="middle" class="mono-lbl" font-size="11" fill="var(--core-text)">modAggregate</text>
+
+      <rect x="516" y="386" width="90" height="34" rx="8" fill="var(--core-soft)"/>
+      <text x="561" y="407" text-anchor="middle" class="mono-lbl" font-size="11" fill="var(--core-text)">modColor</text>
+
+      <rect x="112" y="428" width="300" height="34" rx="8" fill="var(--mto-soft)"/>
+      <text x="262" y="449" text-anchor="middle" class="mono-lbl" font-size="11" fill="var(--mto-text)">modContentMTO — 9 аналитических блоков</text>
+
+      <text class="muted" x="422" y="450" font-size="12">Distinct Count, топ/антитоп, попарные разницы дат — то, что PivotTable без Data Model не умеет.</text>
+
+      <!-- S4 -->
+      <rect x="90" y="510" width="620" height="190" rx="12" fill="var(--surface)" stroke="var(--border)" stroke-width="1.5"/>
+      <text class="stage-title" x="112" y="540" font-size="16">4 · Промпт и обращение к ИИ</text>
+
+      <rect x="112" y="554" width="190" height="34" rx="8" fill="var(--mto-soft)"/>
+      <text x="207" y="575" text-anchor="middle" class="mono-lbl" font-size="11" fill="var(--mto-text)">modContentMTO.BuildPrompt</text>
+
+      <rect x="312" y="554" width="180" height="34" rx="8" fill="var(--core-soft)"/>
+      <text x="402" y="575" text-anchor="middle" class="mono-lbl" font-size="11" fill="var(--core-text)">modAIGateway.SendRequest</text>
+
+      <!-- PII marker -->
+      <circle cx="112" cy="612" r="7" fill="var(--danger)"/>
+      <text x="128" y="617" font-size="12" fill="var(--danger)" font-weight="600">employee (ФИО) исключается здесь — дальше в промпт не попадает</text>
+
+      <rect x="112" y="632" width="200" height="34" rx="8" fill="var(--mto-soft)"/>
+      <text x="212" y="653" text-anchor="middle" class="mono-lbl" font-size="11" fill="var(--mto-text)">modContentMTO.ParseAIResponse</text>
+
+      <text class="muted" x="112" y="686" font-size="11.5">HTTP: <tspan class="mono-lbl">CreateObject("MSXML2.ServerXMLHTTP.6.0")</tspan> — без ссылок, provider/model/URL из листа Variable</text>
+
+      <!-- branch to DeepSeek -->
+      <line x1="500" y1="588" x2="760" y2="588" stroke="var(--core)" stroke-width="2" marker-end="url(#arrCore)"/>
+      <rect x="760" y="558" width="140" height="60" rx="10" fill="var(--surface-2)" stroke="var(--core)" stroke-width="1.5" stroke-dasharray="3 3"/>
+      <text x="830" y="583" text-anchor="middle" class="mono-lbl" font-size="10.5" fill="var(--core-text)">DeepSeek</text>
+      <text x="830" y="598" text-anchor="middle" class="mono-lbl" font-size="10" fill="var(--core-text)">Chat Completions</text>
+      <text x="830" y="536" text-anchor="middle" class="edge-lbl" font-size="10">внешний, HTTPS</text>
+
+      <!-- S5 -->
+      <rect x="90" y="730" width="620" height="160" rx="12" fill="var(--surface)" stroke="var(--border)" stroke-width="1.5"/>
+      <text class="stage-title" x="112" y="760" font-size="16">5 · Сборка HTML-отчёта</text>
+
+      <rect x="112" y="776" width="220" height="34" rx="8" fill="var(--mto-soft)"/>
+      <text x="222" y="797" text-anchor="middle" class="mono-lbl" font-size="11" fill="var(--mto-text)">modContentMTO.BuildPlaceholders</text>
+
+      <rect x="342" y="776" width="140" height="34" rx="8" fill="var(--core-soft)"/>
+      <text x="412" y="797" text-anchor="middle" class="mono-lbl" font-size="11" fill="var(--core-text)">modHTMLEngine</text>
+
+      <rect x="492" y="776" width="200" height="34" rx="8" fill="var(--mto-soft)"/>
+      <text x="592" y="797" text-anchor="middle" class="mono-lbl" font-size="10.5" fill="var(--mto-text)">tmp_index.html (шаблон)</text>
+
+      <text class="muted" x="112" y="838" font-size="12">Замена <tspan class="mono-lbl">{{PLACEHOLDER}}</tspan> в HTML, автономно — без внешних CDN.</text>
+      <text class="muted" x="112" y="858" font-size="12">Ключи плейсхолдеров — только не ФИО; список сверен с modContentMTO.BuildPlaceholders (см. data.md §3.3).</text>
+
+      <!-- S6 -->
+      <rect x="90" y="920" width="620" height="90" rx="12" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.5" stroke-dasharray="4 4"/>
+      <text class="stage-title" x="112" y="950" font-size="16">6 · Результат</text>
+      <text class="muted mono-lbl" x="112" y="972" font-size="12">result\*.html — только локальная папка</text>
+      <text class="muted" x="112" y="992" font-size="12">Без email/Google Диска/облачной доставки — этот путь сознательно не реализуется.</text>
+    </svg>
+  </figure>
+  <figcaption>
+    Процесс сверху вниз: шаги 2 и 5 — там, где Core-модули (синие чипы) выполняют generic-работу
+    (импорт/upsert, рендер шаблона), а Content Spec (амбер) поставляет специфику МТО (нормализация
+    полей, 9 блоков, тексты плейсхолдеров). Шаг 4 — единственная точка выхода во внешнюю сеть,
+    и единственная точка, где явно проверяется, что ФИО не покидает книгу.
+  </figcaption>
+
+  <h2>2. Карта модулей: Core ↔ Content Spec</h2>
+  <p class="section-note">
+    Те же модули, но как граф связей, а не порядок действий. Слева — платформа Core (10 модулей:
+    8 VBA + 2 generic-запроса Power Query), справа — Content Spec направления МТО (модуль
+    <code>modContentMTO.bas</code> как хаб, 3 M-функции, HTML-шаблон). Фиолетовые пунктирные
+    стрелки — <em>Function Contract</em>: Core вызывает функцию по фиксированному имени, не зная
+    её реализации; амбер-пунктир — обратные вызовы Content Spec в generic-инструменты Core.
+  </p>
+
+  <figure class="diagram">
+    <svg viewBox="0 0 1160 800" role="img" aria-label="Граф модулей ReportMTO: кластер Core слева (modMain, modPQSync, modAIGateway, modHTMLEngine, modPivotBuilder, modAggregate, modColor, modLog, Query-ImportJSON.pq, fnUpsert.pq) и кластер Content Spec справа (modContentMTO.bas как хаб, fnNormalizeFields.pq, fnComputeKey.pq, fnComputeGroupMetrics.pq, шаблон tmp_index.html). Function Contract соединяет modMain с modContentMTO; modContentMTO в свою очередь вызывает generic-инструменты Core — modPivotBuilder, modAggregate, modColor, modHTMLEngine; Query-ImportJSON.pq ссылается на fnNormalizeFields.pq и fnComputeKey.pq по бare-имени.">
+      <defs>
+        <marker id="arrCoreLine" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#3E5AE0"/>
+        </marker>
+        <marker id="arrMtoLine" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#C97324"/>
+        </marker>
+        <marker id="arrContractLine" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#7A4FC4"/>
+        </marker>
+      </defs>
+
+      <!-- cluster backgrounds -->
+      <rect x="40" y="90" width="520" height="580" rx="16" fill="var(--core-soft)" opacity="0.45" stroke="var(--core)" stroke-width="1.5"/>
+      <rect x="620" y="90" width="500" height="330" rx="16" fill="var(--mto-soft)" opacity="0.5" stroke="var(--mto)" stroke-width="1.5"/>
+
+      <text class="cluster-label" x="60" y="112" font-size="13" fill="var(--core-text)">CORE — ПЛАТФОРМА (ПЕРЕИСПОЛЬЗУЕМО)</text>
+      <text class="cluster-label" x="640" y="112" font-size="13" fill="var(--mto-text)">CONTENT SPEC — СПЕЦИФИКА МТО</text>
+
+      <!-- Function Contract master arrow (above chips) -->
+      <line x1="180" y1="150" x2="180" y2="128" stroke="var(--contract)" stroke-width="2"/>
+      <line x1="180" y1="128" x2="870" y2="128" stroke="var(--contract)" stroke-width="2" stroke-dasharray="5 4"/>
+      <line x1="870" y1="128" x2="870" y2="150" stroke="var(--contract)" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrContractLine)"/>
+      <text x="525" y="120" text-anchor="middle" font-size="10.5" fill="var(--contract)" font-weight="600">Function Contract: BuildPivots · BuildPrompt · ParseAIResponse · BuildPlaceholders</text>
+
+      <!-- CORE grid: col1 x70-290, col2 x310-530 -->
+      <!-- row1 -->
+      <rect x="70" y="150" width="220" height="54" rx="9" fill="var(--surface)" stroke="var(--core)" stroke-width="1.3"/>
+      <text x="180" y="182" text-anchor="middle" class="mono-lbl" font-size="12.5" fill="var(--core-text)">modMain</text>
+      <rect x="310" y="150" width="220" height="54" rx="9" fill="var(--surface)" stroke="var(--core)" stroke-width="1.3"/>
+      <text x="420" y="182" text-anchor="middle" class="mono-lbl" font-size="12.5" fill="var(--core-text)">modPQSync</text>
+
+      <!-- row2 -->
+      <rect x="70" y="226" width="220" height="54" rx="9" fill="var(--surface)" stroke="var(--core)" stroke-width="1.3"/>
+      <text x="180" y="258" text-anchor="middle" class="mono-lbl" font-size="12.5" fill="var(--core-text)">modAIGateway</text>
+      <rect x="310" y="226" width="220" height="54" rx="9" fill="var(--surface)" stroke="var(--core)" stroke-width="1.3"/>
+      <text x="420" y="258" text-anchor="middle" class="mono-lbl" font-size="12.5" fill="var(--core-text)">modHTMLEngine</text>
+
+      <!-- row3 -->
+      <rect x="70" y="302" width="220" height="54" rx="9" fill="var(--surface)" stroke="var(--core)" stroke-width="1.3"/>
+      <text x="180" y="334" text-anchor="middle" class="mono-lbl" font-size="12.5" fill="var(--core-text)">modLog</text>
+      <rect x="310" y="302" width="220" height="54" rx="9" fill="var(--surface)" stroke="var(--core)" stroke-width="1.3"/>
+      <text x="420" y="334" text-anchor="middle" class="mono-lbl" font-size="12.5" fill="var(--core-text)">modPivotBuilder</text>
+
+      <!-- row4 -->
+      <rect x="70" y="378" width="220" height="54" rx="9" fill="var(--surface)" stroke="var(--core)" stroke-width="1.3"/>
+      <text x="180" y="410" text-anchor="middle" class="mono-lbl" font-size="12" fill="var(--core-text)">Query-ImportJSON.pq</text>
+      <rect x="310" y="378" width="220" height="54" rx="9" fill="var(--surface)" stroke="var(--core)" stroke-width="1.3"/>
+      <text x="420" y="410" text-anchor="middle" class="mono-lbl" font-size="12.5" fill="var(--core-text)">modAggregate</text>
+
+      <!-- row5 -->
+      <rect x="70" y="454" width="220" height="54" rx="9" fill="var(--surface)" stroke="var(--core)" stroke-width="1.3"/>
+      <text x="180" y="486" text-anchor="middle" class="mono-lbl" font-size="12.5" fill="var(--core-text)">fnUpsert.pq</text>
+      <rect x="310" y="454" width="220" height="54" rx="9" fill="var(--surface)" stroke="var(--core)" stroke-width="1.3"/>
+      <text x="420" y="486" text-anchor="middle" class="mono-lbl" font-size="12.5" fill="var(--core-text)">modColor</text>
+
+      <!-- intra-core solid edges -->
+      <line x1="180" y1="378" x2="180" y2="454" stroke="var(--core)" stroke-width="1.6" marker-end="url(#arrCoreLine)"/>
+      <text x="196" y="420" class="edge-lbl">upsert по Key</text>
+
+      <!-- CONTENT SPEC hub -->
+      <rect x="650" y="150" width="440" height="70" rx="10" fill="var(--surface)" stroke="var(--mto)" stroke-width="1.6"/>
+      <text x="870" y="180" text-anchor="middle" class="mono-lbl" font-size="13" fill="var(--mto-text)" font-weight="600">modContentMTO.bas</text>
+      <text x="870" y="198" text-anchor="middle" font-size="10.5" fill="var(--mto-text)">9 блоков · промпт · разбор ответа · плейсхолдеры</text>
+
+      <rect x="650" y="246" width="140" height="54" rx="9" fill="var(--surface)" stroke="var(--mto)" stroke-width="1.3"/>
+      <text x="720" y="278" text-anchor="middle" class="mono-lbl" font-size="10.5" fill="var(--mto-text)">fnNormalize­Fields.pq</text>
+      <rect x="805" y="246" width="140" height="54" rx="9" fill="var(--surface)" stroke="var(--mto)" stroke-width="1.3"/>
+      <text x="875" y="278" text-anchor="middle" class="mono-lbl" font-size="11" fill="var(--mto-text)">fnComputeKey.pq</text>
+      <rect x="960" y="246" width="140" height="54" rx="9" fill="var(--surface)" stroke="var(--mto)" stroke-width="1.3"/>
+      <text x="1030" y="272" text-anchor="middle" class="mono-lbl" font-size="10" fill="var(--mto-text)">fnComputeGroup­Metrics.pq</text>
+
+      <rect x="650" y="320" width="440" height="54" rx="9" fill="var(--surface)" stroke="var(--mto)" stroke-width="1.3" stroke-dasharray="3 3"/>
+      <text x="870" y="352" text-anchor="middle" class="mono-lbl" font-size="12" fill="var(--mto-text)">tmp_index.html (шаблон, 6 слайдов)</text>
+
+      <!-- hub -> 4 core tools (amber dashed fan) -->
+      <path d="M650,168 L560,168 L560,253 L530,253" fill="none" stroke="var(--mto)" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arrMtoLine)"/>
+      <text x="565" y="245" class="edge-lbl">RenderTemplate</text>
+
+      <path d="M650,183 L548,183 L548,329 L530,329" fill="none" stroke="var(--mto)" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arrMtoLine)"/>
+      <text x="553" y="321" class="edge-lbl">BuildPivots (генерик)</text>
+
+      <path d="M650,198 L536,198 L536,405 L530,405" fill="none" stroke="var(--mto)" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arrMtoLine)"/>
+      <text x="540" y="397" class="edge-lbl">GroupCount/Average/Sort</text>
+
+      <path d="M650,210 L524,210 L524,481 L530,481" fill="none" stroke="var(--mto)" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arrMtoLine)"/>
+      <text x="440" y="473" class="edge-lbl">PercentToColor</text>
+
+      <!-- Query-ImportJSON -> fnNormalizeFields / fnComputeKey (bare-name contract) -->
+      <path d="M180,378 L180,365 L720,365 L720,300" fill="none" stroke="var(--contract)" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arrContractLine)"/>
+      <path d="M180,378 L180,371 L875,371 L875,300" fill="none" stroke="var(--contract)" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arrContractLine)"/>
+      <text x="430" y="360" text-anchor="middle" class="edge-lbl" fill="var(--contract)">M bare-name reference (Function Contract)</text>
+
+      <!-- fnComputeGroupMetrics -> modAggregate -->
+      <path d="M1030,300 L1030,312 L560,312 L560,405 L530,405" fill="none" stroke="var(--mto)" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arrMtoLine)"/>
+      <text x="760" y="304" text-anchor="middle" class="edge-lbl">deltaHours (Блоки 7/8)</text>
+    </svg>
+  </figure>
+  <figcaption>
+    Всего платформа — 10 Core-модулей против 5 артефактов Content Spec: осознанно маленькая
+    поверхность специфики (это и есть цель разделения — направление можно добавить, повторно
+    используя весь левый кластер, см. <code>MTO_Architecture_Core_v3.md</code> §16). Ядро не
+    содержит ни одной строки про МТО; вся терминология направления (планшет/ПК, ДГМ/ДЭНТ, DeepSeek)
+    — только в правом кластере.
+  </figcaption>
+
+  <h2>3. Назначение модулей — таблица-справочник</h2>
+  <p class="section-note">Та же карта построчно, с кратким назначением каждого модуля.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th>Модуль</th><th>Владелец</th><th>Назначение</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="name">modMain.bas</td><td><span class="owner-pill core">Core</span></td><td>Точка входа: две кнопки на листе Main — <code>LoadSourceFile</code> (загрузка JSON, обновление <code>prmSourcePath</code>, Refresh) и <code>GenerateReport</code> (оркестрация шагов 3–5).</td></tr>
+        <tr><td class="name">modPQSync.bas</td><td><span class="owner-pill core">Core</span></td><td>Синхронный Refresh соединений Power Query — ждёт завершения обновления, прежде чем VBA продолжит читать <code>tbDATA</code>.</td></tr>
+        <tr><td class="name">modAIGateway.bas</td><td><span class="owner-pill core">Core</span></td><td>HTTP-транспорт к ИИ через <code>CreateObject("MSXML2.ServerXMLHTTP.6.0")</code> — без ссылок на библиотеки; провайдер/модель/URL берёт только с листа Variable, ничего не хардкодит.</td></tr>
+        <tr><td class="name">modHTMLEngine.bas</td><td><span class="owner-pill core">Core</span></td><td>Шаблонизатор: подстановка <code>{{PLACEHOLDER}}</code> в HTML-шаблон и сохранение результата — не знает, что означают конкретные плейсхолдеры.</td></tr>
+        <tr><td class="name">modPivotBuilder.bas</td><td><span class="owner-pill core">Core</span></td><td>Generic-конструктор PivotTable по описанию (поля строк/значений/агрегации) — не содержит специфики МТО.</td></tr>
+        <tr><td class="name">modAggregate.bas</td><td><span class="owner-pill core">Core</span></td><td>In-memory агрегация поверх массива <code>ListObject.DataBodyRange.Value2</code>: Distinct Count, среднее по группе, сортировка по значению, попарные разницы дат — то, что PivotTable без Data Model не умеет.</td></tr>
+        <tr><td class="name">modColor.bas</td><td><span class="owner-pill core">Core</span></td><td><code>PercentToColor</code>/<code>InterpolateHex</code> — раскраска ячеек по проценту для HTML-таблиц.</td></tr>
+        <tr><td class="name">modLog.bas</td><td><span class="owner-pill core">Core</span></td><td><code>WriteLogEntry</code> — запись в <code>tbLogs</code> на листе Logs; вызывается из модулей верхнего уровня на шагах 2–5.</td></tr>
+        <tr><td class="name">Query-ImportJSON.pq</td><td><span class="owner-pill core">Core</span></td><td>Generic ETL-пайплайн: читает <code>prmSourcePath</code>, разворачивает JSON, вызывает по имени <code>fnNormalizeFields</code>/<code>fnComputeKey</code>/<code>fnUpsert</code>.</td></tr>
+        <tr><td class="name">fnUpsert.pq</td><td><span class="owner-pill core">Core</span></td><td>Generic upsert по <code>Key</code> через <code>Table.Combine</code> — полная замена совпавших строк, не anti-join.</td></tr>
+        <tr><td class="name">modContentMTO.bas</td><td><span class="owner-pill mto">Content Spec</span></td><td>Хаб направления МТО: все 9 аналитических блоков, сборка промпта (без <code>employee</code>), разбор ответа ИИ, сборка плейсхолдеров — вызывает Core-инструменты (Pivot/Aggregate/Color/HTMLEngine).</td></tr>
+        <tr><td class="name">fnNormalizeFields.pq</td><td><span class="owner-pill mto">Content Spec</span></td><td>Нормализация значения <code>post</code> (регистр «СТК»/«стк»/«Стк» и т.п.) — правило специфично для формата выгрузки 1С по МТО.</td></tr>
+        <tr><td class="name">fnComputeKey.pq</td><td><span class="owner-pill mto">Content Spec</span></td><td>Формула составного <code>Key</code> (номер заказ-наряда + направление и т.п.) — определяет, что считается «той же строкой» при upsert.</td></tr>
+        <tr><td class="name">fnComputeGroupMetrics.pq</td><td><span class="owner-pill mto">Content Spec</span></td><td>Расчёт <code>deltaHours</code> — попарная разница <code>status_date</code> между записями ДГМ/ДЭНТ, используется в Блоках 7/8.</td></tr>
+        <tr><td class="name">tmp_index.html</td><td><span class="owner-pill mto">Content Spec</span></td><td>HTML-шаблон отчёта — 6 слайдов, все плейсхолдеры <code>{{BLOCK_N_...}}</code>; автономный, без внешних CDN.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    ReportMTO · схема сверена с <code>MTO_Architecture_Core_v3.md</code> и <code>MTO_Content_Spec_v3.md</code> (ревизия 24.08.2026).
+    Обновляйте эту страницу вместе со следующими правками Core/Content Spec — она читает файлы проекта, а не наоборот.
+  </footer>
+
+</div>

@@ -1,0 +1,87 @@
+﻿<div id="mto-report" style="
+    --bg:#eaf3fb; --card:#ffffff; --border:#cfe4f5; --ink:#10283e; --ink-muted:#5a7793;
+    --accent:#0b6bcb; --dgm:#0b6bcb; --dent:#0f8f8a; --bad:#ef4444; --warn:#f59e0b; --good:#10b981;
+    font-family:'Segoe UI', sans-serif; background:var(--bg); color:var(--ink); padding:24px;">
+
+  <nav style="display:flex; gap:8px; margin-bottom:20px;">
+    <button class="tab" data-slide="1" style="background:var(--accent); color:#fff; border:none; border-radius:6px; padding:8px 14px;">01</button>
+    <button class="tab" data-slide="2" style="background:var(--card); color:var(--ink); border:1px solid var(--border); border-radius:6px; padding:8px 14px;">02</button>
+    <button class="tab" data-slide="3" style="background:var(--card); color:var(--ink); border:1px solid var(--border); border-radius:6px; padding:8px 14px;">03</button>
+    <button class="tab" data-slide="4" style="background:var(--card); color:var(--ink); border:1px solid var(--border); border-radius:6px; padding:8px 14px;">04</button>
+    <button class="tab" data-slide="5" style="background:var(--card); color:var(--ink); border:1px solid var(--border); border-radius:6px; padding:8px 14px;">05</button>
+    <button class="tab" data-slide="6" style="background:var(--card); color:var(--ink); border:1px solid var(--border); border-radius:6px; padding:8px 14px;">06</button>
+  </nav>
+
+  <!-- РЎР»Р°Р№Рґ 1: РћР±Р·РѕСЂ -->
+  <section class="slide" data-slide="1" style="background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:16px;">
+    <h2 style="margin-top:0;">РћР±Р·РѕСЂ</h2>
+    {{BLOCK_3_KPI}}
+  </section>
+
+  <!-- РЎР»Р°Р№Рґ 2: РЎРІРѕРґ РїРѕ РЅРµРґРµР»СЏРј Рё РїРѕСЃС‚Р°Рј (РћС‚С‡С‘С‚ в„–4) -->
+  <section class="slide" data-slide="2" style="background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:16px;">
+    <h2 style="margin-top:0;">РЎРІРѕРґ РїРѕ РЅРµРґРµР»СЏРј Рё РїРѕСЃС‚Р°Рј</h2>
+    {{BLOCK_1_TABLE}}
+  </section>
+
+  <!-- РЎР»Р°Р№Рґ 3: % РїР»Р°РЅС€РµС‚ РїРѕ РґРёСЂРµРєС†РёСЏРј -->
+  <section class="slide" data-slide="3" style="background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:16px;">
+    <h2 style="margin-top:0;">% РїР»Р°РЅС€РµС‚ РїРѕ РґРёСЂРµРєС†РёСЏРј</h2>
+    {{BLOCK_4_GAUGE}}
+    <div class="ai-insight" style="margin-top:16px; padding:12px; border-left:4px solid var(--accent); background:var(--bg); border-radius:6px;">
+      <strong style="color:var(--accent);">AI</strong>
+      <p style="margin:6px 0 0; color:var(--ink-muted);">{{AI_INSIGHT_SLIDE_3}}</p>
+    </div>
+  </section>
+
+  <!-- РЎР»Р°Р№Рґ 4: Р РµРјРѕРЅС‚С‹ РїРѕ РїРѕСЃС‚Р°Рј (РћС‚С‡С‘С‚ в„–3) -->
+  <section class="slide" data-slide="4" style="background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:16px;">
+    <h2 style="margin-top:0;">Р РµРјРѕРЅС‚С‹ РїРѕ РїРѕСЃС‚Р°Рј СЂРµРјР·РѕРЅС‹</h2>
+    {{BLOCK_2_TABLE}}
+    {{BLOCK_5_TABLE}}
+    <div class="ai-insight" style="margin-top:16px; padding:12px; border-left:4px solid var(--accent); background:var(--bg); border-radius:6px;">
+      <strong style="color:var(--accent);">AI</strong>
+      <p style="margin:6px 0 0; color:var(--ink-muted);">{{AI_INSIGHT_SLIDE_4}}</p>
+    </div>
+  </section>
+
+  <!-- РЎР»Р°Р№Рґ 5: РЎРёРЅС…СЂРѕРЅРЅРѕСЃС‚СЊ РґРёСЂРµРєС†РёР№ (РћС‚С‡С‘С‚ в„–2) -->
+  <section class="slide" data-slide="5" style="background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:16px;">
+    <h2 style="margin-top:0;">РЎРёРЅС…СЂРѕРЅРЅРѕСЃС‚СЊ РґРёСЂРµРєС†РёР№</h2>
+    {{BLOCK_7_TABLE}}
+    {{BLOCK_8_TABLE}}
+    {{BLOCK_9_TABLE}}
+    <div class="ai-insight" style="margin-top:16px; padding:12px; border-left:4px solid var(--accent); background:var(--bg); border-radius:6px;">
+      <strong style="color:var(--accent);">AI</strong>
+      <p style="margin:6px 0 0; color:var(--ink-muted);">{{AI_INSIGHT_SLIDE_5}}</p>
+    </div>
+  </section>
+
+  <!-- РЎР»Р°Р№Рґ 6: Р РµР№С‚РёРЅРі РёРЅР¶РµРЅРµСЂРѕРІ (РћС‚С‡С‘С‚С‹ в„–1, в„–5) -->
+  <section class="slide" data-slide="6" style="background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px;">
+    <h2 style="margin-top:0;">Р РµР№С‚РёРЅРі РёРЅР¶РµРЅРµСЂРѕРІ</h2>
+    <h3 style="color:var(--good);">РўРѕРї РїРѕ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЋ РїР»Р°РЅС€РµС‚РѕРІ</h3>
+    {{BLOCK_6_TOP}}
+    <h3 style="color:var(--bad); margin-top:20px;">РўСЂРµР±СѓСЋС‚ РІРЅРёРјР°РЅРёСЏ</h3>
+    {{BLOCK_6_BOTTOM}}
+  </section>
+
+  <script>
+    // РџСЂРѕСЃС‚Р°СЏ РЅР°РІРёРіР°С†РёСЏ РїРѕ РІРєР»Р°РґРєР°Рј вЂ” Р±РµР· РІРЅРµС€РЅРёС… Р±РёР±Р»РёРѕС‚РµРє (РѕС„Р»Р°Р№РЅ-Р°РІС‚РѕРЅРѕРјРЅРѕСЃС‚СЊ, Core В§9).
+    (function () {
+      var root = document.getElementById('mto-report');
+      var tabs = root.querySelectorAll('.tab');
+      var slides = root.querySelectorAll('.slide');
+      function show(n) {
+        slides.forEach(function (s) { s.style.display = (s.dataset.slide === n) ? 'block' : 'none'; });
+        tabs.forEach(function (t) {
+          var active = t.dataset.slide === n;
+          t.style.background = active ? 'var(--accent)' : 'var(--card)';
+          t.style.color = active ? '#fff' : 'var(--ink)';
+        });
+      }
+      tabs.forEach(function (t) { t.addEventListener('click', function () { show(t.dataset.slide); }); });
+      show('1');
+    })();
+  </script>
+</div>

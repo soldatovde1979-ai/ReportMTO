@@ -1,0 +1,7 @@
+﻿/Data/*.json
+/result/*.html
+/result/*.xlsx
+!/Data/.gitkeep
+!/result/.gitkeep
+~$*.xlsm
+*.tmp
