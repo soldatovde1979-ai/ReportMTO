@@ -1,0 +1,42 @@
+[
+ {
+  "number": "ЗН-002",
+  "date": "2026-08-24T08:00:00",
+  "ready_for": "Готов к приемке",
+  "direction": "ДГМ",
+  "status_date": "2026-08-25T08:00:00",
+  "employee": "Сидоров С.С.",
+  "arm": "ПК",
+  "post": "стк",
+  "zn_type": "Внеплановый ремонт",
+  "emp_dep": "ДГМ",
+  "model_type": "Автотранспорт",
+  "in_bounds": true,
+  "day_status": 1,
+  "month_status": 1,
+  "year_status": 2026,
+  "week_status": 35,
+  "defekt_type": "Электрооборудование",
+  "defect_desc": "не горит фара"
+ },
+ {
+  "number": "ЗН-002",
+  "date": "2026-08-24T08:00:00",
+  "ready_for": "Готов к выбытию",
+  "direction": "ДГМ",
+  "status_date": "2026-08-25T18:00:00",
+  "employee": "Сидоров С.С.",
+  "arm": "ПК",
+  "post": "стк",
+  "zn_type": "Внеплановый ремонт",
+  "emp_dep": "ДГМ",
+  "model_type": "Автотранспорт",
+  "in_bounds": true,
+  "day_status": 1,
+  "month_status": 1,
+  "year_status": 2026,
+  "week_status": 35,
+  "defekt_type": "Электрооборудование",
+  "defect_desc": "не горит фара"
+ }
+]

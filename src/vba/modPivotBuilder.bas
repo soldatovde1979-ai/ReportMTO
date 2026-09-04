@@ -2,6 +2,11 @@ Attribute VB_Name = "modPivotBuilder"
 ' modPivotBuilder — CORE, generic. Не знает про Блоки/направление — только конструирует
 ' PivotTable по переданным именам полей. Раскладку 9 блоков МТО (какие поля куда) задаёт
 ' Content Spec (см. modContentMTO.bas: BuildPivots).
+'
+' (!) Статус на 24.08.2026: направлением МТО этот модуль НЕ используется - Блоки 1/4/5/9
+' переведены на modAggregate + generic-рендер матрицы (ревью, P1-1/P1-2/P1-3/P2-6:
+' Pivot без Data Model не фильтрует поле области страницы и не даёт «% планшет» по сетке
+' недель). Модуль остаётся частью Core как готовый механизм для будущих направлений.
 Option Explicit
 
 Public Function CreatePivotCache(sourceRange As Range) As PivotCache
