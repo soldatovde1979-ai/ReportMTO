@@ -285,7 +285,19 @@ try {
     } catch { $alreadyLoaded = $false }
 
     if ($alreadyLoaded) {
-        Write-Host "Таблица на листе tbDATA уже существует — пропускаю шаг 4." -ForegroundColor DarkGray
+        Write-Host "Таблица на листе tbDATA уже существует - пропускаю шаг 4." -ForegroundColor DarkGray
+
+        # (!) v6.1. Пропуск шага 4 - основная ветка при повторных сборках, и раньше имя таблицы
+        # здесь не проверялось вовсе. Дефект с регистром ("tbData" вместо "tbDATA") дожил бы до
+        # следующей сборки незамеченным. Проверяем всегда, а не только при создании.
+        foreach ($existingLo in $wsData.ListObjects) {
+            if ($existingLo.Name -ieq "tbDATA" -and $existingLo.Name -cne "tbDATA") {
+                Write-Host "  Имя таблицы отличается регистром: '$($existingLo.Name)'. Исправляю на 'tbDATA'." -ForegroundColor Yellow
+                Write-Host "  Power Query регистрозависим: qExistingData такую таблицу не находит," -ForegroundColor Yellow
+                Write-Host "  и upsert молча превращается в полную замену данных." -ForegroundColor Yellow
+                $existingLo.Name = "tbDATA"
+            }
+        }
     } else {
         Write-Host "Пробую автоматически загрузить Query-ImportJSON в таблицу tbDATA (экспериментально)..." -ForegroundColor Yellow
         try {
@@ -296,7 +308,45 @@ try {
             $destRange = $wsData.Range("A1")
 
             $lo = $wsData.ListObjects.Add(0, $connString, $false, 2, $destRange) # SourceType:=xlSrcExternal(0), XlListObjectHasHeaders.xlYes(2)
+
+            # (!) v6.1. Присвоение имени МОЖЕТ НЕ СРАБОТАТЬ МОЛЧА. Если имя "tbDATA" уже занято
+            # другим объектом книги (в т.ч. остатком прежней сборки), Excel не бросает ошибку,
+            # а даёт ближайшее свободное - на реальной книге получилось "tbData", отличие только
+            # в регистре. VBA это прощает (сравнения идут через vbTextCompare), а Power Query -
+            # нет: Excel.CurrentWorkbook(){[Name="tbDATA"]} регистрозависим, не находит таблицу
+            # и падает. В qExistingData падение гасится try...otherwise #table({},{}), поэтому
+            # ExistingData приходит пустым, Query-ImportJSON уходит в ветку "нет старых данных",
+            # и upsert молча вырождается в полную замену: 25 строк -> 2. Ошибки при этом нет
+            # нигде, лог показывает штатную загрузку. Поэтому имя проверяем ФАКТОМ, а не верим
+            # присвоению.
             $lo.Name = "tbDATA"
+            if ($lo.Name -cne "tbDATA") {   # -cne: сравнение С УЧЁТОМ регистра, иначе проверка бессмысленна
+                $actual = $lo.Name
+                Write-Host "  Имя таблицы не применилось: получено '$actual' вместо 'tbDATA'." -ForegroundColor Yellow
+                Write-Host "  Ищу, что занимает имя..." -ForegroundColor Yellow
+
+                # Освобождаем имя: ищем конфликтующую таблицу на всех листах и переименовываем её
+                $freed = $false
+                foreach ($ws in $wb.Worksheets) {
+                    foreach ($other in $ws.ListObjects) {
+                        if ($other.Name -ne $actual -and $other.Name -ieq "tbDATA") {
+                            $stale = "tbDATA_old_" + (Get-Date -Format "yyyyMMddHHmmss")
+                            Write-Host "  Имя занято таблицей на листе '$($ws.Name)' - переименовываю её в '$stale'" -ForegroundColor Yellow
+                            $other.Name = $stale
+                            $freed = $true
+                        }
+                    }
+                }
+                if ($freed) { $lo.Name = "tbDATA" }
+
+                if ($lo.Name -cne "tbDATA") {
+                    throw ("Не удалось присвоить таблице имя 'tbDATA' (фактическое: '" + $lo.Name + "'). " +
+                           "Power Query регистрозависим, и qExistingData такую таблицу не найдёт: " +
+                           "upsert выродится в полную замену БЕЗ сообщения об ошибке. " +
+                           "Исправьте вручную: щёлкните по таблице -> Конструктор таблиц -> Имя таблицы -> tbDATA.")
+                }
+                Write-Host "  Имя освобождено и применено: tbDATA" -ForegroundColor Green
+            }
             $lo.QueryTable.CommandType = 2 # xlCmdSql
             $lo.QueryTable.CommandText = @("SELECT * FROM [Query-ImportJSON]")
             $lo.QueryTable.Refresh($false)

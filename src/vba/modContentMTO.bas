@@ -555,16 +555,30 @@ Private Function BuildBlock1Table() As String
         ' Строка «% планшет» - по каждой неделе этой дирекции (Content Spec §5).
         html = html & "<tr class='pct-row'><td>% планшет</td>"
         Dim sumTot As Double, sumTab As Double
+        ' (!) v6.1. Dim в VBA - объявление на этапе компиляции, а не инициализация: переменная
+        ' живёт всю процедуру и НЕ обнуляется на новой итерации цикла по дирекциям. Без явного
+        ' сброса ДЭНТ получал накопленные суммы ДГМ: в столбце «Итого» выходило 8/23 = 34,8%
+        ' вместо собственных 0/4 = 0,0%. В Блоке 4 сброс был, в Блоке 1 - нет; отсюда два
+        ' разных ответа на одних данных. Проверено на отчёте от 04.09.2026.
+        sumTot = 0: sumTab = 0
         For j = LBound(weeks) To UBound(weeks)
             Dim key As String: key = dirName & "|" & CStr(weeks(j)) & "|"
             sumTot = sumTot + DictVal(total, key)
             sumTab = sumTab + DictVal(tablet, key)
-            html = html & PctCell(SafePercent(tablet, total, key))
+            ' (!) v6.1. Нулевой знаменатель - это ОТСУТСТВИЕ событий, а не 0% использования.
+            ' SafePercent при делении на ноль возвращает 0, PctCell красит ячейку в красный и
+            ' пишет «0,0%» - читается как «планшетом не пользуются», хотя данных просто нет.
+            ' Блок 4 в той же ситуации ставит «—»; приводим Блок 1 к тому же поведению.
+            If DictVal(total, key) = 0 Then
+                html = html & "<td class='pct empty'>—</td>"
+            Else
+                html = html & PctCell(SafePercent(tablet, total, key))
+            End If
         Next j
         If sumTot > 0 Then
             html = html & PctCell(sumTab / sumTot)
         Else
-            html = html & "<td class='pct'>—</td>"
+            html = html & "<td class='pct empty'>—</td>"
         End If
         html = html & "</tr>"
     Next i
@@ -704,9 +718,13 @@ Private Function Block6RankedTable(topN As Long, descending As Boolean) As Strin
     Dim sortedKeys As Variant
     sortedKeys = modAggregate.SortDictionaryKeysByValue(pctDict, descending)
 
+    ' (!) v6.1. Столбец считает СОБЫТИЯ ПОДПИСАНИЯ (строки tbDATA), а не заказ-наряды:
+    ' totalCounts приходит из GroupCount по строкам. Заголовок «Кол-во нарядов» смешивал
+    ' единицы счёта треков: у Иванова 8 событий, но 4 наряда (ЗН-001, 006, 012, 013).
+    ' Трек А считается в событиях подписания - так и подписываем.
     Dim html As String
     html = "<table class='block-table'><thead><tr><th>Инженер</th><th>% планшет</th>" & _
-           "<th>Кол-во нарядов</th><th>Средняя длительность, ч</th></tr></thead><tbody>"
+           "<th>Кол-во подписаний</th><th>Средняя длительность, ч</th></tr></thead><tbody>"
 
     Dim i As Long, shown As Long
     For i = LBound(sortedKeys) To UBound(sortedKeys)
