@@ -15,3 +15,12 @@ result/debug_*.html
 # Кэш Python
 __pycache__/
 *.pyc
+
+# Реорганизация v2 (05.09.2026): бинарники, данные и служебное - вне git
+build/
+data/*
+!data/.gitkeep
+*.xlsm
+*.xlsx
+.claude/
+_to_delete/

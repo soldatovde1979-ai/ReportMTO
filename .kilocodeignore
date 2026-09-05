@@ -5,12 +5,10 @@
 *.json
 
 # Исключаем тяжелые папки с данными и результатами
-Data/
+data/
 result/
-docs/
 .vscode/
-tools/
-claude/
+_to_delete/
 
 # Стандартные временные файлы
 *.tmp

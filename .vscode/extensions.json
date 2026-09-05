@@ -3,6 +3,7 @@
     "powerquery.vscode-powerquery",
     "davidanson.vscode-markdownlint",
     "jimmyzjx.ripgrep",
-    "kilocode.kilo-code"
+    "kilocode.kilo-code",
+    "zoocodeorganization.zoo-code"
   ]
 }

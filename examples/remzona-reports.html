@@ -1,0 +1,978 @@
+<title>Карта отчётов ремзоны</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  color-scheme: light;
+  --ground:#f1f2ef;
+  --surface:#ffffff;
+  --surface-2:#f8f8f6;
+  --ink:#14181d;
+  --ink-2:#4a5560;
+  --muted:#7d8791;
+  --line:#dde0dc;
+  --line-strong:#c4c9c3;
+  --accent:#b4610e;
+  --accent-wash:#f7ecdf;
+  --s1:#2a78d6;
+  --s2:#eb6834;
+  --s3:#1baf7a;
+  --s4:#eda100;
+  --s7:#4a3aa7;
+  --good:#0ca30c;
+  --warn:#fab219;
+  --serious:#ec835a;
+  --crit:#d03b3b;
+  --grid:#e5e7e3;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --ground:#0e1113;
+    --surface:#181c1f;
+    --surface-2:#14181a;
+    --ink:#eef1f2;
+    --ink-2:#aab4bb;
+    --muted:#7f8b93;
+    --line:#2a3034;
+    --line-strong:#3b4348;
+    --accent:#e2913c;
+    --accent-wash:#2a2119;
+    --s1:#3987e5;
+    --s2:#d95926;
+    --s3:#199e70;
+    --s4:#c98500;
+    --s7:#9085e9;
+    --grid:#262b2e;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --ground:#0e1113;
+  --surface:#181c1f;
+  --surface-2:#14181a;
+  --ink:#eef1f2;
+  --ink-2:#aab4bb;
+  --muted:#7f8b93;
+  --line:#2a3034;
+  --line-strong:#3b4348;
+  --accent:#e2913c;
+  --accent-wash:#2a2119;
+  --s1:#3987e5;
+  --s2:#d95926;
+  --s3:#199e70;
+  --s4:#c98500;
+  --s7:#9085e9;
+  --grid:#262b2e;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--ink);
+  font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  font-size:15px;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px 96px}
+
+/* ——— типографика ——— */
+h1,h2,h3,h4{font-family:Oswald,"IBM Plex Sans",sans-serif;font-weight:500;margin:0;text-wrap:balance;letter-spacing:.01em}
+h1{font-size:clamp(30px,4.4vw,50px);line-height:1.06;font-weight:600;letter-spacing:-.005em}
+h2{font-size:26px;line-height:1.15}
+h3{font-size:19px;line-height:1.2}
+h4{font-size:15px;line-height:1.25}
+p{margin:0 0 12px}
+.lede{font-size:17px;color:var(--ink-2);max-width:66ch}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);
+}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+.num{font-variant-numeric:tabular-nums}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.88em;background:var(--surface-2);border:1px solid var(--line);border-radius:3px;padding:.05em .3em}
+
+/* ——— шапка ——— */
+header.top{
+  border-bottom:2px solid var(--ink);
+  padding:44px 0 26px;margin-bottom:34px;
+}
+.top-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:40px;align-items:end}
+@media(max-width:820px){.top-grid{grid-template-columns:1fr;gap:24px}}
+.facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}
+.facts div{background:var(--surface);padding:10px 12px}
+.facts dt{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+.facts dd{margin:2px 0 0;font-family:Oswald,sans-serif;font-size:22px;font-variant-numeric:tabular-nums}
+
+.note{
+  border-left:3px solid var(--accent);
+  background:var(--accent-wash);
+  padding:12px 16px;margin:22px 0 0;font-size:14px;color:var(--ink);
+}
+.note strong{font-weight:600}
+
+/* ——— секции ——— */
+section{margin-top:56px}
+.sec-head{display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--line-strong);padding-bottom:8px;margin-bottom:22px;flex-wrap:wrap}
+.sec-head .n{font-family:Oswald,sans-serif;font-size:13px;color:var(--muted);letter-spacing:.08em}
+
+/* ——— панель-макет ——— */
+.mock{
+  background:var(--surface);
+  border:1px solid var(--line-strong);
+  box-shadow:0 1px 0 var(--line);
+}
+.mock-bar{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:9px 14px;border-bottom:1px solid var(--line);background:var(--surface-2);flex-wrap:wrap;
+}
+.mock-bar .ttl{font-family:Oswald,sans-serif;font-size:15px;letter-spacing:.02em}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{
+  font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+  border:1px solid var(--line-strong);padding:2px 7px;color:var(--ink-2);background:var(--surface);
+}
+.chip.on{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+.mock-body{padding:16px}
+
+/* KPI */
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line)}
+@media(max-width:900px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi{background:var(--surface);padding:12px 14px 10px;display:flex;flex-direction:column;gap:4px;min-height:104px}
+.kpi .lab{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-family:"IBM Plex Mono",monospace;line-height:1.3}
+.kpi .val{font-family:Oswald,sans-serif;font-size:30px;line-height:1;font-variant-numeric:tabular-nums}
+.kpi .val small{font-size:14px;color:var(--ink-2);font-family:"IBM Plex Sans",sans-serif}
+.kpi .row{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:auto}
+.delta{font-family:"IBM Plex Mono",monospace;font-size:12px;font-variant-numeric:tabular-nums}
+.delta.up{color:var(--good)}
+.delta.dn{color:var(--crit)}
+.delta.flat{color:var(--muted)}
+
+/* таблицы-макеты */
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{
+  text-align:left;font-family:"IBM Plex Mono",monospace;font-weight:400;font-size:10.5px;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--muted);
+  padding:0 8px 6px;border-bottom:1px solid var(--line-strong);white-space:nowrap;
+}
+td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;font-family:"IBM Plex Mono",monospace}
+.scroll{overflow-x:auto}
+
+/* статусы */
+.pill{
+  display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-family:"IBM Plex Mono",monospace;
+  padding:1px 7px;border:1px solid var(--line-strong);white-space:nowrap;
+}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--muted);flex:none}
+.pill.crit::before{background:var(--crit)}
+.pill.warn::before{background:var(--warn)}
+.pill.good::before{background:var(--good)}
+.pill.ser::before{background:var(--serious)}
+
+/* карточки отклонений */
+.alerts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line)}
+@media(max-width:900px){.alerts{grid-template-columns:1fr}}
+.alert{background:var(--surface);padding:14px;display:flex;flex-direction:column;gap:8px}
+.alert.sev-crit{box-shadow:inset 4px 0 0 var(--crit)}
+.alert.sev-warn{box-shadow:inset 4px 0 0 var(--warn)}
+.alert.sev-good{box-shadow:inset 4px 0 0 var(--good)}
+.alert.sev-ser{box-shadow:inset 4px 0 0 var(--serious)}
+.alert .h{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.alert .name{font-family:Oswald,sans-serif;font-size:15px;line-height:1.2}
+.alert .big{font-family:Oswald,sans-serif;font-size:27px;line-height:1;font-variant-numeric:tabular-nums}
+.alert .sub{font-size:12.5px;color:var(--ink-2)}
+.alert .act{font-size:12.5px;border-top:1px dashed var(--line-strong);padding-top:7px;margin-top:auto;color:var(--ink-2)}
+.alert .act b{font-weight:600;color:var(--ink)}
+
+/* отчёты */
+.report{background:var(--surface);border:1px solid var(--line-strong);margin-bottom:26px}
+.rep-head{display:flex;gap:14px;align-items:flex-start;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.rep-num{
+  font-family:Oswald,sans-serif;font-size:13px;letter-spacing:.06em;
+  border:1px solid var(--ink);padding:1px 7px;flex:none;margin-top:3px;
+}
+.rep-q{font-size:13.5px;color:var(--ink-2);margin-top:3px;max-width:72ch}
+.rep-body{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:0}
+@media(max-width:900px){.rep-body{grid-template-columns:1fr}}
+.rep-mock{padding:16px;border-right:1px solid var(--line)}
+@media(max-width:900px){.rep-mock{border-right:0;border-bottom:1px solid var(--line)}}
+.rep-meta{padding:16px;font-size:13.5px}
+.meta-row{display:grid;grid-template-columns:112px minmax(0,1fr);gap:10px;padding:5px 0;border-bottom:1px solid var(--line)}
+.meta-row:last-child{border-bottom:0}
+.meta-row dt{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding-top:3px}
+.meta-row dd{margin:0}
+.risk{color:var(--ink)}
+.risk b{color:var(--crit);font-weight:600}
+
+.mock-label{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+figure{margin:0}
+figcaption{font-size:12px;color:var(--muted);margin-top:6px}
+svg{display:block;width:100%;height:auto;overflow:visible}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);margin-top:8px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;display:inline-block;flex:none}
+
+ul.tight{margin:0;padding-left:18px}
+ul.tight li{margin-bottom:5px}
+.two-col{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
+@media(max-width:820px){.two-col{grid-template-columns:1fr}}
+footer{margin-top:64px;border-top:2px solid var(--ink);padding-top:16px;font-size:13px;color:var(--muted)}
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <div class="top-grid">
+    <div>
+      <div class="eyebrow">МТО · ремзона · трек Б</div>
+      <h1>Карта отчётов ремзоны</h1>
+      <p class="lede">Десять отчётов операционного трека и два дашборда недели. Для каждого — макет, единица счёта, поля выгрузки и то, что человек по нему сделает. Цифры в макетах — правдоподобные заглушки для оценки формы, не результат расчёта.</p>
+    </div>
+    <dl class="facts">
+      <div><dt>Событий</dt><dd class="num">132 704</dd></div>
+      <div><dt>Нарядов</dt><dd class="num">33 176</dd></div>
+      <div><dt>История</dt><dd class="num">~8 мес</dd></div>
+      <div><dt>Без поста</dt><dd class="num">33 %</dd></div>
+    </dl>
+  </div>
+
+  <div class="note">
+    <strong>Две поправки к постановке.</strong> Счетов-фактур в схеме нет — денежное поле ровно одно, <code>cost_parts</code> (материалы), а <code>cost_Trudozatrat</code> хранит часы. Поэтому «объём недели» считается нарядами, заездами и рублями материалов. И «количество ремонтов» — не одно число: наряд ≠ заезд, поэтому на дашборде они стоят рядом, а не вместо друг друга.
+  </div>
+</header>
+
+<!-- ══════════════ ДАШБОРД A ══════════════ -->
+<section>
+  <div class="sec-head">
+    <span class="n">ДАШБОРД A</span>
+    <h2>Неделя ремзоны</h2>
+    <span class="chip">главный механик · утро понедельника</span>
+  </div>
+  <p class="lede" style="margin-bottom:18px">Плотная оперативная сводка: что произошло за прошедшую неделю и что осталось висеть. Один экран, никакой интерактивности сверх переключателя недели — отчёт статический.</p>
+
+  <div class="mock">
+    <div class="mock-bar">
+      <span class="ttl">Ремзона · неделя 202635 (24–30 авг)</span>
+      <div class="chips">
+        <span class="chip on">неделя</span><span class="chip">4 недели</span><span class="chip">ДГМ + ДЭНТ</span><span class="chip">все посты</span>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi">
+        <div class="lab">Заездов техники</div>
+        <div class="val num">214</div>
+        <div class="row"><span class="delta up">▲ 7 % к пр. нед.</span>
+          <svg viewBox="0 0 92 24" width="92" height="24" aria-label="динамика 8 недель"><polyline points="2,17 15,15 28,18 41,13 54,14 67,11 80,12 90,7" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/><circle cx="90" cy="7" r="2.6" fill="var(--s1)"/></svg>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="lab">Нарядов открыто</div>
+        <div class="val num">391</div>
+        <div class="row"><span class="delta up">▲ 4 %</span>
+          <svg viewBox="0 0 92 24" width="92" height="24"><polyline points="2,14 15,16 28,12 41,15 54,11 67,13 80,10 90,9" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/><circle cx="90" cy="9" r="2.6" fill="var(--s1)"/></svg>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="lab">Закрыто нарядов</div>
+        <div class="val num">366</div>
+        <div class="row"><span class="delta flat">баланс −25</span>
+          <svg viewBox="0 0 92 24" width="92" height="24"><polyline points="2,13 15,14 28,13 41,16 54,12 67,14 80,12 90,11" fill="none" stroke="var(--s3)" stroke-width="2" stroke-linejoin="round"/><circle cx="90" cy="11" r="2.6" fill="var(--s3)"/></svg>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="lab">Висит на конец недели</div>
+        <div class="val num">128</div>
+        <div class="row"><span class="delta dn">▲ 25 нарядов</span>
+          <svg viewBox="0 0 92 24" width="92" height="24"><polyline points="2,19 15,18 28,17 41,15 54,14 67,12 80,9 90,5" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round"/><circle cx="90" cy="5" r="2.6" fill="var(--s2)"/></svg>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="lab">Медиана в ремзоне</div>
+        <div class="val num">38 <small>ч</small></div>
+        <div class="row"><span class="delta up">▼ 4 ч</span>
+          <svg viewBox="0 0 92 24" width="92" height="24"><polyline points="2,8 15,10 28,9 41,12 54,11 67,13 80,14 90,16" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/><circle cx="90" cy="16" r="2.6" fill="var(--s1)"/></svg>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="lab">Готово, но не забрано</div>
+        <div class="val num">7,2 <small>ч медиана</small></div>
+        <div class="row"><span class="delta up">▼ 1,3 ч</span>
+          <svg viewBox="0 0 92 24" width="92" height="24"><polyline points="2,6 15,9 28,4 41,11 54,14 67,13 80,17 90,15" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round"/><circle cx="90" cy="15" r="2.6" fill="var(--s2)"/></svg>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="lab">Материалы за неделю</div>
+        <div class="val num">3,14 <small>млн ₽</small></div>
+        <div class="row"><span class="delta dn">▲ 21 %</span>
+          <svg viewBox="0 0 92 24" width="92" height="24"><polyline points="2,16 15,15 28,17 41,12 54,16 67,13 80,14 90,6" fill="none" stroke="var(--s4)" stroke-width="2" stroke-linejoin="round"/><circle cx="90" cy="6" r="2.6" fill="var(--s4)"/></svg>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="lab">Подписей с планшета</div>
+        <div class="val num">68 <small>%</small></div>
+        <div class="row"><span class="delta up">▲ 3 п.п.</span>
+          <svg viewBox="0 0 92 24" width="92" height="24"><polyline points="2,20 15,18 28,17 41,13 54,12 67,10 80,8 90,7" fill="none" stroke="var(--s3)" stroke-width="2" stroke-linejoin="round"/><circle cx="90" cy="7" r="2.6" fill="var(--s3)"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="mock-body" style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:24px;border-top:1px solid var(--line)">
+      <figure>
+        <div class="mock-label">Наряды недели по постам · единица счёта: наряд</div>
+        <svg viewBox="0 0 420 190" role="img" aria-label="Наряды по постам за неделю">
+          <line x1="112" y1="4" x2="112" y2="176" stroke="var(--line-strong)" stroke-width="1"/>
+          <g font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-2)">
+            <text x="106" y="17" text-anchor="end">СТК цех 1</text>
+            <text x="106" y="43" text-anchor="end">СТК цех 2</text>
+            <text x="106" y="69" text-anchor="end">ПРК</text>
+            <text x="106" y="95" text-anchor="end">Участок 3</text>
+            <text x="106" y="121" text-anchor="end">Обмывочная</text>
+            <text x="106" y="147" text-anchor="end" fill="var(--crit)">Пост не указан</text>
+          </g>
+          <g>
+            <rect x="112" y="6" width="196" height="13" rx="4" fill="var(--s1)"/>
+            <rect x="112" y="32" width="150" height="13" rx="4" fill="var(--s1)"/>
+            <rect x="112" y="58" width="104" height="13" rx="4" fill="var(--s1)"/>
+            <rect x="112" y="84" width="62" height="13" rx="4" fill="var(--s1)"/>
+            <rect x="112" y="110" width="34" height="13" rx="4" fill="var(--s1)"/>
+            <rect x="112" y="136" width="127" height="13" rx="4" fill="var(--crit)"/>
+          </g>
+          <g font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">
+            <text x="314" y="17">96</text><text x="268" y="43">73</text><text x="222" y="69">51</text>
+            <text x="180" y="95">30</text><text x="152" y="121">17</text><text x="245" y="147">124</text>
+          </g>
+        </svg>
+        <figcaption>Поле <code>post</code> — родитель поста, поэтому строки читаются как площадки. «Пост не указан» стоит отдельной строкой, а не растворён в прочих.</figcaption>
+      </figure>
+
+      <div>
+        <div class="mock-label">Самое частое за неделю</div>
+        <div class="scroll">
+        <table>
+          <tr><td>Чаще всего подписывают</td><td class="n">Готов к выбытию · ПЛАНШЕТ · ДГМ</td></tr>
+          <tr><td>Топ узла отказа</td><td class="n">Ходовая часть · 52 наряда</td></tr>
+          <tr><td>Топ модели в ремонте</td><td class="n">Тягач · 41 заезд</td></tr>
+          <tr><td>Топ владельца техники</td><td class="n">Служба спецтранспорта</td></tr>
+          <tr><td>Дороже всех по материалам</td><td class="n">28-19 · 412 тыс ₽</td></tr>
+        </table>
+        </div>
+
+        <div class="mock-label" style="margin-top:18px">Машины недели · единица счёта: заезд</div>
+        <div class="scroll">
+        <table>
+          <thead><tr><th>Гар. №</th><th class="n">Заездов</th><th class="n">Часов в ремзоне</th><th>Флаг</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">28-19</td><td class="n">4</td><td class="n">96</td><td><span class="pill crit">хроник</span></td></tr>
+            <tr><td class="mono">28-18</td><td class="n">3</td><td class="n">71</td><td><span class="pill crit">хроник</span></td></tr>
+            <tr><td class="mono">14-07</td><td class="n">3</td><td class="n">44</td><td><span class="pill warn">повтор?</span></td></tr>
+            <tr><td class="mono">31-02</td><td class="n">2</td><td class="n">39</td><td><span class="pill">—</span></td></tr>
+            <tr><td class="mono">09-55</td><td class="n">2</td><td class="n">28</td><td><span class="pill">—</span></td></tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="mock-body" style="border-top:1px solid var(--line)">
+      <div class="mock-label">Хвост незакрытого на утро понедельника · единица счёта: наряд · возраст от даты создания</div>
+      <svg viewBox="0 0 420 96" role="img" aria-label="Незакрытые наряды по возрасту" style="max-width:660px">
+        <g>
+          <rect x="4" y="20" width="66" height="40" rx="4" fill="var(--s1)"/>
+          <rect x="76" y="26" width="66" height="34" rx="4" fill="var(--s1)"/>
+          <rect x="148" y="38" width="66" height="22" rx="4" fill="var(--s4)"/>
+          <rect x="220" y="46" width="66" height="14" rx="4" fill="var(--serious)"/>
+          <rect x="292" y="50" width="66" height="10" rx="4" fill="var(--crit)"/>
+        </g>
+        <line x1="0" y1="60" x2="420" y2="60" stroke="var(--line-strong)" stroke-width="1"/>
+        <g font-family="IBM Plex Mono, monospace" font-size="12" fill="var(--ink)" text-anchor="middle">
+          <text x="37" y="15">61</text><text x="109" y="21">34</text><text x="181" y="33">18</text><text x="253" y="41">9</text><text x="325" y="45">6</text>
+        </g>
+        <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">
+          <text x="37" y="76">0–3 сут</text><text x="109" y="76">3–7</text><text x="181" y="76">7–14</text><text x="253" y="76">14–30</text><text x="325" y="76">30+</text>
+          <text x="325" y="90" fill="var(--crit)">разбор поимённо</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <div class="two-col" style="margin-top:20px">
+    <div>
+      <h4>Как считается</h4>
+      <ul class="tight">
+        <li><b>Неделя</b> — по <code>yearWeek</code>, ось сквозная; строки <code>yearWeek = 101</code> (пустая <code>status_date</code>) выбрасываются на входе и попадают в счётчик брака отчёта Р10.</li>
+        <li><b>Заезды</b> — свёртка нарядов одной <code>ts</code> с разрывом ≤ 12 ч (уровень 3).</li>
+        <li><b>Закрыто</b> — наряды, где есть событие <code>ready_for = «Готов к выбытию»</code> с непустой <code>status_date</code> внутри недели. Написание «приемке/выбытию» — через «е», иначе ноль строк.</li>
+        <li><b>Часов в ремзоне</b> — <code>deltaHours</code>, обрезанный по p99; это не длительность ремонта, а время присутствия.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Что человек делает</h4>
+      <ul class="tight">
+        <li>Баланс «открыто минус закрыто» положительный вторую неделю → расшивка узкого поста.</li>
+        <li>Хвост 14+ суток — поимённый разбор на планёрке, 15 нарядов вместо 391.</li>
+        <li>Строка «пост не указан» на первом экране, а не в разделе качества данных: пока она видна руководителю, её чинят.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ ДАШБОРД Б ══════════════ -->
+<section>
+  <div class="sec-head">
+    <span class="n">ДАШБОРД Б</span>
+    <h2>Панель отклонений</h2>
+    <span class="chip">руководство ДГМ и ДЭНТ · месячный ритм</span>
+  </div>
+  <p class="lede" style="margin-bottom:18px">Тот же период, другой жанр. Здесь нет объёмов — только состояние против порога и тренд восьми недель. Карточка существует, если по ней есть действие; метрика без адресата с панели снимается.</p>
+
+  <div class="mock">
+    <div class="mock-bar">
+      <span class="ttl">Отклонения · неделя 202635 · пороги согласованы 01.07</span>
+      <div class="chips"><span class="chip on">5 из 6 в норме</span><span class="chip">пороги</span><span class="chip">выгрузка 30.08 06:10</span></div>
+    </div>
+
+    <div class="alerts">
+      <div class="alert sev-crit">
+        <div class="h"><span class="name">Хроники парка</span><span class="pill crit">критично</span></div>
+        <div class="big num">6 машин</div>
+        <div class="sub">дают 18 % всех часов в ремзоне. Порог — не более 3 машин выше 200 ч за квартал.</div>
+        <svg viewBox="0 0 200 30" height="30" aria-label="тренд 8 недель"><polyline points="4,22 32,21 60,19 88,20 116,16 144,14 172,11 196,7" fill="none" stroke="var(--s2)" stroke-width="2"/><circle cx="196" cy="7" r="3" fill="var(--s2)"/></svg>
+        <div class="act"><b>ДЭНТ:</b> вынести 28-19 и 28-18 на комиссию по списанию до 15.09.</div>
+      </div>
+      <div class="alert sev-warn">
+        <div class="h"><span class="name">Возврат техники</span><span class="pill warn">внимание</span></div>
+        <div class="big num">7,2 ч</div>
+        <div class="sub">медиана между подписью выбытия ДГМ и ДЭНТ. Порог — 4 ч (одна смена).</div>
+        <svg viewBox="0 0 200 30" height="30"><polyline points="4,8 32,12 60,5 88,14 116,18 144,16 172,21 196,19" fill="none" stroke="var(--s1)" stroke-width="2"/><circle cx="196" cy="19" r="3" fill="var(--s1)"/></svg>
+        <div class="act"><b>ДЭНТ:</b> дежурный приёмщик на вторую смену; 3 из 5 худших постов — ПРК.</div>
+      </div>
+      <div class="alert sev-crit">
+        <div class="h"><span class="name">Качество учёта</span><span class="pill crit">критично</span></div>
+        <div class="big num">33 %</div>
+        <div class="sub">нарядов без поста. Пока держится — отчёты по загрузке постов недостоверны.</div>
+        <svg viewBox="0 0 200 30" height="30"><polyline points="4,10 32,11 60,10 88,12 116,11 144,10 172,11 196,10" fill="none" stroke="var(--crit)" stroke-width="2"/><circle cx="196" cy="10" r="3" fill="var(--crit)"/></svg>
+        <div class="act"><b>ИТ + ДГМ:</b> обязательность поста в форме ЗН; выгрузка листа поста, а не родителя.</div>
+      </div>
+      <div class="alert sev-warn">
+        <div class="h"><span class="name">Старение хвоста</span><span class="pill warn">внимание</span></div>
+        <div class="big num">15</div>
+        <div class="sub">нарядов старше 14 суток, из них 6 старше месяца. Порог — 10.</div>
+        <svg viewBox="0 0 200 30" height="30"><polyline points="4,20 32,19 60,17 88,18 116,15 144,13 172,12 196,9" fill="none" stroke="var(--s2)" stroke-width="2"/><circle cx="196" cy="9" r="3" fill="var(--s2)"/></svg>
+        <div class="act"><b>Руководители постов:</b> причина по каждому — запчасть, подпись или брошенный наряд.</div>
+      </div>
+      <div class="alert sev-good">
+        <div class="h"><span class="name">Планшет</span><span class="pill good">в норме</span></div>
+        <div class="big num">68 %</div>
+        <div class="sub">подписаний с планшета. Цель года — 75 %, тренд её достигает в ноябре.</div>
+        <svg viewBox="0 0 200 30" height="30"><polyline points="4,24 32,22 60,20 88,15 116,13 144,11 172,9 196,7" fill="none" stroke="var(--s3)" stroke-width="2"/><circle cx="196" cy="7" r="3" fill="var(--s3)"/></svg>
+        <div class="act"><b>Никаких:</b> карточка держится на панели как контроль, разбор не требуется.</div>
+      </div>
+      <div class="alert sev-ser">
+        <div class="h"><span class="name">Материалы на старый парк</span><span class="pill ser">риск</span></div>
+        <div class="big num">×4,2</div>
+        <div class="sub">расход на машину 15+ лет против группы до 10 лет. Растёт третий месяц.</div>
+        <svg viewBox="0 0 200 30" height="30"><polyline points="4,21 32,20 60,22 88,17 116,18 144,14 172,12 196,8" fill="none" stroke="var(--s4)" stroke-width="2"/><circle cx="196" cy="8" r="3" fill="var(--s4)"/></svg>
+        <div class="act"><b>Экономика:</b> расчёт замены против ремонта по группе 15+ к бюджетной кампании.</div>
+      </div>
+    </div>
+
+    <div class="mock-body" style="border-top:1px solid var(--line);display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+      <span class="mono" style="font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)">Доверие к данным недели</span>
+      <span class="pill good">заезды · надёжно</span>
+      <span class="pill good">подписи и лаги · надёжно</span>
+      <span class="pill warn">посты · 33 % пусто</span>
+      <span class="pill crit">повторы · без классификатора недостоверны</span>
+      <span class="pill crit">план/факт длительности · строить нельзя</span>
+    </div>
+  </div>
+
+  <div class="note" style="margin-top:18px">
+    <strong>Разница между дашбордами не косметическая.</strong> A отвечает на «что было», единица счёта — наряд и заезд, обновление еженедельное, читает исполнитель. Б отвечает на «где отклонение и чьё», единица — метрика с порогом, читает руководитель. Смешать их в один экран — получить панель, по которой никто не действует.
+  </div>
+</section>
+
+<!-- ══════════════ ОТЧЁТЫ ══════════════ -->
+<section>
+  <div class="sec-head">
+    <span class="n">ОТЧЁТЫ</span>
+    <h2>Десять отчётов трека Б</h2>
+    <span class="chip">уровень модели указан у каждого</span>
+  </div>
+
+  <!-- Р1 -->
+  <article class="report">
+    <div class="rep-head">
+      <span class="rep-num">Р1</span>
+      <div><h3>Хроники парка</h3><div class="rep-q">Какие два десятка машин съедают ремзону — и по какому признаку их отбирать: по числу заездов, по часам простоя или по деньгам?</div></div>
+    </div>
+    <div class="rep-body">
+      <div class="rep-mock">
+        <div class="mock-label">Макет · таблица с тремя независимыми рангами</div>
+        <div class="scroll">
+        <table>
+          <thead><tr><th>Гар. №</th><th class="n">Заездов</th><th class="n">Часов</th><th class="n">Материалы, ₽</th><th class="n">Возраст</th><th>Ранг</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">28-19</td><td class="n">37</td><td class="n">1 245</td><td class="n">412 тыс</td><td class="n">17</td><td><span class="pill crit">1 / 1 / 2</span></td></tr>
+            <tr><td class="mono">28-18</td><td class="n">157</td><td class="n">890</td><td class="n">333 тыс</td><td class="n">19</td><td><span class="pill crit">1 / 2 / 3</span></td></tr>
+            <tr><td class="mono">14-07</td><td class="n">29</td><td class="n">602</td><td class="n">508 тыс</td><td class="n">12</td><td><span class="pill ser">4 / 3 / 1</span></td></tr>
+            <tr><td class="mono">31-02</td><td class="n">24</td><td class="n">311</td><td class="n">96 тыс</td><td class="n">8</td><td><span class="pill warn">6 / 9 / 11</span></td></tr>
+            <tr><td class="mono">09-55</td><td class="n">21</td><td class="n">288</td><td class="n">74 тыс</td><td class="n">21</td><td><span class="pill warn">8 / 10 / 14</span></td></tr>
+          </tbody>
+        </table>
+        </div>
+        <figcaption>Три ранга рядом, потому что машина-рекордсмен по заездам и машина-рекордсмен по деньгам — обычно разные машины. Единый «индекс проблемности» здесь скрывает сюжет, а не выявляет его.</figcaption>
+      </div>
+      <dl class="rep-meta">
+        <div class="meta-row"><dt>Кто спрашивает</dt><dd>Главный механик и ДЭНТ как владелец парка</dd></div>
+        <div class="meta-row"><dt>Единица</dt><dd>Машина; внутри — заезды</dd></div>
+        <div class="meta-row"><dt>Уровень</dt><dd>3 (заезд) → агрегат по <code>ts</code></dd></div>
+        <div class="meta-row"><dt>Поля</dt><dd><code>ts</code>, <code>number</code>, <code>status_date</code>, <code>cost_parts</code>, <code>MadeYear</code>, <code>owner_dep</code></dd></div>
+        <div class="meta-row"><dt>Разрезы</dt><dd>Окно 8 недель и вся история; по владельцу; по возрастной когорте</dd></div>
+        <div class="meta-row"><dt>Действие</dt><dd>Список на комиссию: капремонт, списание, вывод в резерв</dd></div>
+        <div class="meta-row"><dt>Данные</dt><dd class="risk">Достаточно имеющихся. Колонку часов называть «время в ремзоне», не «время ремонта»: <b>в <code>deltaHours</code> сидят очередь и ожидание запчастей</b>. Гаражный номер вырезается из <code>ts</code> регулярным выражением — модель в той же строке.</dd></div>
+      </dl>
+    </div>
+  </article>
+
+  <!-- Р2 -->
+  <article class="report">
+    <div class="rep-head">
+      <span class="rep-num">Р2</span>
+      <div><h3>Кривая старения парка</h3><div class="rep-q">С какого возраста машина начинает стоить дороже, чем её замена? Где именно ломается линейность?</div></div>
+    </div>
+    <div class="rep-body">
+      <div class="rep-mock">
+        <div class="mock-label">Макет · два графика, одна ось возраста, разные величины</div>
+        <figure>
+          <svg viewBox="0 0 420 210" role="img" aria-label="Заезды и материалы на машину по возрастным когортам">
+            <text x="0" y="10" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)">ЗАЕЗДОВ НА МАШИНУ ЗА 8 МЕС</text>
+            <g>
+              <rect x="6" y="46" width="60" height="30" rx="4" fill="var(--s1)"/>
+              <rect x="88" y="35" width="60" height="41" rx="4" fill="var(--s1)"/>
+              <rect x="170" y="30" width="60" height="46" rx="4" fill="var(--s1)"/>
+              <rect x="252" y="17" width="60" height="59" rx="4" fill="var(--s1)"/>
+              <rect x="334" y="11" width="60" height="65" rx="4" fill="var(--s1)"/>
+            </g>
+            <line x1="0" y1="76" x2="420" y2="76" stroke="var(--line-strong)"/>
+            <g font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--ink)" text-anchor="middle">
+              <text x="36" y="42">21</text><text x="118" y="31">33</text><text x="200" y="26">37</text><text x="282" y="13">52</text><text x="364" y="7">58</text>
+            </g>
+            <text x="0" y="112" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)">МАТЕРИАЛОВ НА МАШИНУ, ТЫС ₽</text>
+            <g>
+              <rect x="6" y="175" width="60" height="4" rx="2" fill="var(--s4)"/>
+              <rect x="88" y="163" width="60" height="16" rx="4" fill="var(--s4)"/>
+              <rect x="170" y="140" width="60" height="39" rx="4" fill="var(--s4)"/>
+              <rect x="252" y="111" width="60" height="68" rx="4" fill="var(--s4)"/>
+              <rect x="334" y="96" width="60" height="83" rx="4" fill="var(--s4)"/>
+            </g>
+            <line x1="0" y1="179" x2="420" y2="179" stroke="var(--line-strong)"/>
+            <g font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--ink)" text-anchor="middle">
+              <text x="36" y="171">5,6</text><text x="118" y="159">24</text><text x="200" y="136">61</text><text x="282" y="107">190</text><text x="364" y="92">333</text>
+            </g>
+            <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">
+              <text x="36" y="196">0–4 г</text><text x="118" y="196">5–9</text><text x="200" y="196">10–14</text><text x="282" y="196">15–19</text><text x="364" y="196">20+</text>
+            </g>
+            <line x1="241" y1="0" x2="241" y2="188" stroke="var(--crit)" stroke-width="1" stroke-dasharray="4 3"/>
+            <text x="246" y="207" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--crit)">перелом на 15 годах</text>
+          </svg>
+        </figure>
+        <figcaption>Два графика, а не один с двумя осями: заезды и рубли несопоставимы, совмещённая ось создаёт мнимую корреляцию.</figcaption>
+      </div>
+      <dl class="rep-meta">
+        <div class="meta-row"><dt>Кто спрашивает</dt><dd>ДЭНТ и экономика при формировании инвестпрограммы</dd></div>
+        <div class="meta-row"><dt>Единица</dt><dd>Машина, свёрнутая в возрастную когорту</dd></div>
+        <div class="meta-row"><dt>Уровень</dt><dd>3 → когорта</dd></div>
+        <div class="meta-row"><dt>Поля</dt><dd><code>MadeYear</code>, <code>ts</code>, <code>number</code>, <code>cost_parts</code></dd></div>
+        <div class="meta-row"><dt>Разрезы</dt><dd>Когорты по 5 лет; внутри — по владельцу; помесячно для проверки, что перелом не сезонный</dd></div>
+        <div class="meta-row"><dt>Действие</dt><dd>Порог списания в цифрах и защита бюджета замены</dd></div>
+        <div class="meta-row"><dt>Данные</dt><dd class="risk">Считается сегодня, но <b><code>model_type</code> — константа «Автотранспорт»</b>, поэтому погрузчик и легковая попадают в одну когорту. Пока не появится настоящий тип ТС, вывод формулируется по парку целиком, без «техника типа X изнашивается быстрее». Это первая по важности правка выгрузки.</dd></div>
+      </dl>
+    </div>
+  </article>
+
+  <!-- Р3 -->
+  <article class="report">
+    <div class="rep-head">
+      <span class="rep-num">Р3</span>
+      <div><h3>Парето отказов</h3><div class="rep-q">Какие узлы дают 80 % заездов, какие — 80 % денег, и совпадают ли эти списки?</div></div>
+    </div>
+    <div class="rep-body">
+      <div class="rep-mock">
+        <div class="mock-label">Макет · доля заездов по разделам классификатора</div>
+        <figure>
+          <svg viewBox="0 0 420 170" role="img" aria-label="Парето по узлам отказа">
+            <g>
+              <rect x="4" y="30" width="52" height="86" rx="4" fill="var(--s1)"/>
+              <rect x="64" y="43" width="52" height="73" rx="4" fill="var(--s1)"/>
+              <rect x="124" y="59" width="52" height="57" rx="4" fill="var(--s1)"/>
+              <rect x="184" y="77" width="52" height="39" rx="4" fill="var(--s1)"/>
+              <rect x="244" y="84" width="52" height="32" rx="4" fill="var(--s1)"/>
+              <rect x="304" y="91" width="52" height="25" rx="4" fill="var(--s1)"/>
+              <rect x="364" y="74" width="52" height="42" rx="4" fill="var(--muted)"/>
+            </g>
+            <line x1="0" y1="116" x2="420" y2="116" stroke="var(--line-strong)"/>
+            <polyline points="30,26 90,17 150,11 210,8 270,6 330,4 390,2" fill="none" stroke="var(--s2)" stroke-width="2" stroke-dasharray="5 3"/>
+            <g font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)" text-anchor="middle">
+              <text x="30" y="43">24%</text><text x="90" y="56">21%</text><text x="150" y="72">16%</text>
+              <text x="210" y="90">11%</text><text x="270" y="97">9%</text><text x="330" y="104">7%</text><text x="390" y="87">12%</text>
+            </g>
+            <g font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--s2)" text-anchor="middle">
+              <text x="30" y="20">24</text><text x="90" y="11">45</text><text x="150" y="5">61</text><text x="210" y="4">72</text><text x="270" y="2">81</text><text x="330" y="0">88</text><text x="390" y="-2">100</text>
+            </g>
+            <g font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--muted)" text-anchor="middle">
+              <text x="30" y="130">Ходовая</text><text x="90" y="130">Электрика</text><text x="150" y="130">ДВС</text>
+              <text x="210" y="130">Гидравлика</text><text x="270" y="130">Транс-</text><text x="270" y="141">миссия</text>
+              <text x="330" y="130">Кузов</text><text x="390" y="130">Прочее</text>
+            </g>
+            <text x="0" y="160" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--s2)">пунктир — накопленный процент, подписан числами: отдельной оси у него нет</text>
+          </svg>
+        </figure>
+      </div>
+      <dl class="rep-meta">
+        <div class="meta-row"><dt>Кто спрашивает</dt><dd>Планирование ремонта и склад запчастей</dd></div>
+        <div class="meta-row"><dt>Единица</dt><dd>Заезд для частоты, рубль <code>cost_parts</code> для денег — две отдельные вкладки</dd></div>
+        <div class="meta-row"><dt>Уровень</dt><dd>2 для денег, 3 для частоты</dd></div>
+        <div class="meta-row"><dt>Поля</dt><dd><code>defekt_type</code>, <code>cost_parts</code>, <code>number</code>, <code>MadeYear</code></dd></div>
+        <div class="meta-row"><dt>Разрезы</dt><dd>Узел × возрастная когорта; узел × месяц (сезонность аккумуляторов и деайсеров)</dd></div>
+        <div class="meta-row"><dt>Действие</dt><dd>Страховой запас по трём верхним узлам; план ТО под сезон</dd></div>
+        <div class="meta-row"><dt>Данные</dt><dd class="risk">Валиден именно на этом уровне. <b>12 значений <code>defekt_type</code> — разделы, а не диагнозы</b>: любой шаг глубже («какая именно неисправность ходовой») требует классификации <code>defect_desc</code>, а её нет. Отчёт честно заканчивается на разделе.</dd></div>
+      </dl>
+    </div>
+  </article>
+
+  <!-- Р4 -->
+  <article class="report">
+    <div class="rep-head">
+      <span class="rep-num">Р4</span>
+      <div><h3>Хвост незакрытого</h3><div class="rep-q">Что висит в работе дольше нормы прямо сейчас, у кого и почему — чтобы разбирать пятнадцать нарядов, а не четыреста?</div></div>
+    </div>
+    <div class="rep-body">
+      <div class="rep-mock">
+        <div class="mock-label">Макет · поимённый список старше 14 суток</div>
+        <div class="scroll">
+        <table>
+          <thead><tr><th>Наряд</th><th>Машина</th><th class="n">Возраст</th><th>Последнее событие</th><th>Пост</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">000300944</td><td class="mono">28-19</td><td class="n">41 сут</td><td>приёмка ДГМ, 20.07</td><td>СТК цех 1</td></tr>
+            <tr><td class="mono">000301188</td><td class="mono">14-07</td><td class="n">33 сут</td><td>приёмка ДГМ, 28.07</td><td class="mono" style="color:var(--crit)">не указан</td></tr>
+            <tr><td class="mono">000301402</td><td class="mono">31-02</td><td class="n">27 сут</td><td>выбытие ДГМ без ДЭНТ</td><td>ПРК</td></tr>
+            <tr><td class="mono">000301755</td><td class="mono">09-55</td><td class="n">19 сут</td><td>наряд создан, приёмки нет</td><td class="mono" style="color:var(--crit)">не указан</td></tr>
+            <tr><td class="mono">000301889</td><td class="mono">22-13</td><td class="n">16 сут</td><td>приёмка ДЭНТ без ДГМ</td><td>СТК цех 2</td></tr>
+          </tbody>
+        </table>
+        </div>
+        <figcaption>Колонка «последнее событие» — это диагноз задержки: ждём ремонт, ждём подпись владельца, наряд вообще не заведён в работу. Три разных адресата, три разных разговора.</figcaption>
+      </div>
+      <dl class="rep-meta">
+        <div class="meta-row"><dt>Кто спрашивает</dt><dd>Руководитель поста, ежедневно; главный механик, еженедельно</dd></div>
+        <div class="meta-row"><dt>Единица</dt><dd>Наряд</dd></div>
+        <div class="meta-row"><dt>Уровень</dt><dd>2, собирается из событий уровня 1</dd></div>
+        <div class="meta-row"><dt>Поля</dt><dd><code>number</code>, <code>date</code>, <code>ready_for</code>, <code>direction</code>, <code>status_date</code>, <code>arm</code>, <code>TekStatusPoDoc</code>, <code>postN</code></dd></div>
+        <div class="meta-row"><dt>Разрезы</dt><dd>Бакеты 0–3 / 3–7 / 7–14 / 14–30 / 30+ суток × пост × дирекция</dd></div>
+        <div class="meta-row"><dt>Действие</dt><dd>Утренний разбор хвоста с причиной по каждой строке</dd></div>
+        <div class="meta-row"><dt>Данные</dt><dd class="risk">Строится на текущих полях — но <b>сначала проверить, попадают ли в выгрузку наряды без выбытия</b>. Если 1С отдаёт только закрытые, отчёт окажется пустым, и это не ошибка расчёта, а обрезка на источнике. Проверка: число уникальных <code>number</code> без строк «Готов к выбытию» — если ноль, выгрузку надо расширять.</dd></div>
+      </dl>
+    </div>
+  </article>
+
+  <!-- Р5 -->
+  <article class="report">
+    <div class="rep-head">
+      <span class="rep-num">Р5</span>
+      <div><h3>Готово, но не забрано</h3><div class="rep-q">Сколько техника стоит уже отремонтированной, ожидая, пока владелец подпишет приёмку?</div></div>
+    </div>
+    <div class="rep-body">
+      <div class="rep-mock">
+        <div class="mock-label">Макет · медиана лага ДГМ→ДЭНТ на выбытии, часы по неделям</div>
+        <figure>
+          <svg viewBox="0 0 420 150" role="img" aria-label="Лаг возврата по неделям">
+            <line x1="34" y1="12" x2="34" y2="112" stroke="var(--line-strong)"/>
+            <line x1="34" y1="112" x2="412" y2="112" stroke="var(--line-strong)"/>
+            <g stroke="var(--grid)" stroke-width="1">
+              <line x1="34" y1="87" x2="412" y2="87"/><line x1="34" y1="62" x2="412" y2="62"/><line x1="34" y1="37" x2="412" y2="37"/>
+            </g>
+            <g font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--muted)" text-anchor="end">
+              <text x="28" y="115">0</text><text x="28" y="90">4</text><text x="28" y="65">8</text><text x="28" y="40">12</text>
+            </g>
+            <line x1="34" y1="87" x2="412" y2="87" stroke="var(--crit)" stroke-width="1.5" stroke-dasharray="5 3"/>
+            <text x="412" y="83" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--crit)" text-anchor="end">порог 4 ч — одна смена</text>
+            <polyline points="60,54 110,59 160,39 210,62 260,69 310,67 360,75 405,72" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/>
+            <g fill="var(--s1)">
+              <circle cx="60" cy="54" r="3.2"/><circle cx="110" cy="59" r="3.2"/><circle cx="160" cy="39" r="3.2"/><circle cx="210" cy="62" r="3.2"/>
+              <circle cx="260" cy="69" r="3.2"/><circle cx="310" cy="67" r="3.2"/><circle cx="360" cy="75" r="3.2"/><circle cx="405" cy="72" r="4.2"/>
+            </g>
+            <text x="160" y="31" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink)" text-anchor="middle">11,6</text>
+            <text x="405" y="64" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink)" text-anchor="middle">7,2</text>
+            <g font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--muted)" text-anchor="middle">
+              <text x="60" y="126">28</text><text x="110" y="126">29</text><text x="160" y="126">30</text><text x="210" y="126">31</text>
+              <text x="260" y="126">32</text><text x="310" y="126">33</text><text x="360" y="126">34</text><text x="405" y="126">35</text>
+              <text x="230" y="142">неделя года (yearWeek)</text>
+            </g>
+          </svg>
+        </figure>
+      </div>
+      <dl class="rep-meta">
+        <div class="meta-row"><dt>Кто спрашивает</dt><dd>Руководство обеих дирекций — это межведомственный шов</dd></div>
+        <div class="meta-row"><dt>Единица</dt><dd>Наряд (пара подписей выбытия ДГМ и ДЭНТ)</dd></div>
+        <div class="meta-row"><dt>Уровень</dt><dd>1 → 2, никакой склейки заездов не требуется</dd></div>
+        <div class="meta-row"><dt>Поля</dt><dd><code>number</code>, <code>ready_for</code>, <code>direction</code>, <code>status_date</code>, <code>postN</code>, <code>owner_dep</code></dd></div>
+        <div class="meta-row"><dt>Разрезы</dt><dd>Неделя, пост, владелец техники, время суток подписи ДГМ (ночная смена — отдельный сюжет)</dd></div>
+        <div class="meta-row"><dt>Действие</dt><dd>Дежурный приёмщик на вторую смену; норматив «забрать в течение смены»</dd></div>
+        <div class="meta-row"><dt>Данные</dt><dd class="risk">Самый надёжный отчёт списка: считается по двум отметкам времени, без допущений о длительности ремонта. Обязательно исключить строки <code>arm = «НЕ ПОДПИСАНО»</code> и пустые <code>status_date</code> — иначе медиана считается по неполным парам. Существующая «Синхронность» меряет дисциплину подписи; здесь та же разность переведена в простой техники и адресована другому человеку.</dd></div>
+      </dl>
+    </div>
+  </article>
+
+  <!-- Р6 -->
+  <article class="report">
+    <div class="rep-head">
+      <span class="rep-num">Р6</span>
+      <div><h3>Из чего складываются сутки в ремзоне</h3><div class="rep-q">Куда уходит время наряда: на постановку, на саму ремзону или на возврат владельцу?</div></div>
+    </div>
+    <div class="rep-body">
+      <div class="rep-mock">
+        <div class="mock-label">Макет · медианы фаз, часы, по неделям</div>
+        <figure>
+          <svg viewBox="0 0 420 140" role="img" aria-label="Фазы цикла наряда по неделям">
+            <g>
+              <rect x="20" y="86" width="42" height="12" rx="3" fill="var(--s7)"/><rect x="20" y="26" width="42" height="58" rx="3" fill="var(--s1)"/><rect x="20" y="8" width="42" height="16" rx="3" fill="var(--s2)"/>
+              <rect x="88" y="88" width="42" height="10" rx="3" fill="var(--s7)"/><rect x="88" y="32" width="42" height="54" rx="3" fill="var(--s1)"/><rect x="88" y="16" width="42" height="14" rx="3" fill="var(--s2)"/>
+              <rect x="156" y="84" width="42" height="14" rx="3" fill="var(--s7)"/><rect x="156" y="24" width="42" height="58" rx="3" fill="var(--s1)"/><rect x="156" y="10" width="42" height="12" rx="3" fill="var(--s2)"/>
+              <rect x="224" y="90" width="42" height="8" rx="3" fill="var(--s7)"/><rect x="224" y="38" width="42" height="50" rx="3" fill="var(--s1)"/><rect x="224" y="26" width="42" height="10" rx="3" fill="var(--s2)"/>
+              <rect x="292" y="89" width="42" height="9" rx="3" fill="var(--s7)"/><rect x="292" y="40" width="42" height="47" rx="3" fill="var(--s1)"/><rect x="292" y="28" width="42" height="10" rx="3" fill="var(--s2)"/>
+              <rect x="360" y="90" width="42" height="8" rx="3" fill="var(--s7)"/><rect x="360" y="46" width="42" height="42" rx="3" fill="var(--s1)"/><rect x="360" y="36" width="42" height="8" rx="3" fill="var(--s2)"/>
+            </g>
+            <line x1="10" y1="98" x2="412" y2="98" stroke="var(--line-strong)"/>
+            <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink)" text-anchor="middle">
+              <text x="41" y="112">54 ч</text><text x="109" y="112">48</text><text x="177" y="112">53</text><text x="245" y="112">44</text><text x="313" y="112">42</text><text x="381" y="112">38</text>
+            </g>
+            <g font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--muted)" text-anchor="middle">
+              <text x="41" y="126">н30</text><text x="109" y="126">н31</text><text x="177" y="126">н32</text><text x="245" y="126">н33</text><text x="313" y="126">н34</text><text x="381" y="126">н35</text>
+            </g>
+          </svg>
+          <div class="legend">
+            <span><i style="background:var(--s7)"></i>постановка: создание → приёмка</span>
+            <span><i style="background:var(--s1)"></i>ремзона: очередь + ремонт, неразделимо</span>
+            <span><i style="background:var(--s2)"></i>возврат: выбытие ДГМ → ДЭНТ</span>
+          </div>
+        </figure>
+      </div>
+      <dl class="rep-meta">
+        <div class="meta-row"><dt>Кто спрашивает</dt><dd>Главный механик: куда бить — в очередь, в ремонт или в возврат</dd></div>
+        <div class="meta-row"><dt>Единица</dt><dd>Наряд, агрегируется медианой (не средним)</dd></div>
+        <div class="meta-row"><dt>Уровень</dt><dd>2</dd></div>
+        <div class="meta-row"><dt>Поля</dt><dd><code>number</code>, <code>date</code>, <code>ready_for</code>, <code>direction</code>, <code>status_date</code></dd></div>
+        <div class="meta-row"><dt>Разрезы</dt><dd>Неделя, пост, вид ремонта <code>zn_type</code> (плановый против внепланового)</dd></div>
+        <div class="meta-row"><dt>Действие</dt><dd>Если растёт средняя полоса — расшивка постов; верхняя — регламент возврата; нижняя — дисциплина оформления</dd></div>
+        <div class="meta-row"><dt>Данные</dt><dd class="risk">Средняя полоса принципиально неразложима: <b>отделить очередь от собственно ремонта можно только по истории смены поста, а есть ли она в 1С — не выяснено</b>. До выяснения полоса подписана «очередь + ремонт» и в план/факт не превращается. Выбросы (наряд с планом 2,4 ч и фактом 5 042 ч) режутся по p95 и уходят списком в Р10, а не искажают медиану. <code>hourdlit</code> вида <code>"11:00"</code> разбирается в часы отдельно и на этом графике не используется.</dd></div>
+      </dl>
+    </div>
+  </article>
+
+  <!-- Р7 -->
+  <article class="report">
+    <div class="rep-head">
+      <span class="rep-num">Р7</span>
+      <div><h3>Пакет против дробления</h3><div class="rep-q">Машину загоняют один раз и чинят всё сразу — или гоняют через КПП трижды за неделю по одному дефекту?</div></div>
+    </div>
+    <div class="rep-body">
+      <div class="rep-mock">
+        <div class="mock-label">Макет · распределение заездов по числу нарядов + чувствительность к порогу</div>
+        <figure>
+          <svg viewBox="0 0 420 150" role="img" aria-label="Распределение заездов по числу нарядов">
+            <g>
+              <rect x="10" y="20" width="120" height="34" rx="4" fill="var(--s1)"/>
+              <rect x="150" y="20" width="52" height="34" rx="4" fill="var(--s2)"/>
+              <rect x="222" y="20" width="20" height="34" rx="4" fill="var(--crit)"/>
+            </g>
+            <g font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">
+              <text x="10" y="70">63 % — 1 наряд</text><text x="150" y="70">27 % — 2–3</text><text x="222" y="86" fill="var(--crit)">10 % — 4 и более</text>
+            </g>
+            <text x="10" y="112" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)">ЧУВСТВИТЕЛЬНОСТЬ К ПОРОГУ СКЛЕЙКИ</text>
+            <g font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-2)">
+              <text x="10" y="130">8 ч → 4 910 заездов</text>
+              <text x="150" y="130" fill="var(--ink)">12 ч → 4 480</text>
+              <text x="290" y="130">24 ч → 3 870</text>
+            </g>
+            <text x="10" y="146" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--muted)">порог — параметр отчёта, а не константа в коде</text>
+          </svg>
+        </figure>
+      </div>
+      <dl class="rep-meta">
+        <div class="meta-row"><dt>Кто спрашивает</dt><dd>ДЭНТ (перегоны и водители) и ДГМ (переналадка поста)</dd></div>
+        <div class="meta-row"><dt>Единица</dt><dd>Заезд; внутри — число нарядов на заезд</dd></div>
+        <div class="meta-row"><dt>Уровень</dt><dd>3 — отчёт, ради которого этот уровень и строится</dd></div>
+        <div class="meta-row"><dt>Поля</dt><dd><code>ts</code>, <code>number</code>, <code>status_date</code>, <code>defekt_type</code></dd></div>
+        <div class="meta-row"><dt>Разрезы</dt><dd>Владелец техники, месяц, машина; отдельно — заезды одной машины с интервалом менее суток</dd></div>
+        <div class="meta-row"><dt>Действие</dt><dd>Правило сдачи пакетом: перед постановкой собрать все известные дефекты в один заезд</dd></div>
+        <div class="meta-row"><dt>Данные</dt><dd class="risk">Порог 12 ч — <b>гипотеза, опирающаяся на медиану размаха 12,9 ч, а не измеренный факт</b>. Поэтому отчёт обязан показывать три значения порога рядом: если выводы при 8 и 24 часах расходятся качественно, публиковать нельзя — сначала нужен признак фактического выезда с территории.</dd></div>
+      </dl>
+    </div>
+  </article>
+
+  <!-- Р8 -->
+  <article class="report">
+    <div class="rep-head">
+      <span class="rep-num">Р8</span>
+      <div><h3>Подозрение на повтор</h3><div class="rep-q">Какие ремонты вернулись обратно — и какие из них стоит разобрать руками?</div></div>
+    </div>
+    <div class="rep-body">
+      <div class="rep-mock">
+        <div class="mock-label">Макет · рабочий список, не метрика</div>
+        <div class="scroll">
+        <table>
+          <thead><tr><th>Машина</th><th>Раздел</th><th class="n">Интервал</th><th>Первый / повторный наряд</th><th>Итог разбора</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">14-07</td><td>Ходовая</td><td class="n">6 сут</td><td class="mono">…944 / …188</td><td><span class="pill crit">повтор</span></td></tr>
+            <tr><td class="mono">28-18</td><td>Электрика</td><td class="n">11 сут</td><td class="mono">…402 / …559</td><td><span class="pill good">другой дефект</span></td></tr>
+            <tr><td class="mono">31-02</td><td>ДВС</td><td class="n">19 сут</td><td class="mono">…755 / …889</td><td><span class="pill">не разобран</span></td></tr>
+          </tbody>
+        </table>
+        </div>
+        <figcaption style="color:var(--crit)">Шапка отчёта содержит дисклеймер: «кандидаты на повтор, не показатель качества ремонта». Столбец «итог разбора» заполняет мастер — и именно он со временем превращается в обучающую выборку для классификатора дефектов.</figcaption>
+      </div>
+      <dl class="rep-meta">
+        <div class="meta-row"><dt>Кто спрашивает</dt><dd>Мастер поста; на уровень руководства цифра не выносится</dd></div>
+        <div class="meta-row"><dt>Единица</dt><dd>Пара заездов одной машины</dd></div>
+        <div class="meta-row"><dt>Уровень</dt><dd>3</dd></div>
+        <div class="meta-row"><dt>Поля</dt><dd><code>ts</code>, <code>defekt_type</code>, <code>defect_desc</code>, <code>status_date</code>, <code>number</code></dd></div>
+        <div class="meta-row"><dt>Разрезы</dt><dd>Окно 30 суток, тот же раздел; сортировка по возрастанию интервала (чем ближе — тем подозрительнее)</dd></div>
+        <div class="meta-row"><dt>Действие</dt><dd>10–30 кейсов в неделю на ручной разбор; результат разбора — вход для будущего справочника</dd></div>
+        <div class="meta-row"><dt>Данные</dt><dd class="risk"><b>Насчитанные 42 % повторов — артефакт классификатора из 12 значений и в отчётность не выносятся.</b> Достоверная метрика невозможна до появления <code>dictDefect</code> — смысловой группировки ~20 тыс. описаний. Пока её нет, отчёт живёт в жанре списка, а не процента. Отдельно: <code>defect_desc</code> может содержать ФИО — во внешнюю модель это поле не уходит до написания санитайзера.</dd></div>
+      </dl>
+    </div>
+  </article>
+
+  <!-- Р9 -->
+  <article class="report">
+    <div class="rep-head">
+      <span class="rep-num">Р9</span>
+      <div><h3>Где деньги на материалы</h3><div class="rep-q">Какая часть парка съедает основную часть закупки запчастей и на что именно?</div></div>
+    </div>
+    <div class="rep-body">
+      <div class="rep-mock">
+        <div class="mock-label">Макет · ABC-разбиение парка по <code>cost_parts</code></div>
+        <figure>
+          <svg viewBox="0 0 420 130" role="img" aria-label="ABC-анализ затрат на материалы">
+            <text x="0" y="12" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)">ДОЛЯ МАШИН</text>
+            <rect x="0" y="18" width="76" height="20" rx="3" fill="var(--s2)"/>
+            <rect x="79" y="18" width="113" height="20" rx="3" fill="var(--s4)"/>
+            <rect x="195" y="18" width="225" height="20" rx="3" fill="var(--muted)"/>
+            <g font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--surface)" text-anchor="middle"><text x="38" y="32">18 %</text><text x="135" y="32">27 %</text><text x="307" y="32">55 %</text></g>
+            <text x="0" y="62" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)">ДОЛЯ ЗАТРАТ</text>
+            <rect x="0" y="68" width="336" height="20" rx="3" fill="var(--s2)"/>
+            <rect x="339" y="68" width="63" height="20" rx="3" fill="var(--s4)"/>
+            <rect x="405" y="68" width="15" height="20" rx="3" fill="var(--muted)"/>
+            <g font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--surface)" text-anchor="middle"><text x="168" y="82">80 %</text><text x="370" y="82">15 %</text></g>
+            <text x="418" y="102" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--muted)" text-anchor="end">5 %</text>
+            <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)">
+              <text x="0" y="120">A — 47 машин, 2,1 млн ₽/мес</text><text x="200" y="120">B — 71</text><text x="290" y="120">C — 145</text>
+            </g>
+          </svg>
+        </figure>
+      </div>
+      <dl class="rep-meta">
+        <div class="meta-row"><dt>Кто спрашивает</dt><dd>Закупка, экономика, главный механик при защите бюджета</dd></div>
+        <div class="meta-row"><dt>Единица</dt><dd>Наряд в рублях → агрегат по машине и по узлу</dd></div>
+        <div class="meta-row"><dt>Уровень</dt><dd>2</dd></div>
+        <div class="meta-row"><dt>Поля</dt><dd><code>cost_parts</code>, <code>ts</code>, <code>defekt_type</code>, <code>MadeYear</code>, <code>number</code></dd></div>
+        <div class="meta-row"><dt>Разрезы</dt><dd>Группы A/B/C; топ-20 самых дорогих нарядов помесячно; узел × когорта</dd></div>
+        <div class="meta-row"><dt>Действие</dt><dd>Заявка на закупку по группе A; экономическое обоснование замены вместо ремонта</dd></div>
+        <div class="meta-row"><dt>Данные</dt><dd class="risk">Только материалы. <b><code>cost_Trudozatrat</code> — часы, а не рубли</b>: перевести их в деньги можно лишь умножением на ставку нормо-часа, которой в выгрузке нет. Пока её нет, отчёт нигде не называется «стоимостью ремонта» — только «затратами на материалы», иначе первое же сравнение с бухгалтерией его похоронит.</dd></div>
+      </dl>
+    </div>
+  </article>
+
+  <!-- Р10 -->
+  <article class="report">
+    <div class="rep-head">
+      <span class="rep-num">Р10</span>
+      <div><h3>Качество учёта</h3><div class="rep-q">Насколько данным можно верить сегодня, что чинится в 1С и кем — с датой?</div></div>
+    </div>
+    <div class="rep-body">
+      <div class="rep-mock">
+        <div class="mock-label">Макет · реестр дефектов данных с единицей счёта у каждой строки</div>
+        <div class="scroll">
+        <table>
+          <thead><tr><th>Дефект</th><th>Единица</th><th class="n">Сейчас</th><th>Кто чинит</th><th>Статус</th></tr></thead>
+          <tbody>
+            <tr><td>Наряд без поста</td><td class="mono">наряд</td><td class="n">33 %</td><td>ДГМ + 1С</td><td><span class="pill crit">открыт</span></td></tr>
+            <tr><td><code>post</code> — родитель, а не пост</td><td class="mono">поле</td><td class="n">100 %</td><td>1С (выгрузка)</td><td><span class="pill crit">открыт</span></td></tr>
+            <tr><td>Строки-призраки <code>yearWeek = 101</code></td><td class="mono">событие</td><td class="n">1 204</td><td>1С (выгрузка)</td><td><span class="pill warn">в работе</span></td></tr>
+            <tr><td><code>arm = «НЕ ПОДПИСАНО»</code></td><td class="mono">событие</td><td class="n">4,1 %</td><td>дирекции</td><td><span class="pill warn">в работе</span></td></tr>
+            <tr><td><code>emp_dep</code> ≠ <code>direction</code></td><td class="mono">событие</td><td class="n">2,6 %</td><td>кадры + ДГМ</td><td><span class="pill warn">в работе</span></td></tr>
+            <tr><td>Нет признака счётчика (пробег/моточасы)</td><td class="mono">машина</td><td class="n">нет поля</td><td>1С (выгрузка)</td><td><span class="pill crit">открыт</span></td></tr>
+            <tr><td><code>model_type</code> — константа</td><td class="mono">поле</td><td class="n">100 %</td><td>1С (выгрузка)</td><td><span class="pill crit">открыт</span></td></tr>
+            <tr><td><code>in_bounds</code> всегда false</td><td class="mono">поле</td><td class="n">100 %</td><td>1С — удалить</td><td><span class="pill ser">к удалению</span></td></tr>
+            <tr><td>Аномальный <code>deltaHours</code> &gt; 720 ч</td><td class="mono">наряд</td><td class="n">86</td><td>ДГМ (разбор)</td><td><span class="pill warn">в работе</span></td></tr>
+          </tbody>
+        </table>
+        </div>
+        <figcaption>Единица счёта проставлена у каждой строки намеренно: «33 % нарядов» и «4,1 % событий» стоят рядом и не складываются. Без этой колонки таблица через месяц начнёт врать.</figcaption>
+      </div>
+      <dl class="rep-meta">
+        <div class="meta-row"><dt>Кто спрашивает</dt><dd>Владелец процесса и ИТ; это отчёт-требование к источнику</dd></div>
+        <div class="meta-row"><dt>Единица</dt><dd>Своя у каждой строки — поле, событие, наряд или машина</dd></div>
+        <div class="meta-row"><dt>Уровень</dt><dd>1 и 2 одновременно</dd></div>
+        <div class="meta-row"><dt>Поля</dt><dd>Служебные проверки по всей таблице <code>tbDATA</code></dd></div>
+        <div class="meta-row"><dt>Разрезы</dt><dd>Неделя (динамика — чинится или нет), дирекция, пост</dd></div>
+        <div class="meta-row"><dt>Действие</dt><dd>Реестр заявок на доработку выгрузки с ответственным и сроком; закрытая строка исчезает с панели</dd></div>
+        <div class="meta-row"><dt>Данные</dt><dd class="risk">Единственный отчёт, которому дефектные поля не мешают — они его содержание. Он же защищает остальные девять: пока строка открыта, отчёты, на неё опирающиеся, публикуются с пометкой о недостоверности.</dd></div>
+      </dl>
+    </div>
+  </article>
+</section>
+
+<!-- ══════════════ ОГРАНИЧЕНИЯ ══════════════ -->
+<section>
+  <div class="sec-head">
+    <span class="n">ГРАНИЦЫ</span>
+    <h2>Чего нельзя построить и что для этого нужно</h2>
+  </div>
+  <div class="two-col">
+    <div class="mock">
+      <div class="mock-bar"><span class="ttl">Нельзя до починки выгрузки</span></div>
+      <div class="mock-body">
+        <ul class="tight">
+          <li><b>План против факта длительности.</b> <code>deltaHours</code> включает очередь и задержку подписи; наряд с планом 2,4 ч и фактом 5 042 ч — не срыв, а свойство метрики. Нужна история смены поста или отметки начала и конца работ.</li>
+          <li><b>Наработка и межремонтный интервал.</b> <code>odometer</code> и <code>engine_hours</code> взаимоисключающи, признака применимого счётчика нет — среднее по ним бессмысленно.</li>
+          <li><b>Достоверный процент повторных ремонтов.</b> Требует <code>dictDefect</code> поверх ~20 тыс. описаний.</li>
+          <li><b>Загрузка конкретного поста.</b> <code>post</code> — родитель, плюс 33 % пусто. Сравнивать площадки можно, конкретные посты — нет.</li>
+          <li><b>Сравнение по типам техники.</b> <code>model_type</code> — константа.</li>
+          <li><b>Полная стоимость ремонта.</b> Нет ставки нормо-часа, есть только материалы.</li>
+          <li><b>Любая оценка людей.</b> ФИО не уходят во внешнюю модель, персональные рейтинги не строятся — и по 152-ФЗ, и по существу: доля планшета у инженера зависит от поста, а не от него.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="mock">
+      <div class="mock-bar"><span class="ttl">Заявка на доработку 1С · по приоритету</span></div>
+      <div class="mock-body">
+        <ol class="tight" style="padding-left:20px">
+          <li><b>Лист поста</b> вместо родителя + обязательность заполнения. Разблокирует Р4, Р5, Р6 в разрезе постов.</li>
+          <li><b>Настоящий тип ТС</b> отдельным полем. Разблокирует Р2 и Р3 в разрезе техники.</li>
+          <li><b>Признак применимого счётчика</b> (пробег или моточасы). Открывает метрики наработки целиком.</li>
+          <li><b>Выгрузка незакрытых нарядов</b> — проверить, отдаёт ли их источник. Без этого Р4 пуст.</li>
+          <li><b>Ставка нормо-часа</b> к <code>cost_Trudozatrat</code>. Достраивает Р9 до полной стоимости.</li>
+          <li><b>История смены поста / отметки работ.</b> Единственный путь к честному план-факту.</li>
+          <li><b>Удалить <code>in_bounds</code></b> и починить календарные поля при пустой <code>status_date</code>.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="note" style="margin-top:22px">
+    <strong>Порядок сборки.</strong> Р5, Р4 и Р10 считаются на текущих полях и не требуют уровня 3 — их можно делать первыми, они же дают самый быстрый управленческий эффект. Р1, Р2, Р7 требуют склейки заездов. Р3 и Р9 упираются в качество классификатора и в отсутствие типа ТС, но в верхнеуровневом виде работают. Р8 остаётся списком, пока не появится справочник дефектов.
+  </div>
+</section>
+
+<footer>
+  Макеты · трек Б, операционка ремзоны. Цифры демонстрационные. Ограничения контура учтены: офлайн-HTML, инлайн-SVG без внешних библиотек, все расчёты на стороне Excel, ФИО за периметр не уходят.
+</footer>
+
+</div>
