@@ -10,7 +10,7 @@
     он откроет уже частично собранную книгу (а не начнёт заново с чистой заготовки) и
     продолжит с того места, где остановился.
 
-      1. Если $OutputPath (ReportMTO.xlsm) уже существует — открывает ЕГО (режим "продолжить").
+      1. Если $OutputPath (по умолчанию build\ReportMTO.xlsm) уже существует — открывает ЕГО (режим "продолжить").
          Если нет — открывает build\starter\ReportMTO_starter.xlsx и сохраняет как $OutputPath (режим "с нуля").
       2. Импортирует все .bas из src/vba в VBA-проект (VBComponents.Import — задокументированный
          API), пропуская модули, которые уже есть в книге по имени. Сохраняет книгу сразу
@@ -34,7 +34,8 @@
     Папка проекта (там, где лежат src\vba, src\powerquery, tmp_index.html, build\starter\ReportMTO_starter.xlsx).
 
 .PARAMETER OutputPath
-    Куда сохранить итоговый ReportMTO.xlsm. По умолчанию — $ProjectRoot\ReportMTO.xlsm.
+    Куда сохранить итоговый ReportMTO.xlsm. По умолчанию — $ProjectRoot\build\ReportMTO.xlsm
+    (папка build передаётся в git-обмен целиком; локальная копия в корне проекта — вне git).
     Если файл по этому пути уже существует — скрипт ПРОДОЛЖИТ сборку в нём, а не начнёт с нуля
     (см. режим "продолжить" выше). Если хотите начать заново с чистого листа — удалите этот файл
     перед запуском (или используйте другой -OutputPath).
@@ -69,7 +70,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$ProjectRoot,
 
-    [string]$OutputPath = $(Join-Path $ProjectRoot "ReportMTO.xlsm"),
+    [string]$OutputPath = $(Join-Path $ProjectRoot "build\ReportMTO.xlsm"),
 
     [string]$SourcePathPlaceholder = "C:\MTO_Analytics\Data\placeholder.json"
 )

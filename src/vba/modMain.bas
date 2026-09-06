@@ -28,15 +28,27 @@ Public Sub LoadSourceFile()
     On Error GoTo ErrHandler
 
     SetSourcePathParameter CStr(filePath)
+    ' Итог этапа 1/3 (вариант А - логирование в оркестраторе): полный путь нужен для
+    ' возобновления загрузки после обрыва на следующих этапах.
+    modLog.WriteLogEntry Now, "Инфо", "Параметр PQ", "prmSourcePath", _
+        "Путь выбранного файла: " & CStr(filePath)
+
     modPQSync.RefreshImportQuery
 
     Dim rowsAfter As Long
     rowsAfter = SafeRowCount()
 
-    modLog.WriteLogEntry Now, "Инфо", "Загрузка данных", Dir(CStr(filePath)), _
+    ' Итог этапа 2/3: строки до/после - вместо прежней общей записи «Загрузка данных»,
+    ' чтобы не дублировать одни и те же цифры в двух строках лога.
+    modLog.WriteLogEntry Now, "Инфо", "Обновление импорта", "Query-ImportJSON", _
         "Строк до: " & rowsBefore & "; строк после: " & rowsAfter
 
     modContentMTO.BuildPivots
+    ' Итог этапа 3/3: BuildPivots не возвращает результат, поэтому фиксируем факт
+    ' завершения и текущий объём tbDATA.
+    modLog.WriteLogEntry Now, "Инфо", "Сводки", "modContentMTO.BuildPivots", _
+        "Сводки построены; строк в tbDATA: " & SafeRowCount()
+
     MsgBox "Загрузка завершена. Строк в tbDATA: " & rowsAfter, vbInformation
     Exit Sub
 
