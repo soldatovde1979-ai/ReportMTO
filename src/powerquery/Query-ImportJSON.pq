@@ -1,14 +1,22 @@
 // Query - ImportJSON — CORE, generic ETL-пайплайн (Architecture Core §5, §5.1).
 // Вызывает по фиксированным именам контракта: fnNormalizeFields, fnComputeKey,
-// fnComputeGroupMetrics (реализация — Content Spec направления) и fnUpsert (Core).
+// fnDedupByKey, fnComputeGroupMetrics (реализация — Content Spec направления)
+// и fnUpsert (Core).
 //
 // prmSourcePath — именованный параметр (текстовый), задаётся из VBA перед Refresh (modMain.bas).
 // "tbDATA" — имя целевой таблицы листа, фиксировано контрактом Core (Architecture Core §5.1).
 //
-// v3.1 (ревью 24.08.2026) — без изменений в v5:
-//   A-3/P2-4 — fnNormalizeFields вызывается как table -> table.
-//   P1-7     — Table.Buffer перед выгрузкой (запрос самоссылающийся).
-//   P1-7b    — первый запуск не опирается на fnUpsert(X, X).
+// v7 (06.09.2026), одна правка:
+//   C-1 — в конвейер добавлен шаг fnDedupByKey между fnComputeKey и fnComputeGroupMetrics.
+//         Правка Core, критерий соблюдён: fnUpsert склеивает результат как
+//         Table.Combine({NewBuf, Cleaned}) и НЕ проверяет уникальность Key в newData —
+//         значит гарантировать её обязан конвейер, и обязан для ЛЮБОГО отчёта на этой
+//         платформе, а не только для МТО. В Core лежит только вызов по фиксированному
+//         имени; само правило победителя (для МТО — максимальный status_date) живёт
+//         в реализации направления, см. fnDedupByKey.pq.
+//         Место шага существенно: дедупликация ДО fnComputeGroupMetrics оставляет на пару
+//         (number, direction) не больше одной записи каждого статуса, и допущение min/max
+//         в расчёте deltaHours вырождается.
 //
 // v5 (02.09.2026), две правки, обе связаны с «файл не загружается»:
 //   L-1 — Json.Document получает кодовую страницу 65001 (UTF-8). Без второго аргумента
@@ -22,6 +30,11 @@
 //         (!) Одна эта правка firewall не снимает: нужны ещё две вещи, см. AUDIT_src_v2.md,
 //            раздел «Блокер 1» (prmSourcePath должен остаться ПАРАМЕТРОМ + разово выключить
 //            уровни конфиденциальности в настройках Excel).
+//
+// v3.1 (ревью 24.08.2026) — без изменений в v5:
+//   A-3/P2-4 — fnNormalizeFields вызывается как table -> table.
+//   P1-7     — Table.Buffer перед выгрузкой (запрос самоссылающийся).
+//   P1-7b    — первый запуск не опирается на fnUpsert(X, X).
 let
     // 65001 — кодовая страница источника, а не «кодировка вывода». UTF-8 с BOM тоже понимается.
     Source = Json.Document(File.Contents(prmSourcePath), 65001),
@@ -39,7 +52,12 @@ let
     Normalized = fnNormalizeFields(Expanded),
 
     WithKey = Table.AddColumn(Normalized, "Key", each fnComputeKey(_), type text),
-    WithGroups = fnComputeGroupMetrics(WithKey),
+
+    // C-1: уникальность Key в пределах одного файла. Обязательна перед fnUpsert
+    // и перед расчётом дельт — см. шапку и fnDedupByKey.pq.
+    Deduped = fnDedupByKey(WithKey),
+
+    WithGroups = fnComputeGroupMetrics(Deduped),
 
     NewData = Table.Buffer(WithGroups),
 

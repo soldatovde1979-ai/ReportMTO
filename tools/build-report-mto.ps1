@@ -15,7 +15,7 @@
       2. Импортирует все .bas из src/vba в VBA-проект (VBComponents.Import — задокументированный
          API), пропуская модули, которые уже есть в книге по имени. Сохраняет книгу сразу
          после этого шага — импортированные модули не потеряются, даже если дальше что-то упадёт.
-      3. Создаёт 6 Power Query-запросов через Workbook.Queries.Add (задокументированный API):
+      3. Создаёт 7 Power Query-запросов через Workbook.Queries.Add (задокументированный API):
          сначала prmSourcePath (текстовая заглушка-путь), затем 4 функции, последним —
          Query-ImportJSON. Пропускает уже существующие запросы. Каждый Add обёрнут в повтор
          (до 3 попыток с паузой) — на практике Excel иногда кратковременно "занят" сразу после
@@ -60,7 +60,7 @@
         либо отключить общую проверку — после этого скрытые диалоги на этом шаге больше не
         появляются.
     Импорт VBA-модулей (шаг 2) проверен на реальном Excel и работает надёжно. Создание
-    Power Query-запросов (шаг 3) через Workbook.Queries.Add — задокументированный API, но
+    Power Query-запросов (шаг 3, с v7 их 7) через Workbook.Queries.Add — задокументированный API, но
     на практике проявляет описанную выше нестабильность COM/UI-диалогов; повтор + идемпотентность
     в этой версии скрипта — прямой ответ на найденные при реальных прогонах ошибки (см. next-steps.md).
     Шаг 4 остаётся экспериментальным и не проверялся ни разу на реальном Excel.
@@ -265,7 +265,7 @@ try {
     # 3.2 функции + qExistingData + Query-ImportJSON — в этом порядке, читаем M-код прямо из файлов.
     # qExistingData добавлен в v5: чтение листа tbDATA вынесено из Query-ImportJSON отдельным
     # запросом (Formula Firewall). Грузить его на лист НЕ надо — только создать подключение.
-    $pqOrder = @("fnNormalizeFields", "fnComputeKey", "fnComputeGroupMetrics", "fnUpsert", "qExistingData", "Query-ImportJSON")
+    $pqOrder = @("fnNormalizeFields", "fnComputeKey", "fnDedupByKey", "fnComputeGroupMetrics", "fnUpsert", "qExistingData", "Query-ImportJSON")
     foreach ($qname in $pqOrder) {
         $file = Join-Path $pqDir "$qname.pq"
         if (-not (Test-Path $file)) { throw "Не найден файл запроса: $file" }
