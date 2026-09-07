@@ -4,6 +4,9 @@
 > **Ревизия от 24.08.2026** по итогам ревью `MTO_Review_2026-08-24.md`: обновлены §1.1 (новый ключ
 > и контракт `RESULT_FOLDER`), §2.1 (`yearWeek`, формула `Key`), §2.2 (новый контракт
 > `fnNormalizeFields`), §2.4 (все блоки без PivotTable), §3.1–§3.2 (JSON-промпт и двухшаговый разбор).
+> **Ревизия от 07.09.2026** по факту выгрузок 2026: §2.1 — новые реквизиты выгрузки (13 полей),
+> третье значение `arm` «НЕ ПОДПИСАНО» и гипотезы вычисляемых полей плана v4 (⚠️ требуют
+> подтверждения); §2.2 — пометка о сквозном прохождении новых полей.
 
 ---
 
@@ -107,10 +110,23 @@ Parameter через Manage Parameters. Она живёт в коллекции 
     },
     "arm": {
       "type": "string",
-      "enum": ["ПК", "ПЛАНШЕТ"],
-      "description": "Устройство, на котором сменился статус"
+      "enum": ["ПК", "ПЛАНШЕТ", "НЕ ПОДПИСАНО"],
+      "description": "Устройство, на котором сменился статус; «НЕ ПОДПИСАНО» — статус не зафиксирован ни на одном устройстве: такие строки в выгрузке 2026 идут с in_bounds=false, employee/status_date пустыми и в отчётность не входят"
     },
     "post": { "type": "string", "description": "Ремзона/пост, сырое значение из 1С, может быть пустым" },
+    "owner_dep": { "type": "string", "description": "Подразделение-владелец ТС (новый реквизит 2026)", "example": "Служба доставки пассажиров (ДЭНТ)" },
+    "TekStatusPoDoc": { "type": "string", "description": "Статус ЗН по документу (новый реквизит 2026)", "example": "В ремонте" },
+    "vehicle_group": { "type": "string", "description": "Группа ТС (новый реквизит 2026)", "example": "Микроавтобус" },
+    "vehicle_number": { "type": "string", "description": "Номер ТС (новый реквизит 2026)", "example": "5-26" },
+    "hourdlit": { "type": "string", "description": "Длительность работ, чч:мм (новый реквизит 2026; ⚠️ приходит текстом, не числом)", "example": "15:10" },
+    "MadeYear": { "type": "string", "format": "date-time", "description": "Дата выпуска ТС (новый реквизит 2026; приходит как ISO datetime)", "example": "2017-12-01T00:00:00" },
+    "Sektor": { "type": "string", "description": "Сектор/линейка (новый реквизит 2026)", "example": "Линейка Ш-1" },
+    "cost_parts": { "type": "number", "description": "Стоимость запчастей (новый реквизит 2026)", "example": 54079.6 },
+    "cost_Trudozatrat": { "type": "number", "description": "Стоимость трудозатрат (новый реквизит 2026)", "example": 2 },
+    "ts": { "type": "string", "description": "Описание ТС (новый реквизит 2026)", "example": "5-26 Микроавтобус FORD TRANSIT" },
+    "zn_closed": { "type": ["string", "null"], "format": "date-time", "description": "Дата закрытия ЗН, может быть null (новый реквизит 2026)" },
+    "odometer": { "type": "number", "description": "Пробег (новый реквизит 2026)", "example": 0 },
+    "engine_hours": { "type": "number", "description": "Моточасы (новый реквизит 2026)", "example": 0 },
     "day_status": { "type": "integer", "description": "Не используется в отчётности" },
     "month_status": { "type": "integer", "description": "Не используется в отчётности" },
     "year_status": { "type": "integer", "description": "Не используется в отчётности" },
@@ -154,11 +170,42 @@ Parameter через Manage Parameters. Она живёт в коллекции 
       "type": ["number", "null"],
       "description": "Вычисляемое поле. Часы между status_date записи «Готов к приёмке» и записи «Готов к выбытию» в рамках одной пары (number, direction). Присваивается ТОЛЬКО строке со статусом «Готов к выбытию»; у строки «Готов к приёмке» — null. ⚠️ При >2 статусных записей на пару (number, direction) берутся min/max по status_date — не подтверждено заказчиком",
       "computed_by": "fnComputeGroupMetrics"
+    },
+    "isWait": {
+      "type": "boolean",
+      "description": "⚠️ ГИПОТЕЗА (план v4, правила не зафиксированы). ЗН в ожидании (простой: запчасти/подрядчик/решение); кандидат: TekStatusPoDoc содержит «ожидан» (без учёта регистра)",
+      "computed_by": "fnNormalizeFields (кандидат, не реализовано)"
+    },
+    "isRepair": {
+      "type": "boolean",
+      "description": "⚠️ ГИПОТЕЗА (план v4, правила не зафиксированы). ЗН относится к ремонту (не ТО/обслуживание); кандидат: zn_type содержит «ремонт» (без учёта регистра)",
+      "computed_by": "fnNormalizeFields (кандидат, не реализовано)"
+    },
+    "usage": {
+      "type": ["boolean", "number", "null"],
+      "description": "⚠️ ГИПОТЕЗА (план v4, правила не зафиксированы). Признак использования планшета. Вариант A: arm = «ПЛАНШЕТ» (дублирует arm); вариант B: числовой показатель использования. Тип и формула без дополнительных данных не определяются",
+      "computed_by": "—"
+    },
+    "usageSrc": {
+      "type": ["string", "null"],
+      "description": "⚠️ ГИПОТЕЗА (план v4, правила не зафиксированы). Источник, из которого определён usage (например «1С», «журнал входа в планшет»); способ вывода значения неясен",
+      "computed_by": "—"
+    },
+    "ageYears": {
+      "type": ["number", "null"],
+      "description": "⚠️ ГИПОТЕЗА (план v4, правила не зафиксированы). Возраст ТС в годах на момент формирования отчёта: Year(сейчас) − Year(MadeYear); округление (полные годы vs календарный год) не определено",
+      "computed_by": "fnNormalizeFields (кандидат, не реализовано)"
     }
   },
   "required": ["number", "date", "ready_for", "direction", "status_date", "employee", "arm", "week_status", "postN", "yearWeek", "Key"]
 }
 ```
+
+**Новые реквизиты выгрузки (2026):** поля `owner_dep`, `TekStatusPoDoc`, `vehicle_group`,
+`vehicle_number`, `hourdlit`, `MadeYear`, `Sektor`, `cost_parts`, `cost_Trudozatrat`, `ts`,
+`zn_closed`, `odometer`, `engine_hours` проходят в `tbDATA` без изменений и в расчётах блоков
+1–9 не участвуют. Их типизация и использование — план v4 (вычисляемые поля `isWait`, `isRepair`,
+`usage`, `usageSrc`, `ageYears`; правила расчёта ждут фиксации).
 
 ### 2.2 Реализация вычисляемых полей (Power Query Custom Functions)
 
@@ -242,6 +289,9 @@ Parameter через Manage Parameters. Она живёт в коллекции 
 
 > ⚠️ Код не прогонялся целиком в редакторе Power Query — при внедрении проверить синтаксис
 > `Table.Group`/`Table.TransformColumns`/`Table.NestedJoin` в реальном редакторе запросов.
+>
+> **Новые поля выгрузки (2026)** в `fnNormalizeFields` не типизируются и не изменяются —
+> проходят в `tbDATA` как есть; их использование — план v4.
 
 ### 2.3 `Logs` (ListObject `tbLogs`) — JSON Schema
 
