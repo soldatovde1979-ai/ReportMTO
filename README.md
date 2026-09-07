@@ -4,6 +4,16 @@
 собирается в `build\` и передаётся в git-обмен вместе с этой папкой (см. «Сборка» ниже).
 Локальная копия книги в корне проекта — вне git (см. `.gitignore`).
 
+## Что читать (порядок)
+
+1. Этот README — карта проекта, сборка, допущения.
+2. `docs\spec.md` — вся система: архитектура, конфигурация, схема данных, контракты, потоки, бэклог, известные проблемы.
+3. `docs\content-spec.md` — специфика МТО: поля выгрузки, 9 блоков, промпт DeepSeek, слайды, палитра.
+4. `docs\brief-data-mto.md` — предметная область для внешнего аналитика.
+5. `docs\manifest.md` — контрольные суммы файлов (для сверки сборок).
+6. `docs\next-steps.md` — что сделано/не сделано, чем заняться дальше.
+7. `docs\archive\` — только история: выполненные планы, старые инструкции установки.
+
 ## Что где лежит
 
 | Папка/файл | Что внутри | Владелец |
@@ -22,14 +32,15 @@
 | `src\powerquery\fnNormalizeFields.pq` | Нормализация `postN` | **Content Spec** |
 | `src\powerquery\fnComputeKey.pq` | Формула `Key` | **Content Spec** |
 | `src\powerquery\fnComputeGroupMetrics.pq` | Расчёт `deltaHours` | **Content Spec** |
-| `src\powerquery\qExistingData.pq` | Чтение текущего содержимого `tbDATA` (новый запрос, см. `docs\data-contract.md`) | Core |
+| `src\powerquery\qExistingData.pq` | Чтение текущего содержимого `tbDATA` (новый запрос, см. `docs\spec.md` §5.3) | Core |
 | `src\powerquery\qDiagImport.pq` | Диагностика источника JSON, в сборку не входит | — |
 | `tmp_index.html` | Рабочий HTML-шаблон с плейсхолдерами и навигацией по 6 слайдам | **Content Spec** |
 | `examples\reference-example.html` | Визуальный референс для сверки стиля (НЕ рабочий шаблон) | — |
-| `docs\architecture.md` | Полная спецификация Core (архитектура, контракты) | — |
-| `docs\content-spec.md` | Полная спецификация направления МТО | — |
-| `docs\system-spec.md` / `docs\data-contract.md` | Та же система в формате AI-agent spec/data (другая ось разбиения) | — |
-| `docs\archive\*` | Исходная постановка ТЗ и черновая архитектура (для истории) | — |
+| `docs\spec.md` | Полная спецификация системы: архитектура Core, конфигурация, схемы, контракты, потоки | — |
+| `docs\content-spec.md` | Специфика направления МТО: поля, 9 блоков, промпт, слайды, палитра | — |
+| `docs\next-steps.md` | Живой трекинг задач, найденных багов и того, что проверено в Excel | — |
+| `docs\brief-data-mto.md` | Данные МТО для внешнего аналитика (процесс загрузки намеренно опущен) | — |
+| `docs\archive\*` | Исторические документы: выполненные планы, старые инструкции установки (для истории) | — |
 | `build\` | Заготовка `ReportMTO_starter.xlsx` и собранная книга (передаются в git-обмен) | — |
 | `data\` | Входящие JSON-выгрузки из 1С (вне git) | — |
 | `result\` | Готовые отчёты (не версионируется) | — |
@@ -45,7 +56,7 @@ Power Query и VBA нельзя запустить из текстовых фа�
 
 1. Создать пустую книгу `ReportMTO.xlsm` (с поддержкой макросов). Листы: `Main`, `Variable`,
    `Logs` (таблица `tbLogs`), `tbDATA` — структура и значения листа `Variable` — см.
-   `docs\data-contract.md` §1 и §2.
+   `docs\spec.md` §5.1 и §7.
 2. Редактор VBA (Alt+F11) → File → Import File → импортировать **все** `.bas` из `src\vba\`
    (порядок не важен, VBA сам разрешает зависимости между модулями).
 3. Power Query (Get Data → Blank Query → Advanced Editor) → создать запросы, вставив содержимое
@@ -55,7 +66,7 @@ Power Query и VBA нельзя запустить из текстовых фа�
    (загружается «Только создать подключение», не на лист).
 4. Именованный параметр `prmSourcePath` (текстовый, для пути к файлу-источнику) — создать
    вручную через Get Data → Blank Query (или Manage Parameters), если Power Query его не создал
-   автоматически при первом использовании `File.Contents(prmSourcePath)`. См. `docs\data-contract.md` §1.2 —
+   автоматически при первом использовании `File.Contents(prmSourcePath)`. См. `docs\spec.md` §5.2 —
    это обычная Power Query query, а НЕ именованный диапазон Excel.
 5. Скопировать `tmp_index.html` в папку рядом с `ReportMTO.xlsm` (тот же уровень, что и книга) —
    `modMain.GenerateReport` ищет его по `ThisWorkbook.Path & "\tmp_index.html"`.
