@@ -1,6 +1,7 @@
 {
   "recommendations": [
     "powerquery.vscode-powerquery",
+    "pkief.material-icon-theme",
     "davidanson.vscode-markdownlint",
     "jimmyzjx.ripgrep",
     "pkief.material-icon-theme",

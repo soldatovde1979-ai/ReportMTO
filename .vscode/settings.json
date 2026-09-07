@@ -1,16 +1,18 @@
-﻿{
+{
   "workbench.iconTheme": "material-icon-theme",
   "material-icon-theme.folders.theme": "specific",
   "material-icon-theme.folders.associations": {
     "vba": "plugin",
     "powerquery": "database",
+    "Data": "database",
     "data": "database",
     "claude": "log",
     "design": "theme",
     "plans": "task",
-    "result": "dist",
+    "result": "archive",
     "tests": "test"
   },
+  "material-icon-theme.folders.color": "#42a5f5",
   "files.associations": { "*.bas": "vb", "*.pq": "powerquery" },
   "markdown.extension.toc.levels": "2..4"
 }
