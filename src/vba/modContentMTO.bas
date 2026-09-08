@@ -132,6 +132,35 @@ Private Sub EnsureSnapshot()
     End If
 End Sub
 
+' Защитный контракт: проверяет обязательные столбцы tbDATA один раз до сборки отчёта.
+' Возвращает False и показывает внятное сообщение, если какого-то столбца нет, -
+' вместо падения на 13-й секунде с Err -2147221502 «Столбец не найден».
+Public Function ValidateRequiredColumns() As Boolean
+    EnsureSnapshot
+    Dim required As Variant
+    required = Array("yearWeek", "postN", "Key", "in_bounds", "arm", _
+                     "number", "ready_for", "status_date", "date", "direction", _
+                     "zn_type", "defekt_type")
+    Dim missing As String
+    missing = ""
+    Dim i As Long
+    For i = LBound(required) To UBound(required)
+        If Not modAggregate.HasColumn(required(i)) Then
+            missing = missing & required(i) & ", "
+        End If
+    Next i
+    If missing <> "" Then
+        missing = Left$(missing, Len(missing) - 2)
+        modLog.WriteLogEntry Now, "Ошибка", "Формирование отчёта", "ValidateRequiredColumns", _
+            "В tbDATA отсутствуют обязательные столбцы: " & missing
+        MsgBox "В таблице tbDATA отсутствуют обязательные столбцы:" & vbCrLf & missing & vbCrLf & _
+               "Обновите M-код (install.ps1) и перезагрузите данные.", vbCritical
+        ValidateRequiredColumns = False
+        Exit Function
+    End If
+    ValidateRequiredColumns = True
+End Function
+
 ' --- Наборы фильтров (Content Spec §5) ---
 ' Базовый фильтр направления: in_bounds = ИСТИНА И arm из {ПК, ПЛАНШЕТ}.
 ' (!) 24.08.2026: поле arm принимает не два, а ТРИ значения - "ПК", "ПЛАНШЕТ" и "НЕ ПОДПИСАНО"
@@ -174,8 +203,16 @@ Private Function IsMultiYear() As Boolean
     If mMultiYear <> -1 Then IsMultiYear = (mMultiYear = 1): Exit Function
 
     EnsureSnapshot
+    ' Год берём из yearWeek (year*100+week), а не из year_status: выгрузка 2026
+    ' не содержит *_status, и опора на year_status роняла отчёт (Err -2147221502).
     Dim years As Object
-    Set years = modAggregate.DistinctValues("year_status", FBase())
+    Set years = CreateObject("Scripting.Dictionary")
+    Dim weeks As Variant
+    weeks = WeeksList()
+    Dim i As Long
+    For i = LBound(weeks) To UBound(weeks)
+        years(CStr(CLng(KeyPart(weeks(i), 0)) \ 100)) = 1
+    Next i
     mMultiYear = IIf(years.Count > 1, 1, 0)
     IsMultiYear = (mMultiYear = 1)
 End Function
@@ -464,7 +501,9 @@ Private Sub EnsureDashboard()
                 wdte = 0
                 If IsNumeric(dte) Then wdte = WeekKeyOf(CDbl(dte))
                 Dim ySt As Long
-                ySt = Val(modAggregate.CellText(r, "year_status"))
+                ' Год события из yearWeek (year*100+week): выгрузка 2026 не содержит
+                ' year_status, опора на него роняла отчёт (Err -2147221502).
+                ySt = YearOfWeekKey(modAggregate.CellText(r, "yearWeek"))
                 Dim isTab As Boolean
                 isTab = (armT = "ПЛАНШЕТ")
                 Dim isLeave As Boolean
@@ -572,6 +611,15 @@ End Function
 
 Private Function WeekKeyOfSafe(v As Variant) As Long
     If IsNumeric(v) Then WeekKeyOfSafe = WeekKeyOf(CDbl(v)) Else WeekKeyOfSafe = 0
+End Function
+
+' Год из yearWeek (year*100+week). Пустой/нечисловой yearWeek -> 0 (строка «НЕ ПОДПИСАНО»).
+Private Function YearOfWeekKey(yw As Variant) As Long
+    If Not IsNumeric(yw) Then YearOfWeekKey = 0: Exit Function
+    Dim n As Long
+    n = CLng(yw)
+    If n <= 0 Then YearOfWeekKey = 0: Exit Function
+    YearOfWeekKey = n \ 100
 End Function
 
 Private Function YearOfSafe(v As Variant) As Long
@@ -1726,7 +1774,7 @@ Private Function DumpRowJson(r As Long) As String
         J("date_week", CStr(WeekKeyOfSafe(dte))) & "," & _
         J("status_week", modAggregate.CellText(r, "yearWeek")) & "," & _
         J("date_year", CStr(YearOfSafe(dte))) & "," & _
-        J("status_year", modAggregate.CellText(r, "year_status")) & "," & _
+        J("status_year", CStr(YearOfWeekKey(modAggregate.CellText(r, "yearWeek")))) & "," & _
         J("norm_status", NormStatus(rf)) & "}"
 End Function
 

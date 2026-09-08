@@ -16,5 +16,5 @@ param(
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $install = Join-Path $scriptRoot "install.ps1"
 
-& powershell -NoProfile -ExecutionPolicy Bypass -File $install -Target $Target
+& powershell -NoProfile -ExecutionPolicy Bypass -File $install -Target "$Target"
 exit $LASTEXITCODE

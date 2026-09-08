@@ -109,6 +109,12 @@ Public Sub GenerateReport()
         GoTo CleanExit
     End If
 
+    ' Защитный контракт: обязательные столбцы проверяем один раз до сборки, чтобы
+    ' не падать на 13-й секунде с Err -2147221502 «Столбец не найден».
+    If Not modContentMTO.ValidateRequiredColumns() Then
+        GoTo CleanExit
+    End If
+
     modContentMTO.BuildPivots ' пересчёт на случай, если отчёт формируют без предварительной загрузки
     modLog.WriteDebug 1, "Формирование отчёта", "GenerateReport", _
         "BuildPivots завершён: " & Round(Timer - t0, 2) & " c"

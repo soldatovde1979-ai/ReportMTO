@@ -38,7 +38,11 @@ param(
 $ErrorActionPreference = "Stop"
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 if ($ProjectRoot -eq "") { $ProjectRoot = Split-Path -Parent $scriptRoot }
-if (-not [System.IO.Path]::IsPathRooted($Target)) { $Target = Join-Path $ProjectRoot $Target }
+if (-not [System.IO.Path]::IsPathRooted($Target)) {
+    $Target = Join-Path $ProjectRoot $Target
+} else {
+    $Target = [System.IO.Path]::GetFullPath($Target)
+}
 
 $vbaDir = Join-Path $ProjectRoot "src\vba"
 $tplSrc = Join-Path $ProjectRoot "tmp_index.html"
