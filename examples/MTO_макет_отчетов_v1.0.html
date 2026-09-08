@@ -1,0 +1,758 @@
+<title>Отчёты МТО · дисциплина и ремзона</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  color-scheme: light;
+  --ground:#f1f2ef;
+  --surface:#ffffff;
+  --surface-2:#f8f8f6;
+  --ink:#14181d;
+  --ink-2:#4a5560;
+  --muted:#7d8791;
+  --line:#dde0dc;
+  --line-strong:#c4c9c3;
+  --accent:#b4610e;
+  --accent-wash:#f7ecdf;
+  --s1:#2a78d6;
+  --s2:#eb6834;
+  --s3:#1baf7a;
+  --s4:#eda100;
+  --s7:#4a3aa7;
+  --good:#0ca30c;
+  --warn:#fab219;
+  --serious:#ec835a;
+  --crit:#d03b3b;
+  --grid:#e5e7e3;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --ground:#0e1113;
+    --surface:#181c1f;
+    --surface-2:#14181a;
+    --ink:#eef1f2;
+    --ink-2:#aab4bb;
+    --muted:#7f8b93;
+    --line:#2a3034;
+    --line-strong:#3b4348;
+    --accent:#e2913c;
+    --accent-wash:#2a2119;
+    --s1:#5a9ff0;
+    --s2:#d95926;
+    --s3:#2ec48c;
+    --s4:#c98500;
+    --s7:#9085e9;
+    --good:#2fbe36;
+    --warn:#e5ae2a;
+    --crit:#e75f5f;
+    --grid:#262b2e;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --ground:#0e1113;
+  --surface:#181c1f;
+  --surface-2:#14181a;
+  --ink:#eef1f2;
+  --ink-2:#aab4bb;
+  --muted:#7f8b93;
+  --line:#2a3034;
+  --line-strong:#3b4348;
+  --accent:#e2913c;
+  --accent-wash:#2a2119;
+  --s1:#5a9ff0;
+  --s2:#d95926;
+  --s3:#2ec48c;
+  --s4:#c98500;
+  --s7:#9085e9;
+  --good:#2fbe36;
+  --warn:#e5ae2a;
+  --crit:#e75f5f;
+  --grid:#262b2e;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--ink);
+  font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  font-size:15px;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px 96px}
+
+/* ——— типографика ——— */
+h1,h2,h3,h4{font-family:Oswald,"IBM Plex Sans",sans-serif;font-weight:500;margin:0;text-wrap:balance;letter-spacing:.01em}
+h1{font-size:clamp(30px,4.4vw,50px);line-height:1.06;font-weight:600;letter-spacing:-.005em}
+h2{font-size:26px;line-height:1.15}
+h3{font-size:19px;line-height:1.2}
+h4{font-size:15px;line-height:1.25;margin-bottom:8px}
+p{margin:0 0 12px}
+.lede{font-size:17px;color:var(--ink-2);max-width:78ch}
+.fine{font-size:12.5px;color:var(--muted);margin:10px 0 0;line-height:1.5}
+.fine b{color:var(--ink-2)}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);
+}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+.num{font-variant-numeric:tabular-nums}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.88em;background:var(--surface-2);border:1px solid var(--line);border-radius:3px;padding:.05em .3em}
+
+/* ——— шапка ——— */
+header.top{border-bottom:2px solid var(--ink);padding:44px 0 26px;margin-bottom:34px}
+.top-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:40px;align-items:end}
+@media(max-width:820px){.top-grid{grid-template-columns:1fr;gap:24px}}
+.facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);margin:0}
+.facts div{background:var(--surface);padding:10px 12px}
+.facts dt{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+.facts dd{margin:2px 0 0;font-family:Oswald,sans-serif;font-size:22px;font-variant-numeric:tabular-nums}
+
+.note{border-left:3px solid var(--accent);background:var(--accent-wash);padding:12px 16px;margin:22px 0 0;font-size:14px;color:var(--ink)}
+.note strong{font-weight:600}
+.note b{font-weight:600}
+
+/* ——— секции ——— */
+section{margin-top:56px}
+.sec-head{display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--line-strong);padding-bottom:8px;margin-bottom:22px;flex-wrap:wrap}
+.sec-head .n{font-family:Oswald,sans-serif;font-size:13px;color:var(--muted);letter-spacing:.08em}
+
+/* ——— панель-макет ——— */
+.dash{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+@media(max-width:980px){.dash{grid-template-columns:1fr}}
+.mock{background:var(--surface);border:1px solid var(--line-strong);box-shadow:0 1px 0 var(--line)}
+.mock-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 14px;border-bottom:1px solid var(--line);background:var(--surface-2);flex-wrap:wrap}
+.mock-bar .ttl{font-family:Oswald,sans-serif;font-size:15px;letter-spacing:.02em}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--line-strong);padding:2px 7px;color:var(--ink-2);background:var(--surface)}
+.chip.on{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+.mock-body{padding:16px}
+
+/* KPI */
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line)}
+.kpis-4{grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line)}
+.kpis-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:900px){.kpis,.kpis-4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi{background:var(--surface);padding:12px 14px 10px;display:flex;flex-direction:column;gap:4px;min-height:104px}
+.kpi .lab{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-family:"IBM Plex Mono",monospace;line-height:1.3}
+.kpi .val{font-family:Oswald,sans-serif;font-size:30px;line-height:1;font-variant-numeric:tabular-nums}
+.kpi .val small{font-size:14px;color:var(--ink-2);font-family:"IBM Plex Sans",sans-serif}
+.kpi .val.bad{color:var(--crit)}
+.kpi .val.warn{color:var(--accent)}
+.kpi .row{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:auto}
+.kpi .sub{font-size:11.5px;color:var(--ink-2);line-height:1.35}
+.kpi .sub code{font-size:.92em}
+
+/* крупный факт */
+.big-fact{display:flex;gap:14px;align-items:flex-start;border:1px solid var(--line-strong);background:var(--surface-2);padding:14px}
+.bf-num{font-family:Oswald,sans-serif;font-size:34px;line-height:1;font-variant-numeric:tabular-nums;color:var(--crit);white-space:nowrap}
+.bf-num span{font-size:15px;color:var(--ink-2);display:block;margin-top:4px}
+.bf-txt{font-size:13.5px;color:var(--ink-2)}
+.bf-txt b{color:var(--ink);font-weight:600}
+
+/* таблицы */
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-family:"IBM Plex Mono",monospace;font-weight:400;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);padding:0 8px 6px;border-bottom:1px solid var(--line-strong);white-space:nowrap}
+td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;font-family:"IBM Plex Mono",monospace}
+.scroll{overflow-x:auto}
+td .fine{margin-top:2px}
+
+/* статусы */
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-family:"IBM Plex Mono",monospace;padding:1px 7px;border:1px solid var(--line-strong);white-space:nowrap}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--muted);flex:none}
+.pill.crit::before{background:var(--crit)}
+.pill.warn::before{background:var(--warn)}
+.pill.good::before{background:var(--good)}
+.pill.ser::before{background:var(--serious)}
+
+.mock-label{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+figure{margin:0}
+figcaption{font-size:12px;color:var(--muted);margin-top:6px}
+svg{display:block;width:100%;height:auto;overflow:visible}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);margin-top:10px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;display:inline-block;flex:none;border-radius:2px}
+
+ul.tight{margin:0;padding-left:18px;font-size:14px}
+ul.tight li{margin-bottom:7px}
+ul.tight b{font-weight:600}
+.two-col{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
+@media(max-width:820px){.two-col{grid-template-columns:1fr}}
+footer{margin-top:64px;border-top:2px solid var(--ink);padding-top:16px;font-size:13px;color:var(--muted)}
+
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <div class="top-grid">
+    <div>
+      <div class="eyebrow">МТО · ДГМ и ДЭНТ · макет отчётов v1.0</div>
+      <h1>Дисциплина подписания и время в ремзоне</h1>
+      <p class="lede">Семь экранов: дашборд дисциплины, разрезы по планшетам, неподписанные наряды,
+      расхождение АРМ между дирекциями и время между статусами. <b>Цифры в макете — настоящие</b>,
+      посчитаны по выгрузке <code>sppr_tablet_20260824_161449_25000rec.json</code>; заглушек нет нигде, кроме последнего раздела,
+      где прямо сказано, каких полей не хватает.</p>
+    </div>
+    <dl class="facts">
+      <div><dt>Нарядов</dt><dd class="num">6 250</dd></div>
+      <div><dt>Событий</dt><dd class="num">25 000</dd></div>
+      <div><dt>Период</dt><dd class="num">55 дн</dd></div>
+      <div><dt>% планшета</dt><dd class="num">65,2</dd></div>
+    </dl>
+  </div>
+  <div class="note">
+    <strong>Три поправки, без которых экраны читаются неверно.</strong>
+    <b>Первая:</b> выгрузка начинается 1 июля 2026, поэтому «с начала года» здесь фактически
+    01.07.2026 – 24.08.2026 — колонка «год» станет годом, когда накопится <code>tbDATA</code>.
+    <b>Вторая:</b> у неподписанного события нет даты статуса — статуса не было. Следствие для отчёта:
+    все 5 570 таких событий получают <code>year_status = 1</code>, <code>week_status = 1</code>,
+    то есть <code>yearWeek = 101</code>, и <b>выпадают из любой недельной оси</b> — все девять блоков
+    <code>data.md</code> группируют по <code>yearWeek</code>. Единственная ось времени для них —
+    <code>date</code>, дата создания наряда; её надо закладывать явно.
+    <b>Третья:</b> ДГМ и ДЭНТ проставляют «Готов к выбытию» одной и той же секундой в
+    4 845 случаях из 4 845 — метрика синхронности дирекций (блоки 7–8) на этих данных
+    тождественно нулевая, а вот <b>АРМ у них расходится в 13,3 % событий</b>, и это отдельный экран.
+  </div>
+</header>
+
+<section>
+  <div class="sec-head"><span class="n">ЭКРАН 1</span><h2>Дашборд дисциплины</h2>
+    <span class="chip">единица счёта: событие подписания и наряд · трек A</span></div>
+  <p class="lede" style="margin-bottom:18px">Слева — накопленный итог, справа — последняя неделя выгрузки.
+  Одни и те же шесть показателей в двух окнах: сравнивается не «план и факт», а «привычка и текущая неделя».</p>
+
+  <div class="dash">
+    <div class="mock">
+      <div class="mock-bar"><span class="ttl">С начала года</span>
+        <span class="chips"><span class="chip on">01.07.2026 – 24.08.2026</span></span></div>
+      <div class="mock-body" style="padding:0">
+        <div class="kpis">
+          <div class="kpi"><div class="lab">ЗН пришло</div><div class="val">6 250</div><div class="row"><span class="sub">уникальных <code>number</code> по <code>date</code></span></div></div>
+          <div class="kpi"><div class="lab">ЗН закрыто</div><div class="val">4 843 <small><small>77,5 %</small></small></div><div class="row"><span class="sub">есть «Готов к выбытию» с датой</span></div></div>
+          <div class="kpi"><div class="lab">% планшета</div><div class="val">65,2 <small>%</small></div><div class="row"><span class="sub">ДГМ 59,8 · ДЭНТ 70,5</span></div></div>
+          <div class="kpi"><div class="lab">Не подписано ни разу</div><div class="val bad">1 344 <small><small>21,5 %</small></small></div><div class="row"><span class="sub">все 4 строки наряда без АРМ</span></div></div>
+          <div class="kpi"><div class="lab">Без поста ремзоны</div><div class="val bad">2 216 <small><small>35,5 %</small></small></div><div class="row"><span class="sub"><code>post</code> пуст</span></div></div>
+          <div class="kpi"><div class="lab">Медиана в ремзоне</div><div class="val">0,75 <small>ч</small></div><div class="row"><span class="sub">среднее 8,3 ч · p90 7,8 ч</span></div></div>
+        </div>
+        <div style="padding:16px;border-top:1px solid var(--line)">
+          <div class="mock-label">% планшета помесячно · доля от подписанных событий</div>
+          <svg viewBox="0 0 440 150" role="img" aria-label="Сравнение по группам">
+<line x1="0" y1="116" x2="440" y2="116" stroke="var(--line-strong)" stroke-width="1"/>
+<rect x="83.0" y="59.2" width="26.0" height="56.8" rx="4" fill="var(--s1)"><title>Июль: 60,4%</title></rect>
+<text x="96.0" y="54.2" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">60,4</text>
+<rect x="111.0" y="50.6" width="26.0" height="65.4" rx="4" fill="var(--s3)"><title>Июль: 69,6%</title></rect>
+<text x="124.0" y="45.6" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">69,6</text>
+<text x="110.0" y="130.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">Июль</text>
+<rect x="303.0" y="60.4" width="26.0" height="55.6" rx="4" fill="var(--s1)"><title>Август: 59,1%</title></rect>
+<text x="316.0" y="55.4" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">59,1</text>
+<rect x="331.0" y="48.5" width="26.0" height="67.5" rx="4" fill="var(--s3)"><title>Август: 71,8%</title></rect>
+<text x="344.0" y="43.5" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">71,8</text>
+<text x="330.0" y="130.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">Август</text>
+</svg>
+          <div class="legend"><span><i style="background:var(--s1)"></i>ДГМ</span><span><i style="background:var(--s3)"></i>ДЭНТ</span></div>
+          <p class="fine">Два месяца — это не тренд, а две точки. График оставлен формой: он станет
+          читаемым, когда в <code>tbDATA</code> накопится полугодие.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="mock">
+      <div class="mock-bar"><span class="ttl">Последние 7 дней выгрузки</span>
+        <span class="chips"><span class="chip on">18–24.08.2026</span></span></div>
+      <div class="mock-body" style="padding:0">
+        <div class="kpis">
+          <div class="kpi"><div class="lab">ЗН пришло</div><div class="val">778</div><div class="row"><span class="sub">12,4 % годового объёма за неделю</span></div></div>
+          <div class="kpi"><div class="lab">ЗН закрыто</div><div class="val">631 <small><small>81,1 %</small></small></div><div class="row"><span class="sub">часть придёт к закрытию позже</span></div></div>
+          <div class="kpi"><div class="lab">% планшета</div><div class="val">65,7 <small>%</small></div><div class="row"><span class="sub">ДГМ 60,2 · ДЭНТ 71,2</span></div></div>
+          <div class="kpi"><div class="lab">Не подписано ни разу</div><div class="val bad">161 <small><small>20,7 %</small></small></div><div class="row"><span class="sub">свежие, ещё можно подписать</span></div></div>
+          <div class="kpi"><div class="lab">Без поста ремзоны</div><div class="val bad">280 <small><small>36,0 %</small></small></div><div class="row"><span class="sub">доля не снижается</span></div></div>
+          <div class="kpi"><div class="lab">Медиана в ремзоне</div><div class="val">0,50 <small>ч</small></div><div class="row"><span class="sub">среднее 3,0 ч · p90 6,5 ч</span></div></div>
+        </div>
+        <div style="padding:16px;border-top:1px solid var(--line)">
+          <div class="mock-label">% планшета понедельно · последний месяц</div>
+          <svg viewBox="0 0 440 150" role="img" aria-label="Сравнение по группам">
+<line x1="0" y1="116" x2="440" y2="116" stroke="var(--line-strong)" stroke-width="1"/>
+<rect x="9.7" y="58.9" width="26.0" height="57.1" rx="4" fill="var(--s1)"><title>30: 60,7%</title></rect>
+<rect x="37.7" y="53.9" width="26.0" height="62.1" rx="4" fill="var(--s3)"><title>30: 66,1%</title></rect>
+<text x="36.7" y="130.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">30</text>
+<rect x="83.0" y="59.0" width="26.0" height="57.0" rx="4" fill="var(--s1)"><title>31: 60,6%</title></rect>
+<rect x="111.0" y="48.8" width="26.0" height="67.2" rx="4" fill="var(--s3)"><title>31: 71,5%</title></rect>
+<text x="110.0" y="130.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">31</text>
+<rect x="156.3" y="63.6" width="26.0" height="52.4" rx="4" fill="var(--s1)"><title>32: 55,7%</title></rect>
+<rect x="184.3" y="48.8" width="26.0" height="67.2" rx="4" fill="var(--s3)"><title>32: 71,5%</title></rect>
+<text x="183.3" y="130.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">32</text>
+<rect x="229.7" y="60.4" width="26.0" height="55.6" rx="4" fill="var(--s1)"><title>33: 59,2%</title></rect>
+<rect x="257.7" y="49.4" width="26.0" height="66.6" rx="4" fill="var(--s3)"><title>33: 70,8%</title></rect>
+<text x="256.7" y="130.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">33</text>
+<rect x="303.0" y="58.0" width="26.0" height="58.0" rx="4" fill="var(--s1)"><title>34: 61,7%</title></rect>
+<rect x="331.0" y="48.1" width="26.0" height="67.9" rx="4" fill="var(--s3)"><title>34: 72,2%</title></rect>
+<text x="330.0" y="130.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">34</text>
+<rect x="376.3" y="70.8" width="26.0" height="45.2" rx="4" fill="var(--s1)"><title>35: 48,1%</title></rect>
+<text x="389.3" y="65.8" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">48,1</text>
+<rect x="404.3" y="53.8" width="26.0" height="62.2" rx="4" fill="var(--s3)"><title>35: 66,2%</title></rect>
+<text x="417.3" y="48.8" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">66,2</text>
+<text x="403.3" y="130.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">35</text>
+</svg>
+          <div class="legend"><span><i style="background:var(--s1)"></i>ДГМ</span><span><i style="background:var(--s3)"></i>ДЭНТ</span></div>
+          <p class="fine">Недели ISO по <code>date</code>: 30 = 20–26.07 … 35 = с 24.08. Значения подписаны
+          только у последней недели — шесть пар подписей превращают график в кашу; остальные читаются
+          наведением и в таблице. Неделя 35 неполная: выгрузка обрывается 24.08, в ней 63 наряда.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="two-col" style="margin-top:20px">
+    <div>
+      <h4>Как считается</h4>
+      <ul class="tight">
+        <li><b>% планшета</b> — <code>ПЛАНШЕТ / (ПЛАНШЕТ + ПК)</code> по событиям подписания.
+        «НЕ ПОДПИСАНО» в знаменатель не входит и вынесено отдельным показателем — иначе один дефект
+        размывал бы другой.</li>
+        <li><b>ЗН пришло</b> — уникальные <code>number</code> с <code>date</code> внутри окна;
+        <b>ЗН закрыто</b> — уникальные <code>number</code>, у которых есть событие
+        <code>ready_for = «Готов к выбытию»</code> с непустой <code>status_date</code>. Написание через «е».</li>
+        <li><b>Медиана в ремзоне</b> — часы между «Готов к приемке» и «Готов к выбытию» в паре
+        <code>(number, direction)</code>. Медиана, а не среднее: среднее (8,3 ч) в
+        одиннадцать раз выше медианы (0,75 ч) — его тянут 96 нарядов с хвостом более трёх суток.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Что видно уже сейчас</h4>
+      <ul class="tight">
+        <li>Разрыв ДГМ и ДЭНТ — <b>10,7 п.п.</b> и он держится во всех неделях,
+        то есть это не колебание, а разная практика.</li>
+        <li>Каждый пятый наряд не подписан вообще ни разу — это больше, чем весь разрыв между дирекциями.</li>
+        <li>Доля нарядов без поста (35,5 %) на последней неделе не ниже годовой —
+        проблема не рассасывается сама.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="n">ЭКРАН 2</span><h2>% планшета: дирекции и посты</h2>
+    <span class="chip">единица счёта: событие подписания</span></div>
+  <p class="lede" style="margin-bottom:18px">Два разреза, которые запрашивались: общий по дирекциям и
+  СТК/ПРК по дирекциям. Полная таблица постов — под ними, потому что главный сюжет оказался не в СТК и ПРК.</p>
+
+  <div class="dash">
+    <div class="mock">
+      <div class="mock-bar"><span class="ttl">Общий · по дирекции</span></div>
+      <div class="mock-body">
+        <svg viewBox="0 0 420 150" role="img" aria-label="Сравнение по группам">
+<line x1="0" y1="116" x2="420" y2="116" stroke="var(--line-strong)" stroke-width="1"/>
+<rect x="57.0" y="54.7" width="26.0" height="61.3" rx="4" fill="var(--muted)"><title>Всего: 65,2%</title></rect>
+<text x="70.0" y="49.7" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">65,2</text>
+<text x="70.0" y="130.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">Всего</text>
+<rect x="197.0" y="59.8" width="26.0" height="56.2" rx="4" fill="var(--s1)"><title>ДГМ: 59,8%</title></rect>
+<text x="210.0" y="54.8" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">59,8</text>
+<text x="210.0" y="130.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">ДГМ</text>
+<rect x="337.0" y="49.7" width="26.0" height="66.3" rx="4" fill="var(--s3)"><title>ДЭНТ: 70,5%</title></rect>
+<text x="350.0" y="44.7" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">70,5</text>
+<text x="350.0" y="130.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">ДЭНТ</text>
+</svg>
+        <div class="legend"><span><i style="background:var(--muted)"></i>обе дирекции</span>
+        <span><i style="background:var(--s1)"></i>ДГМ</span><span><i style="background:var(--s3)"></i>ДЭНТ</span></div>
+        <p class="fine">19 430 подписанных событий из 25 000. Серый столбец — та же метрика
+        без разреза, точка отсчёта; цвет закреплён за дирекцией и не переезжает между столбцами.</p>
+      </div>
+    </div>
+    <div class="mock">
+      <div class="mock-bar"><span class="ttl">СТК и ПРК · по дирекции</span></div>
+      <div class="mock-body">
+        <svg viewBox="0 0 420 150" role="img" aria-label="Сравнение по группам">
+<line x1="0" y1="116" x2="420" y2="116" stroke="var(--line-strong)" stroke-width="1"/>
+<rect x="43.0" y="34.5" width="26.0" height="81.5" rx="4" fill="var(--s1)"><title>СТК: 86,7%</title></rect>
+<text x="56.0" y="29.5" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">86,7</text>
+<rect x="71.0" y="29.4" width="26.0" height="86.6" rx="4" fill="var(--s3)"><title>СТК: 92,1%</title></rect>
+<text x="84.0" y="24.4" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">92,1</text>
+<text x="70.0" y="130.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">СТК</text>
+<rect x="183.0" y="54.7" width="26.0" height="61.3" rx="4" fill="var(--s1)"><title>ПРК: 65,2%</title></rect>
+<text x="196.0" y="49.7" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">65,2</text>
+<rect x="211.0" y="44.1" width="26.0" height="71.9" rx="4" fill="var(--s3)"><title>ПРК: 76,5%</title></rect>
+<text x="224.0" y="39.1" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">76,5</text>
+<text x="210.0" y="130.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">ПРК</text>
+<rect x="323.0" y="111.6" width="26.0" height="4.4" rx="4" fill="var(--s1)"><title>Ангар №1: 4,7%</title></rect>
+<text x="336.0" y="106.6" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">4,7</text>
+<rect x="351.0" y="101.4" width="26.0" height="14.6" rx="4" fill="var(--s3)"><title>Ангар №1: 15,5%</title></rect>
+<text x="364.0" y="96.4" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">15,5</text>
+<text x="350.0" y="130.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">Ангар №1</text>
+</svg>
+        <div class="legend"><span><i style="background:var(--s1)"></i>ДГМ</span><span><i style="background:var(--s3)"></i>ДЭНТ</span></div>
+        <p class="fine">Третьей группой добавлен Ангар №1 — без него экран показывает благополучие,
+        которого нет: в СТК и ПРК планшет уже норма.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="mock" style="margin-top:20px">
+    <div class="mock-bar"><span class="ttl">Все посты · <code>postN</code></span>
+      <span class="chips"><span class="chip">норма ≥ 70 %</span><span class="chip">провал &lt; 40 %</span></span></div>
+    <div class="mock-body scroll">
+      <table>
+        <thead><tr><th>Пост</th><th class="n">Нарядов</th><th class="n">Событий</th>
+        <th class="n">% планшета</th><th class="n">ДГМ</th><th class="n">ДЭНТ</th><th>Оценка</th></tr></thead>
+        <tbody><tr><td>СТК</td><td class="n">2 543</td><td class="n">10 172</td><td class="n">86,7</td><td class="n">81,3</td><td class="n">92,1</td><td><span class="pill good">норма</span></td></tr>
+<tr><td>(пост не указан)</td><td class="n">2 216</td><td class="n">8 864</td><td class="n">39,7</td><td class="n">34,7</td><td class="n">44,8</td><td><span class="pill crit">провал</span></td></tr>
+<tr><td>Ангар №1</td><td class="n">699</td><td class="n">2 796</td><td class="n">10,1</td><td class="n">4,7</td><td class="n">15,5</td><td><span class="pill crit">провал</span></td></tr>
+<tr><td>ПРК</td><td class="n">645</td><td class="n">2 580</td><td class="n">70,8</td><td class="n">65,2</td><td class="n">76,5</td><td><span class="pill good">норма</span></td></tr>
+<tr><td>Планирование ТО</td><td class="n">139</td><td class="n">556</td><td class="n">87,5</td><td class="n">82,9</td><td class="n">92,0</td><td><span class="pill good">норма</span></td></tr>
+<tr><td>Ангар №2</td><td class="n">6</td><td class="n">24</td><td class="n">8,3</td><td class="n">8,3</td><td class="n">8,3</td><td><span class="pill">мало данных</span></td></tr>
+<tr><td>Обмывная</td><td class="n">2</td><td class="n">8</td><td class="n">25,0</td><td class="n">0,0</td><td class="n">50,0</td><td><span class="pill">мало данных</span></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="two-col" style="margin-top:20px">
+    <div>
+      <h4>Главный вывод экрана</h4>
+      <ul class="tight">
+        <li><b>Ангар №1 — 699 нарядов при 10,1 % планшета.</b> Это крупнейший очаг работы
+        с ПК, и он не в СТК/ПРК, куда смотрит текущая постановка. У ДГМ там 4,7 %.</li>
+        <li><b>Пустой пост — 2 216 нарядов, 39,7 % планшета.</b> Вторая по величине группа,
+        и она же почти целиком совпадает с неподписанными (экран 3).</li>
+        <li>СТК (86,7 %) и «Планирование ТО» (87,5 %) — там задача, по сути, решена.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Ограничения</h4>
+      <ul class="tight">
+        <li><code>post</code> — <b>родитель поста</b> (цех, площадка), а не сам пост: «СТК, цех 1» и
+        «СТК, цех 2» схлопнуты в «СТК» нормализацией <code>postN</code>. Разбор внутри цеха на этих данных невозможен.</li>
+        <li>«Ангар №2» и «Обмывная» — 6 и 2 наряда: показаны для полноты, выводов по ним не делать.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="n">ЭКРАН 3</span><h2>Не подписано вообще</h2>
+    <span class="chip">единица счёта: наряд</span>
+    <span class="pill crit">за прошлые периоды уже не исправить</span></div>
+  <p class="lede" style="margin-bottom:18px">Отдельный экран, потому что в проценте планшета этих нарядов
+  нет вовсе, а в недельных разрезах их нет тем более: даты статуса у неподписанного события не существует,
+  <code>yearWeek</code> у него равен <code>101</code>. Из отчёта они выпадают молча — а это ровно тот брак,
+  который интересно видеть. Ось времени здесь одна и другая, чем на остальных экранах: <code>date</code>.</p>
+
+  <div class="kpis kpis-4">
+    <div class="kpi"><div class="lab">ЗН без единой подписи</div><div class="val bad">1 344 <small><small>21,5 % парка нарядов</small></small></div><div class="row"><span class="sub">все 4 строки без АРМ</span></div></div>
+    <div class="kpi"><div class="lab">ЗН подписаны частично</div><div class="val warn">97</div><div class="row"><span class="sub">1–3 строки из 4</span></div></div>
+    <div class="kpi"><div class="lab">Событий без подписи</div><div class="val">5 570 <small><small>22,3 %</small></small></div><div class="row"><span class="sub">приемка 2 760 · выбытие 2 810</span></div></div>
+    <div class="kpi"><div class="lab">Старше двух недель</div><div class="val bad">995 <small><small>74,0 % от них</small></small></div><div class="row"><span class="sub">подписывать уже некому</span></div></div>
+  </div>
+
+  <div class="dash" style="margin-top:20px">
+    <div class="mock">
+      <div class="mock-bar"><span class="ttl">Старение · возраст от <code>date</code> до конца выгрузки</span></div>
+      <div class="mock-body">
+        <svg viewBox="0 0 440 102" role="img" aria-label="Возраст неподписанных нарядов">
+<text x="0" y="16" font-size="11.5" fill="var(--ink-2)">0–7 дней</text>
+<rect x="110" y="6" width="71.3" height="14" rx="4" fill="var(--crit)"><title>0–7 дней: без единой подписи — 179</title></rect>
+<rect x="183.3" y="6" width="10.8" height="14" rx="4" fill="var(--warn)"><title>0–7 дней: подписан частично — 27</title></rect>
+<text x="200.0" y="16" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">179 + 27</text>
+<text x="0" y="40" font-size="11.5" fill="var(--ink-2)">8–14 дней</text>
+<rect x="110" y="30" width="67.7" height="14" rx="4" fill="var(--crit)"><title>8–14 дней: без единой подписи — 170</title></rect>
+<rect x="179.7" y="30" width="5.2" height="14" rx="4" fill="var(--warn)"><title>8–14 дней: подписан частично — 13</title></rect>
+<text x="190.9" y="40" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">170 + 13</text>
+<text x="0" y="64" font-size="11.5" fill="var(--ink-2)">15–30 дней</text>
+<rect x="110" y="54" width="139.4" height="14" rx="4" fill="var(--crit)"><title>15–30 дней: без единой подписи — 350</title></rect>
+<rect x="251.4" y="54" width="9.6" height="14" rx="4" fill="var(--warn)"><title>15–30 дней: подписан частично — 24</title></rect>
+<text x="266.9" y="64" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">350 + 24</text>
+<text x="0" y="88" font-size="11.5" fill="var(--ink-2)">31–55 дней</text>
+<rect x="110" y="78" width="256.9" height="14" rx="4" fill="var(--crit)"><title>31–55 дней: без единой подписи — 645</title></rect>
+<rect x="368.9" y="78" width="13.1" height="14" rx="4" fill="var(--warn)"><title>31–55 дней: подписан частично — 33</title></rect>
+<text x="388.0" y="88" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">645 + 33</text>
+</svg>
+        <div class="legend"><span><i style="background:var(--crit)"></i>без единой подписи</span>
+        <span><i style="background:var(--warn)"></i>подписан частично</span></div>
+        <p class="fine">Чем старше корзина, тем она больше — это не очередь, которая рассосётся.
+        645 нарядов возрастом больше месяца не подписаны и не будут: событие прошло, подписывать нечего.
+        Верхняя граница «31–55» — это длина выгрузки, а не срок давности.</p>
+      </div>
+    </div>
+    <div class="mock">
+      <div class="mock-bar"><span class="ttl">Откуда они берутся</span></div>
+      <div class="mock-body">
+        <div class="big-fact">
+          <div class="bf-num">1 334 <span>из 1 344</span></div>
+          <div class="bf-txt">неподписанных нарядов имеют <b>пустой <code>post</code></b>.
+          Это один дефект, а не два: наряд, не привязанный к посту ремзоны, не подписывает никто.</div>
+        </div>
+        <div class="mock-label" style="margin-top:16px">По виду ремонта</div>
+        <div class="scroll"><table>
+          <thead><tr><th>Вид ремонта</th><th class="n">ЗН</th><th class="n">% от неподписанных</th></tr></thead>
+          <tbody><tr><td>Обслуживание при выпуске</td><td class="n">558</td><td class="n">41,5</td></tr>
+<tr><td>Внеплановый ремонт</td><td class="n">450</td><td class="n">33,5</td></tr>
+<tr><td>Omnicomm</td><td class="n">226</td><td class="n">16,8</td></tr>
+<tr><td>ТО2</td><td class="n">33</td><td class="n">2,5</td></tr>
+<tr><td>ТО3</td><td class="n">28</td><td class="n">2,1</td></tr>
+<tr><td>ТО1</td><td class="n">17</td><td class="n">1,3</td></tr></tbody>
+        </table></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note" style="margin-top:20px">
+    <strong>Что это значит для отчёта.</strong> Пока «НЕ ПОДПИСАНО» отфильтровано условием
+    <code>arm ∈ {ПК, ПЛАНШЕТ}</code>, отчёт показывает 65,2 % и выглядит удовлетворительно.
+    С учётом неподписанных доля событий, прошедших через планшет, — <b>50,7 %</b>.
+    Оба числа верные, но отвечают на разные вопросы: первое — «чем подписывают», второе — «подписывают ли вообще».
+    На дашборде они должны стоять рядом.
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="n">ЭКРАН 4</span><h2>Расхождение АРМ между дирекциями</h2>
+    <span class="chip">единица счёта: пара «наряд × статус»</span></div>
+  <p class="lede" style="margin-bottom:18px">Одно и то же событие подписывают обе дирекции. Если ДГМ
+  подписала его с ПК, а ДЭНТ — с планшета, разрыв между дирекциями объясняется не разными нарядами,
+  а разной привычкой на одном и том же наряде. Считается на текущих полях, без доработки выгрузки.</p>
+
+  <div class="dash">
+    <div class="mock">
+      <div class="mock-bar"><span class="ttl">Масштаб</span></div>
+      <div class="mock-body">
+        <div class="kpis kpis-2" style="background:none">
+          <div class="kpi"><div class="lab">Пар «наряд × статус»</div><div class="val">12 500</div><div class="row"><span class="sub">по 2 на наряд: приемка и выбытие</span></div></div>
+          <div class="kpi"><div class="lab">АРМ различается</div><div class="val warn">1 660 <small><small>13,3 %</small></small></div><div class="row"><span class="sub">каждое восьмое событие</span></div></div>
+        </div>
+        <div class="mock-label" style="margin-top:16px">Как именно расходится</div>
+        <svg viewBox="0 0 440 50" role="img" aria-label="Распределение">
+<text x="0" y="15" font-size="11.5" fill="var(--ink-2)">ДГМ: ПК → ДЭНТ: ПЛАНШЕТ<title>ДГМ: ПК → ДЭНТ: ПЛАНШЕТ</title></text>
+<rect x="200" y="6" width="186.0" height="13" rx="4" fill="var(--crit)"><title>ДГМ: ПК → ДЭНТ: ПЛАНШЕТ: 1 349,0</title></rect>
+<text x="392.0" y="15" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">1 349</text>
+<text x="0" y="37" font-size="11.5" fill="var(--ink-2)">ДГМ: ПЛАНШЕТ → ДЭНТ: ПК<title>ДГМ: ПЛАНШЕТ → ДЭНТ: ПК</title></text>
+<rect x="200" y="28" width="42.9" height="13" rx="4" fill="var(--s4)"><title>ДГМ: ПЛАНШЕТ → ДЭНТ: ПК: 311,0</title></rect>
+<text x="248.9" y="37" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">311</text>
+</svg>
+        <p class="fine">Асимметрия 4,3 : 1. Это и есть механика разрыва в 10,7 п.п. с экрана 1.</p>
+        <div class="mock-label" style="margin-top:16px">Где расходится · доля пар с разным АРМ</div>
+        <div class="scroll"><table>
+          <thead><tr><th>Пост</th><th class="n">Пар</th><th class="n">Расходится</th><th class="n">%</th></tr></thead>
+          <tbody>
+            <tr><td>ПРК</td><td class="n">1 290</td><td class="n">333</td><td class="n">25,8</td></tr>
+            <tr><td>Планирование ТО</td><td class="n">278</td><td class="n">55</td><td class="n">19,8</td></tr>
+            <tr><td>СТК</td><td class="n">5 086</td><td class="n">805</td><td class="n">15,8</td></tr>
+            <tr><td>Ангар №1</td><td class="n">1 398</td><td class="n">184</td><td class="n">13,2</td></tr>
+            <tr><td>(пост не указан)</td><td class="n">4 432</td><td class="n">281</td><td class="n">6,3</td></tr>
+          </tbody>
+        </table></div>
+        <p class="fine">Расхождение рассеяно по всем постам, а максимум — в ПРК, где связь заведомо есть.
+        Версия «в ангаре нет сети» этим не подтверждается: в Ангаре №1 доля расхождения ниже среднего,
+        там обе дирекции одинаково работают с ПК.</p>
+      </div>
+    </div>
+    <div class="mock">
+      <div class="mock-bar"><span class="ttl">Почему это отдельный отчёт</span></div>
+      <div class="mock-body">
+        <ul class="tight">
+          <li><b>Наряд один и тот же.</b> Гипотезы «у ДГМ другие наряды», «у ДГМ нет связи в ангаре»
+          проверяются здесь, а не в спорах: 1 349 событий, где сосед по тому же наряду смог с планшета.</li>
+          <li><b>Адресность.</b> Разрез по <code>postN</code> и <code>employee</code> даёт список мест,
+          где ПК используется системно. ФИО остаются внутри контура и в промпт к ИИ не уходят.</li>
+          <li><b>Проверка гипотезы о покрытии.</b> Если бы дело было в связи или в отсутствии планшета,
+          расхождение концентрировалось бы в одном посте. Проверяется тем же разрезом.</li>
+        </ul>
+        <div class="note" style="margin-top:6px">
+          <strong>Побочная находка.</strong> «Готов к выбытию» у ДГМ и ДЭНТ совпадает по секунде в
+          4 845 парах из 4 845. Либо обе записи создаются одной операцией в 1С, либо
+          <code>status_date</code> проставляется не в момент действия человека. До ответа
+          <b>блоки 7–8 «синхронность дирекций» считать нельзя</b> — они всегда дадут ноль.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="n">ЭКРАН 5</span><h2>Время между «Готов к приемке» и «Готов к выбытию»</h2>
+    <span class="chip">единица счёта: пара (наряд, дирекция) · трек B</span></div>
+  <p class="lede" style="margin-bottom:18px">Экран вынесен из дашборда дисциплины: единица счёта другая,
+  и смешивать их на одном экране — значит получить панель, по которой нельзя действовать.</p>
+
+  <div class="mock">
+    <div class="mock-bar"><span class="ttl">Распределение · 9 618 пар со обеими датами</span>
+      <span class="chips"><span class="chip on">медиана 0,73 ч</span><span class="chip">среднее 8,28 ч</span>
+      <span class="chip">p90 7,7 ч</span></span></div>
+    <div class="mock-body">
+      <svg viewBox="0 0 440 150" role="img" aria-label="Распределение времени между статусами" style="max-width:680px">
+<line x1="0" y1="118" x2="440" y2="118" stroke="var(--line-strong)"/>
+<rect x="6.0" y="18.0" width="61.3" height="100.0" rx="4" fill="var(--s1)"><title>< 1 ч: 5 198 пар</title></rect>
+<text x="36.7" y="13.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">5 198</text>
+<text x="36.7" y="132.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">< 1 ч</text>
+<rect x="79.3" y="73.3" width="61.3" height="44.7" rx="4" fill="var(--s1)"><title>1–4 ч: 2 326 пар</title></rect>
+<text x="110.0" y="68.3" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">2 326</text>
+<text x="110.0" y="132.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">1–4 ч</text>
+<rect x="152.7" y="96.3" width="61.3" height="21.7" rx="4" fill="var(--s1)"><title>4–8 ч: 1 128 пар</title></rect>
+<text x="183.3" y="91.3" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">1 128</text>
+<text x="183.3" y="132.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">4–8 ч</text>
+<rect x="226.0" y="105.2" width="61.3" height="12.8" rx="4" fill="var(--s4)"><title>8–24 ч: 664 пар</title></rect>
+<text x="256.7" y="100.2" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">664</text>
+<text x="256.7" y="132.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">8–24 ч</text>
+<rect x="299.3" y="115.0" width="61.3" height="3.0" rx="4" fill="var(--crit)"><title>1–3 сут: 154 пар</title></rect>
+<text x="330.0" y="110.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">154</text>
+<text x="330.0" y="132.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">1–3 сут</text>
+<rect x="372.7" y="115.0" width="61.3" height="3.0" rx="4" fill="var(--crit)"><title>> 3 сут: 96 пар</title></rect>
+<text x="403.3" y="110.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-2)" text-anchor="middle">96</text>
+<text x="403.3" y="132.0" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">> 3 сут</text>
+<line x1="51.3" y1="12" x2="51.3" y2="122" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="56.3" y="146.0" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--accent)">медиана 0,73 ч</text>
+</svg>
+      <p class="fine">Больше половины пар укладывается в час. Среднее в 11 раз выше медианы, потому что
+      хвост тянут 96 нарядов дольше трёх суток; максимум — 13 791 ч, это 574 суток
+      и почти наверняка брак данных, а не ремонт.</p>
+    </div>
+  </div>
+
+  <div class="two-col" style="margin-top:20px">
+    <div>
+      <h4>Что этой метрикой можно и нельзя мерить</h4>
+      <ul class="tight">
+        <li><b>Можно:</b> сравнивать посты и недели между собой, ловить хвост и брак дат.</li>
+        <li><b>Нельзя:</b> называть это длительностью ремонта или сравнивать с нормативом. Интервал
+        включает очередь, ожидание запчастей и время до подписи — это время присутствия, а не работы.</li>
+        <li><b>Медиана против среднего:</b> показывать надо медиану, среднее — рядом мелким шрифтом.
+        На таком распределении среднее описывает выбросы, а не работу ремзоны.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Что чинить в данных</h4>
+      <ul class="tight">
+        <li>Хвост &gt; 3 суток (96 пар) разобрать поимённо: это либо реально брошенные наряды,
+        либо забытая подпись выбытия. Отличить их внутри выгрузки нечем.</li>
+        <li>Пары без одной из дат (9 566 посчитано из 12 500 возможных) — тот же дефект подписи,
+        что на экране 3.</li>
+        <li>Обрезка по p99 обязательна до любого вывода на экран, иначе одна запись 2024 года
+        сдвигает всю картину.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="n">ЭКРАН 6</span><h2>Из чего состоит поток нарядов</h2>
+    <span class="chip">единица счёта: наряд</span></div>
+  <p class="lede" style="margin-bottom:18px">Контекст к дисциплине: какие наряды вообще идут через ремзону.
+  Оба разреза считаются на текущих полях, но у второго есть оговорка, без которой им пользоваться нельзя.</p>
+
+  <div class="dash">
+    <div class="mock">
+      <div class="mock-bar"><span class="ttl">Вид ремонта · <code>zn_type</code></span></div>
+      <div class="mock-body scroll">
+        <table><thead><tr><th>Вид</th><th class="n">Нарядов</th><th class="n">%</th></tr></thead>
+        <tbody><tr><td>Внеплановый ремонт</td><td class="n">4 673</td><td class="n">74,8</td></tr>
+<tr><td>Обслуживание при выпуске</td><td class="n">559</td><td class="n">8,9</td></tr>
+<tr><td>ТО1</td><td class="n">317</td><td class="n">5,1</td></tr>
+<tr><td>Omnicomm</td><td class="n">226</td><td class="n">3,6</td></tr>
+<tr><td>ТО2</td><td class="n">133</td><td class="n">2,1</td></tr>
+<tr><td>СТО1</td><td class="n">112</td><td class="n">1,8</td></tr>
+<tr><td>ТО3</td><td class="n">91</td><td class="n">1,5</td></tr>
+<tr><td>ТО4</td><td class="n">53</td><td class="n">0,8</td></tr></tbody></table>
+        <p class="fine">Три четверти потока — внеплановый ремонт. Плановое ТО в ремзоне почти не видно,
+        и это стоит проверить у заказчика: либо ТО идёт мимо этих нарядов, либо мимо планшета.</p>
+      </div>
+    </div>
+    <div class="mock">
+      <div class="mock-bar"><span class="ttl">Раздел дефекта · <code>defekt_type</code></span>
+        <span class="chips"><span class="chip">разделы, не диагнозы</span></span></div>
+      <div class="mock-body">
+        <svg viewBox="0 0 440 216" role="img" aria-label="Распределение">
+<text x="0" y="15" font-size="11.5" fill="var(--ink-2)">Электрооборудование<title>Электрооборудование</title></text>
+<rect x="210" y="6" width="176.0" height="12" rx="4" fill="var(--s1)"><title>Электрооборудование: 1 329,0</title></rect>
+<text x="392.0" y="15" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">1 329</text>
+<text x="0" y="36" font-size="11.5" fill="var(--ink-2)">Ходовая / Управление / Тор…<title>Ходовая / Управление / Тормоза</title></text>
+<rect x="210" y="27" width="147.3" height="12" rx="4" fill="var(--s1)"><title>Ходовая / Управление / Тормоза: 1 112,0</title></rect>
+<text x="363.3" y="36" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">1 112</text>
+<text x="0" y="57" font-size="11.5" fill="var(--ink-2)">ДВС<title>ДВС</title></text>
+<rect x="210" y="48" width="122.5" height="12" rx="4" fill="var(--s1)"><title>ДВС: 925,0</title></rect>
+<text x="338.5" y="57" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">925</text>
+<text x="0" y="78" font-size="11.5" fill="var(--ink-2)">(раздел не указан)<title>(раздел не указан)</title></text>
+<rect x="210" y="69" width="106.1" height="12" rx="4" fill="var(--muted)"><title>(раздел не указан): 801,0</title></rect>
+<text x="322.1" y="78" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">801</text>
+<text x="0" y="99" font-size="11.5" fill="var(--ink-2)">Целостность и внешний вид<title>Целостность и внешний вид</title></text>
+<rect x="210" y="90" width="60.3" height="12" rx="4" fill="var(--s1)"><title>Целостность и внешний вид: 455,0</title></rect>
+<text x="276.3" y="99" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">455</text>
+<text x="0" y="120" font-size="11.5" fill="var(--ink-2)">Спецоборудование<title>Спецоборудование</title></text>
+<rect x="210" y="111" width="50.5" height="12" rx="4" fill="var(--s1)"><title>Спецоборудование: 381,0</title></rect>
+<text x="266.5" y="120" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">381</text>
+<text x="0" y="141" font-size="11.5" fill="var(--ink-2)">Комплектация<title>Комплектация</title></text>
+<rect x="210" y="132" width="32.6" height="12" rx="4" fill="var(--s1)"><title>Комплектация: 246,0</title></rect>
+<text x="248.6" y="141" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">246</text>
+<text x="0" y="162" font-size="11.5" fill="var(--ink-2)">Рабочее место / Органы упр…<title>Рабочее место / Органы управления</title></text>
+<rect x="210" y="153" width="32.6" height="12" rx="4" fill="var(--s1)"><title>Рабочее место / Органы управления: 246,0</title></rect>
+<text x="248.6" y="162" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">246</text>
+<text x="0" y="183" font-size="11.5" fill="var(--ink-2)">Omnicomm<title>Omnicomm</title></text>
+<rect x="210" y="174" width="31.0" height="12" rx="4" fill="var(--s1)"><title>Omnicomm: 234,0</title></rect>
+<text x="247.0" y="183" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">234</text>
+<text x="0" y="204" font-size="11.5" fill="var(--ink-2)">ЧТО, ПТО, СТО, ТО, ОЗП, ВЛП<title>ЧТО, ПТО, СТО, ТО, ОЗП, ВЛП</title></text>
+<rect x="210" y="195" width="23.6" height="12" rx="4" fill="var(--s1)"><title>ЧТО, ПТО, СТО, ТО, ОЗП, ВЛП: 178,0</title></rect>
+<text x="239.6" y="204" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">178</text>
+</svg>
+        <p class="fine">12 значений на весь массив — это <b>разделы классификатора</b>, а не диагнозы.
+        Строить на них метрику повторного ремонта нельзя: два разных отказа внутри «Электрооборудования»
+        будут засчитаны как повтор. 801 нарядов вообще без раздела.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="n">ЭКРАН 7</span><h2>Чего в этих отчётах нет и почему</h2></div>
+  <p class="lede" style="margin-bottom:18px">Заезды, простой, возраст парка и деньги в макет не вошли —
+  не по решению, а потому что полей нет в исторической выгрузке. Ниже — что именно нужно, чтобы они появились.</p>
+
+  <div class="mock">
+    <div class="mock-bar"><span class="ttl">Разрыв между двумя выгрузками</span></div>
+    <div class="mock-body scroll">
+      <table>
+        <thead><tr><th>Отчёт</th><th>Чего не хватает</th><th>Статус</th></tr></thead>
+        <tbody>
+          <tr><td><b>Заезды техники</b><div class="fine">сколько раз машина заходила в ремзону</div></td>
+            <td>нет <code>vehicle_number</code> / <code>ts</code> в исторической выгрузке;
+            <b>плюс не определено правило склейки</b> — какой разрыв между нарядами одной машины
+            считать одним заездом (в старом макете стояла гипотеза 8–12 ч, она ничем не подтверждена)</td>
+            <td><span class="pill crit">нужны поле и решение</span></td></tr>
+          <tr><td><b>Хронические машины, парк, возраст</b></td>
+            <td><code>ts</code>, <code>vehicle_group</code>, <code>MadeYear</code>;
+            <code>model_type</code> в обеих выгрузках — константа «Автотранспорт», типа ТС фактически нет</td>
+            <td><span class="pill crit">нет данных</span></td></tr>
+          <tr><td><b>Деньги на материалы</b></td>
+            <td><code>cost_parts</code> есть только в новой схеме; <code>cost_Trudozatrat</code> хранит часы,
+            а не рубли — «стоимость ремонта» из него не считается</td>
+            <td><span class="pill crit">нет данных</span></td></tr>
+          <tr><td><b>Очередь и простой</b></td>
+            <td><code>TekStatusPoDoc</code>, <code>zn_closed</code>, <code>hourdlit</code> — только в новой схеме;
+            в пробе на 220 записей <code>zn_closed</code> заполнен у половины нарядов</td>
+            <td><span class="pill warn">после накопления</span></td></tr>
+          <tr><td><b>Повторный ремонт</b></td>
+            <td>поля есть, но <code>defekt_type</code> — разделы (экран 6): признак повтора на них
+            даёт ложные срабатывания</td>
+            <td><span class="pill warn">нужен справочник дефектов</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="note" style="margin-top:20px">
+    <strong>Одно решение закрывает половину таблицы.</strong> Историческая выгрузка
+    (<code>sppr_tablet_20260824_161449_25000rec.json</code>, 25 000 записей) — это <b>18 полей</b>, новая проба на 220 записей —
+    <b>31 поле</b>. Тринадцати полей просто нет в истории. Пока 1С не отдаст период в новой схеме,
+    треком B можно заниматься только на витрине вперёд: копить <code>tbDATA</code> с сегодняшнего дня.
+    Дисциплина (экраны 1–4) при этом считается уже сейчас и на полной истории.
+  </div>
+</section>
+
+<footer>
+  Макет v1.0 · данные: <code>sppr_tablet_20260824_161449_25000rec.json</code> (01.07.2026 – 24.08.2026, 6 250 нарядов, 25 000 событий) ·
+  все числа посчитаны из выгрузки, ни одна цифра на экранах не является заглушкой ·
+  единицы счёта подписаны на каждом экране, треки A и B разведены.
+</footer>
+</div>
