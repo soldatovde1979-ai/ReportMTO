@@ -18,6 +18,17 @@
 //         не оказалось в первых 1000 записях выборки Query-ImportJSON. Значение null
 //         обрабатывалось (P1-16), отсутствие столбца — нет.
 //
+// v6 (08.09.2026), одна правка:
+//   N-3 — выгрузка 2026 убрала поля day_status/month_status/year_status/week_status
+//         (реальная выгрузка от 08.09.2026, три файла). Раньше yearWeek собирался из
+//         year_status*100 + week_status, и при их отсутствии в tbDATA не было столбцов —
+//         VBA-слой падал на ColIndex("year_status") (Err -2147221502), отчёт не собирался.
+//         Теперь при отсутствии полей они ВЫЧИСЛЯЮТСЯ из status_date (терпимо, ISO-неделя):
+//         day/month/year — компоненты даты, week_status — Date.WeekOfYear(_, Day.Monday).
+//         Пустой status_date (строки «НЕ ПОДПИСАНО») -> все четыре поля null, yearWeek = null:
+//         такие строки в недельные оси не попадают (решение владельца процесса от 08.09.2026).
+//         Если выгрузка отдаёт старые поля — они используются как раньше (обратная совместимость).
+//
 // (!) НЕ ИЗМЕНЕНО СОЗНАТЕЛЬНО (это не баги, а решения владельца процесса):
 //   1. Схлопка «стк»->«СТК» противоречит граблям проекта («post — родитель поста, схлопывать
 //      вредно, склеивает СТК цех 1 и цех 2») и листу dictZone на восемь раздельных зон.
@@ -28,6 +39,11 @@
 (tbl as table) as table =>
     let
         Existing = Table.ColumnNames(tbl),
+
+        // v6: выгрузка 2026 может не содержать day/month/year/week_status — тогда они
+        // вычисляются из status_date на шаге StatusBase ниже (см. N-3).
+        StatusCols = {"day_status", "month_status", "year_status", "week_status"},
+        HasStatusCols = List.ContainsAll(Existing, StatusCols),
 
         // Типизация НЕ-датовых полей. Culture "en-US" здесь безопасна: числа из JSON
         // приходят с точкой, логические — как true/false.
@@ -64,6 +80,24 @@
             List.Transform(DateCols, each {_, ToDateTime, type nullable datetime})
         ),
 
+        // N-3: компоненты даты статуса. Пустой status_date (строки «НЕ ПОДПИСАНО») -> null:
+        // такие строки не попадают в недельные/месячные оси (решение владельца процесса).
+        StatusPart = (st as nullable datetime, part as text) as nullable number =>
+            if st = null then null
+            else if part = "day"   then Date.Day(st)
+            else if part = "month" then Date.Month(st)
+            else if part = "year"  then Date.Year(st)
+            else Date.WeekOfYear(st, Day.Monday),   // ISO-8601: неделя с понедельника
+
+        WithDay   = Table.AddColumn(Dated,    "day_status",   each StatusPart([status_date], "day"),   Int64.Type),
+        WithMonth = Table.AddColumn(WithDay,  "month_status", each StatusPart([status_date], "month"), Int64.Type),
+        WithYear  = Table.AddColumn(WithMonth, "year_status",  each StatusPart([status_date], "year"),  Int64.Type),
+        WithWeek  = Table.AddColumn(WithYear, "week_status",   each StatusPart([status_date], "week"),  Int64.Type),
+
+        // Если выгрузка отдала *_status — они уже типизированы и используются как есть;
+        // иначе — вычисленные выше. Обе ветки дают одни и те же имена колонок.
+        StatusBase = if HasStatusCols then Dated else WithWeek,
+
         // Нормализация поста. P1-16: post может быть null — Text.Contains(null, ...) уронил бы строку.
         PostNormalize = (p as nullable text) as text =>
             let
@@ -76,7 +110,7 @@
         // N-2: наличие столбца проверяется один раз, а не на каждой строке.
         HasPost = List.Contains(Existing, "post"),
         WithPostN = Table.AddColumn(
-            Dated, "postN",
+            StatusBase, "postN",
             each PostNormalize(if HasPost then [post] else null),
             type text
         ),
@@ -84,9 +118,8 @@
         // P1-4: неделя с годом. week_status без года схлопывает 43/2025 и 43/2026 в одну
         // колонку и ломает арифметику окна на границе года. Отображается по-прежнему
         // номер недели (см. modContentMTO.WeekLabel), группировка — по yearWeek.
-        // (!) Если выгрузка перестала отдавать year_status/week_status, оба try дают 0 и
-        //    yearWeek = 0 у ВСЕХ строк: понедельные матрицы схлопнутся в один столбец.
-        //    Это видно сразу на листе tbDATA и разбирается отдельно (переход на status_date).
+        // (!) Если оба поля null (пустой status_date, строки «НЕ ПОДПИСАНО»), yearWeek = null:
+        //    строка в недельные оси не попадает — базовый фильтр VBA её и так отсекает.
         WithYearWeek = Table.AddColumn(
             WithPostN,
             "yearWeek",

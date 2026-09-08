@@ -47,6 +47,10 @@ Public Sub BeginSnapshot(lo As ListObject)
     End If
 
     mReady = True
+
+    modLog.WriteDebug 2, "Снимок данных", "modAggregate.BeginSnapshot", _
+        "Таблица " & lo.Name & ": строк=" & mRows & ", столбцов=" & mCols.Count & _
+        " (" & Join(mCols.Keys, ", ") & ")"
 End Sub
 
 Public Sub EndSnapshot()
@@ -68,6 +72,9 @@ End Function
 Public Function ColIndex(columnName As String) As Long
     If Not mReady Then Err.Raise vbObjectError + 3, , "modAggregate: снимок не создан (BeginSnapshot)"
     If Not mCols.Exists(columnName) Then
+        modLog.WriteDebug 1, "Снимок данных", "modAggregate.ColIndex", _
+            "Столбец '" & columnName & "' отсутствует в " & mLo.Name & _
+            ". Имеющиеся столбцы: " & Join(mCols.Keys, ", ")
         Err.Raise vbObjectError + 2, , "Столбец '" & columnName & "' не найден в " & mLo.Name
     End If
     ColIndex = mCols(columnName)

@@ -18,6 +18,11 @@ Private Const TIMEOUT_MS As Long = 60000
 Public Function PostJSON(endpointUrl As String, apiKey As String, bodyJson As String) As String
     On Error GoTo ErrHandler
 
+    Dim t0 As Single
+    t0 = Timer
+    modLog.WriteDebug 1, "Вызов внешнего ИИ", "PostJSON", _
+        "POST " & endpointUrl & "; тело: " & Len(bodyJson) & " символов"
+
     Dim http As Object
     Set http = CreateObject("MSXML2.ServerXMLHTTP.6.0")  ' позднее связывание - обязательное требование Core
 
@@ -30,9 +35,18 @@ Public Function PostJSON(endpointUrl As String, apiKey As String, bodyJson As St
 
     If http.Status = 200 Then
         PostJSON = Utf8BytesToText(http.responseBody)
+        modLog.WriteDebug 1, "Вызов внешнего ИИ", "PostJSON", _
+            "HTTP " & http.Status & "; ответ: " & Len(PostJSON) & " символов; " & _
+            Round(Timer - t0, 2) & " c"
+        modLog.WriteDebug 2, "Вызов внешнего ИИ", "PostJSON", _
+            "Начало ответа: " & Left$(PostJSON, 4000)
     Else
         modLog.WriteLogEntry Now, "Предупреждение", "Вызов внешнего ИИ", endpointUrl, _
             "HTTP " & http.Status & ": " & http.statusText
+        modLog.WriteDebug 1, "Вызов внешнего ИИ", "PostJSON", _
+            "HTTP " & http.Status & ": " & http.statusText
+        modLog.WriteDebug 2, "Вызов внешнего ИИ", "PostJSON", _
+            "Тело ответа при HTTP-ошибке: " & Left$(Utf8BytesToText(http.responseBody), 4000)
         PostJSON = ""
     End If
     Exit Function
@@ -40,6 +54,8 @@ Public Function PostJSON(endpointUrl As String, apiKey As String, bodyJson As St
 ErrHandler:
     modLog.WriteLogEntry Now, "Предупреждение", "Вызов внешнего ИИ", endpointUrl, _
         "Ошибка/таймаут: " & Err.Description
+    modLog.WriteDebug 1, "Вызов внешнего ИИ", "PostJSON", _
+        "Ошибка/таймаут через " & Round(Timer - t0, 2) & " c: " & Err.Description
     PostJSON = ""
 End Function
 

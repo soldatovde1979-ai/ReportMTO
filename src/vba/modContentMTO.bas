@@ -1763,13 +1763,24 @@ Public Function BuildPrompt() As String
         "только ими. Ответ строго в формате JSON с ключами slide1_conclusions … slide7_conclusions, " & _
         "без markdown-разметки вокруг JSON."
 
+    ' Блоки собираются в отдельные переменные (порядок вычислений прежний) -
+    ' при DEBUG=2 их длины идут в лог для поиска раздутых частей промпта.
+    Dim block4 As String, block5 As String, block7 As String
+    Dim block8 As String, block9 As String, block6 As String
+    block4 = PctMatrixToJson("direction")
+    block5 = PctMatrixToJson("postN")
+    block7 = SyncToJson(False)
+    block8 = SyncToJson(True)
+    block9 = Block9ToJson()
+    block6 = Block6PeopleToJson()
+
     Dim userMessage As String
-    userMessage = "{""block4_percent_by_direction"":" & PctMatrixToJson("direction") & _
-                  ",""block5_percent_by_post"":" & PctMatrixToJson("postN") & _
-                  ",""block7_sync_by_week"":" & SyncToJson(False) & _
-                  ",""block8_sync_by_week_post"":" & SyncToJson(True) & _
-                  ",""block9_defect_types"":" & Block9ToJson() & _
-                  ",""block6_people"":" & Block6PeopleToJson() & "}"
+    userMessage = "{""block4_percent_by_direction"":" & block4 & _
+                  ",""block5_percent_by_post"":" & block5 & _
+                  ",""block7_sync_by_week"":" & block7 & _
+                  ",""block8_sync_by_week_post"":" & block8 & _
+                  ",""block9_defect_types"":" & block9 & _
+                  ",""block6_people"":" & block6 & "}"
 
     Dim model As String
     model = modMain.GetVariable("AI/MODEL")
@@ -1782,6 +1793,14 @@ Public Function BuildPrompt() As String
         """messages"":[" & _
         "{""role"":""system"",""content"":""" & JsonEscape(SYSTEM_PROMPT) & """}," & _
         "{""role"":""user"",""content"":""" & JsonEscape(userMessage) & """}]}"
+
+    modLog.WriteDebug 1, "Формирование отчёта", "BuildPrompt", _
+        "Модель: " & model & "; userMessage=" & Len(userMessage) & _
+        " символов; весь запрос=" & Len(BuildPrompt)
+    modLog.WriteDebug 2, "Формирование отчёта", "BuildPrompt", _
+        "Блоки: block4=" & Len(block4) & "; block5=" & Len(block5) & _
+        "; block7=" & Len(block7) & "; block8=" & Len(block8) & _
+        "; block9=" & Len(block9) & "; block6=" & Len(block6)
 End Function
 
 ' Матрица «строка x неделя» с долей планшета -> JSON-массив записей.
@@ -1943,6 +1962,8 @@ Public Function ParseAIResponse(responseText As String, ByRef slide3 As String, 
     slide3 = AI_FALLBACK: slide4 = AI_FALLBACK: slide5 = AI_FALLBACK
 
     If Trim$(responseText) = "" Then
+        modLog.WriteDebug 1, "Формирование отчёта", "ParseAIResponse", _
+            "Ответ ИИ пуст - все выводы заменяются заглушками"
         Set mInsights = Nothing
         mInsightsReady = False
         ParseAIResponse = False
@@ -1965,6 +1986,8 @@ Public Function ParseAIResponse(responseText As String, ByRef slide3 As String, 
     Set ins = CreateObject("Scripting.Dictionary")
     Dim ok As Boolean
     ok = True
+    Dim missing As String
+    missing = ""
     Dim i As Long, v As String
     For i = 1 To 7
         v = JsonUnescape(ExtractJsonStringValue(payload, "slide" & CStr(i) & "_conclusions"))
@@ -1973,12 +1996,24 @@ Public Function ParseAIResponse(responseText As String, ByRef slide3 As String, 
         Else
             ins("slide" & CStr(i)) = AI_FALLBACK
             ok = False
+            missing = missing & "slide" & CStr(i) & ", "
         End If
     Next i
 
     slide3 = ins("slide3")
     slide4 = ins("slide4")
     slide5 = ins("slide5")
+
+    If ok Then
+        modLog.WriteDebug 1, "Формирование отчёта", "ParseAIResponse", _
+            "Распознаны все 7 ключей slide1..slide7_conclusions"
+    Else
+        modLog.WriteDebug 1, "Формирование отчёта", "ParseAIResponse", _
+            "Не распознаны: " & Left$(missing, Len(missing) - 2) & _
+            "; длина payload=" & Len(payload)
+    End If
+    modLog.WriteDebug 2, "Формирование отчёта", "ParseAIResponse", _
+        "Payload после распаковки: " & Left$(payload, 4000)
 
     Set mInsights = ins
     mInsightsReady = True
@@ -2095,6 +2130,9 @@ End Function
 Public Function BuildPlaceholders(aiSlide3 As String, aiSlide4 As String, aiSlide5 As String) As Object
     EnsureSnapshot
 
+    Dim t0 As Single
+    t0 = Timer
+
     Dim d As Object
     Set d = CreateObject("Scripting.Dictionary")
 
@@ -2157,6 +2195,21 @@ Public Function BuildPlaceholders(aiSlide3 As String, aiSlide4 As String, aiSlid
         ' Обратная замена [EMP_N] -> ФИО (по убыванию номеров), затем HtmlEscape.
         d("AI_INSIGHT_SLIDE_" & CStr(i)) = Esc(ReplaceEmpMarkers(CStr(ai("slide" & CStr(i)))))
     Next i
+
+    modLog.WriteDebug 1, "Формирование отчёта", "BuildPlaceholders", _
+        "Готово: " & d.Count & " плейсхолдеров за " & Round(Timer - t0, 2) & " c"
+
+    If modLog.GetDebugLevel() >= 2 Then
+        Dim dbgInfo As String
+        dbgInfo = ""
+        Dim k As Variant
+        For Each k In d.Keys
+            If dbgInfo <> "" Then dbgInfo = dbgInfo & "; "
+            dbgInfo = dbgInfo & k & "=" & Len(CStr(d(k)))
+        Next k
+        modLog.WriteDebug 2, "Формирование отчёта", "BuildPlaceholders", _
+            "Размеры плейсхолдеров: " & dbgInfo
+    End If
 
     Set BuildPlaceholders = d
 End Function

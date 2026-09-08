@@ -5,22 +5,22 @@
 
 ## 1. Задача
 
-Выполнить полностью [`docs/task-for-coder.md`](docs/task-for-coder.md:1) — доработка отчёта МТО до 7 слайдов
+Выполнить полностью [`docs/archive/task-for-coder.md`](task-for-coder.md:1) — доработка отчёта МТО до 7 слайдов
 (13 пунктов §2), правки только в трёх местах:
 
-- [`src/vba/modContentMTO.bas`](src/vba/modContentMTO.bas:1) — единственный VBA-модуль с правками;
-- [`tmp_index.html`](tmp_index.html:1) — шаблон (пересборка под 7 слайдов);
+- [`src/vba/modContentMTO.bas`](../../src/vba/modContentMTO.bas:1) — единственный VBA-модуль с правками;
+- [`tmp_index.html`](../../tmp_index.html:1) — шаблон (пересборка под 7 слайдов);
 - лист `Variable` (5 новых ключей в build-книгах).
 
 Core-модули (`modMain.bas`, `modAggregate.bas`, `modHTMLEngine.bas`, `modColor.bas`, `modLog.bas`, Power Query) — НЕ трогать.
 
-Требования-акценты: см. `docs/task-for-coder.md` §5 (архитектурные ограничения 5.1–5.7 — обязательны),
-§6 (критерии приёмки). Источник цифр для проверки на тестовом JSON — [`tests/expected.md`](tests/expected.md:1).
+Требования-акценты: см. `docs/archive/task-for-coder.md` §5 (архитектурные ограничения 5.1–5.7 — обязательны),
+§6 (критерии приёмки). Источник цифр для проверки на тестовом JSON — [`tests/expected.md`](../../tests/expected.md:1).
 
 ## 2. Что уже сделано (состояние на диске)
 
 ### Код
-- [`src/vba/modContentMTO.bas`](src/vba/modContentMTO.bas:1) (~2180 строк) переписан под v7.0:
+- [`src/vba/modContentMTO.bas`](../../src/vba/modContentMTO.bas:1) (~2180 строк) переписан под v7.0:
   все 13 пунктов §2 реализованы:
   - **П.2**: ключи `REPORT/WEEK` (авто = второй с конца присутствующий `yearWeek`, явная N = последний год с неделей N), `REPORT/MIN_POST_RECORDS`, `REPORT/SLIDE_ZONES`, `NormaForPlanshet`, `ProvalForPlanshet`; `GetVariableDef` с дефолтами.
   - **П.4**: Дашборд 1 — `BuildDashboard(primary)`: три периода (ytd/prev/last, JS-переключатель в шаблоне), показатели «создали» (Distinct `number` по `date`), «закрыли» (Distinct `number`, «Готов к выбытию», по `status_date`), «% планшет», «без поста ремзоны», «медиана» (`MedianFromPairs()` по кэшу `mPairs`, вывод «чч:мм» через `FormatHHMM`).
@@ -35,7 +35,7 @@ Core-модули (`modMain.bas`, `modAggregate.bas`, `modHTMLEngine.bas`, `modC
   - **П.11**: график `BuildBlock2Chart()` — инлайн-SVG по постам × «% планшет» (офлайн).
   - **П.12**: подписи «как считается» — `Recipe()` под каждым блоком.
   - **П.13**: сравнения статусов — только `NormStatus`/`IsStatusReadyToLeave`/`IsStatusReadyToAccept`.
-- [`tmp_index.html`](tmp_index.html:1) — 7 слайдов, навигация, период-переключатель Дашборда, клик-расшифровка, панель расшифровки, печать.
+- [`tmp_index.html`](../../tmp_index.html:1) — 7 слайдов, навигация, период-переключатель Дашборда, клик-расшифровка, панель расшифровки, печать.
 
 ### Лист Variable
 Через COM (скрипт `tools/_tmp_variable.ps1`) в обе build-книги добавлены ключи:

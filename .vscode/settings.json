@@ -14,5 +14,8 @@
   },
   "material-icon-theme.folders.color": "#42a5f5",
   "files.associations": { "*.bas": "vb", "*.pq": "powerquery" },
-  "markdown.extension.toc.levels": "2..4"
+  "markdown.extension.toc.levels": "2..4",
+  "powerquery.client.additionalSymbolsDirectories": [
+    "c:/Projects/ReportMTO/.vscode/excel-pq-symbols"
+  ]
 }

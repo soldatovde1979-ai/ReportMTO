@@ -99,12 +99,19 @@ Public Sub GenerateReport()
 
     Application.StatusBar = "Подготовка данных..."
 
+    Dim t0 As Single
+    t0 = Timer
+    modLog.WriteDebug 1, "Формирование отчёта", "GenerateReport", _
+        "Старт. Строк в tbDATA: " & SafeRowCount() & "; DEBUG=" & modLog.GetDebugLevel()
+
     If SafeRowCount() = 0 Then
         MsgBox "Таблица tbDATA пуста - сначала нажмите «Загрузить» и выберите файл выгрузки.", vbExclamation
         GoTo CleanExit
     End If
 
     modContentMTO.BuildPivots ' пересчёт на случай, если отчёт формируют без предварительной загрузки
+    modLog.WriteDebug 1, "Формирование отчёта", "GenerateReport", _
+        "BuildPivots завершён: " & Round(Timer - t0, 2) & " c"
 
     Dim slide3 As String, slide4 As String, slide5 As String
     Dim parsedOK As Boolean
@@ -120,14 +127,28 @@ Public Sub GenerateReport()
     requestBody = modContentMTO.BuildPrompt()
 
     If Err.Number = 0 And requestBody <> "" Then
+        modLog.WriteDebug 1, "Формирование отчёта", "BuildPrompt", _
+            "Запрос к ИИ собран: " & Len(requestBody) & " символов"
+        modLog.WriteDebug 2, "Формирование отчёта", "BuildPrompt", _
+            "Тело запроса: " & Left$(requestBody, 20000)
         Application.StatusBar = "Ожидание ответа внешнего ИИ (до 60 сек)..."
         responseText = modAIGateway.PostJSON(endpoint, apiKey, requestBody)
+    Else
+        modLog.WriteDebug 1, "Формирование отчёта", "DeepSeek", _
+            "Запрос к ИИ пропущен: Err=" & Err.Number & " (" & Err.Description & _
+            "), длина тела=" & Len(requestBody)
     End If
 
     Dim aiErrDesc As String
     If Err.Number <> 0 Then aiErrDesc = Err.Description
     Err.Clear
     On Error GoTo ErrHandler
+
+    modLog.WriteDebug 1, "Формирование отчёта", "DeepSeek", _
+        "Ответ ИИ: " & Len(responseText) & " символов" & _
+        IIf(aiErrDesc <> "", "; ошибка вызова: " & aiErrDesc, "")
+    modLog.WriteDebug 2, "Формирование отчёта", "DeepSeek", _
+        "Начало ответа: " & Left$(responseText, 4000)
 
     If aiErrDesc <> "" Then
         modLog.WriteLogEntry Now, "Предупреждение", "Формирование отчёта", "DeepSeek", _
@@ -144,18 +165,24 @@ Public Sub GenerateReport()
     Application.StatusBar = "Сборка HTML-отчёта..."
     Dim placeholders As Object
     Set placeholders = modContentMTO.BuildPlaceholders(slide3, slide4, slide5)
+    modLog.WriteDebug 1, "Формирование отчёта", "BuildPlaceholders", _
+        "Плейсхолдеры готовы: " & Round(Timer - t0, 2) & " c от старта"
 
     Dim templatePath As String
     templatePath = ThisWorkbook.Path & "\tmp_index.html"
 
     Dim html As String
     html = modHTMLEngine.RenderTemplate(templatePath, placeholders)
+    modLog.WriteDebug 1, "Формирование отчёта", "RenderTemplate", _
+        "HTML собран: " & Len(html) & " символов, " & Round(Timer - t0, 2) & " c от старта"
 
     Dim resultFolder As String
     resultFolder = GetVariable("OUTPUT/RESULT_FOLDER")
 
     Dim savedPath As String
     savedPath = modHTMLEngine.SaveHTMLFile(html, resultFolder)
+    modLog.WriteDebug 1, "Формирование отчёта", "SaveHTMLFile", _
+        "Папка: " & resultFolder & "; сохранён: " & savedPath
 
     If savedPath <> "" Then
         modLog.WriteLogEntry Now, "Инфо", "Формирование отчёта", resultFolder, "Сохранён: " & savedPath
@@ -172,6 +199,9 @@ CleanExit:
 ErrHandler:
     modLog.WriteLogEntry Now, "Ошибка", "Формирование отчёта", "GenerateReport", _
         "Ошибка " & Err.Number & ": " & Err.Description
+    modLog.WriteDebug 1, "Формирование отчёта", "GenerateReport", _
+        "Падение через " & Round(Timer - t0, 2) & " c от старта: " & Err.Number & _
+        " (" & Err.Description & ")"
     modAggregate.EndSnapshot
     Application.StatusBar = False
     MsgBox "Не удалось сформировать отчёт." & vbCrLf & Err.Description & vbCrLf & vbCrLf & _

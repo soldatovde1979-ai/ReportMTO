@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Конвертер docs/Презентация и блоки данных.md -> docs/Презентация и блоки данных_чтение.docx.
+"""Конвертер docs/presentations/Презентация и блоки данных.md -> docs/archive/Презентация и блоки данных_чтение.docx.
 
 Поддержка: заголовки #..####, таблицы |...|, списки "- ", цитаты "> ",
 жирный **...**, код `...`, ссылки [текст](url) (выводятся текстом).
@@ -12,8 +12,8 @@ from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Cm, Pt
 
-SRC = "docs/Презентация и блоки данных.md"
-OUT = "docs/Презентация и блоки данных_чтение.docx"
+SRC = "docs/presentations/Презентация и блоки данных.md"
+OUT = "docs/archive/Презентация и блоки данных_чтение.docx"
 
 LINK_RE = re.compile(r"\[([^\[\]]*)\]\([^)]*\)")
 BOLD_RE = re.compile(r"\*\*([^*]+)\*\*")

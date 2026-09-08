@@ -14,7 +14,7 @@
 # Source is ASCII-only on purpose: PowerShell 5.1 reads .ps1 without BOM as ANSI
 # and cyrillic string literals break parsing. All cyrillic comparisons live in VBA.
 #
-# Scenario and rules for adding new tests: docs/testing-e2e-v1.md
+# Scenario and rules for adding new tests: tests/testing-e2e-v1.md
 
 param(
     [string]$BookPath = "build\ReportMTO v7.0.xlsm",

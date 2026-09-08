@@ -1,15 +1,18 @@
 # Установка правок v7.1
 
+> Версия документа: v1.1 от 08.09.2026. Исправлена команда «Вариант 2» (ключ ИИ):
+> `icacls ... /grant:r "$env:USERNAME:F"` не работает из PowerShell («Недопустимый параметр»),
+> а `Out-File -Encoding utf8` в PowerShell 5.1 пишет файл с BOM — заменён на запись без BOM.
 > Версия документа: v1.0 от 08.09.2026.
 > Обновление рабочей книги v7.0 → v7.1 на месте (Путь A, как в
-> [`install-v7.0.md`](install-v7.0.md:1)): данные `tbDATA`, лист `Variable`, кнопки и
+> [`install-v7.0.md`](../docs/archive/install-v7.0.md:1)): данные `tbDATA`, лист `Variable`, кнопки и
 > подключения сохраняются.
 
 ## Что изменилось против v7.0
 
 | Файл | Что и зачем |
 |---|---|
-| `src/vba/modContentMTO.bas` (v7.1) | дашборд переоформлен под дизайн-систему [`examples/remzona-reports.html`](../../examples/remzona-reports.html): период вынесен из KPI-карточки в заголовок панели (`mock-bar`), переключатель периодов — чипы `.chip/.on`, карточки KPI — классы `.lab/.val` |
+| `src/vba/modContentMTO.bas` (v7.1) | дашборд переоформлен под дизайн-систему [`examples/remzona-reports.html`](../examples/remzona-reports.html): период вынесен из KPI-карточки в заголовок панели (`mock-bar`), переключатель периодов — чипы `.chip/.on`, карточки KPI — классы `.lab/.val` |
 | `src/vba/modMain.bas` (v7.1) | `ResolveAiApiKey()`: ключ ИИ читается вне книги (переменная окружения `AI_API_KEY` → файл `%APPDATA%\ReportMTO\deepseek.key` → строка Variable как legacy с предупреждением в лог) |
 | `tmp_index.html` (v2.0) | полный рестайлинг отчёта: палитра/типографика/сетки эталона remzona-reports, системные шрифты Segoe UI / Consolas (офлайн, без Google Fonts); вкладки, чипы периодов, клик-расшифровка и печать сохранены |
 
@@ -29,7 +32,7 @@
 
    Затем в VBE: File → Import File → `%TEMP%\modMain_ansi.bas`, затем
    `%TEMP%\modContentMTO_ansi.bas`.
-4. **Заменить шаблон.** Скопировать [`tmp_index.html`](../../tmp_index.html) в папку рядом с
+4. **Заменить шаблон.** Скопировать [`tmp_index.html`](../tmp_index.html) в папку рядом с
    рабочей книгой (тот же каталог; `GenerateReport` ищет его по `ThisWorkbook.Path`).
 5. **Компиляция.** В VBE: Debug → Compile VBAProject. Должно пройти без ошибок.
 6. **Проверка без ключа.** Alt+F8 → `DebugGenerateOffline` → отчёт соберётся с заглушками ИИ,
@@ -60,12 +63,14 @@ setx AI_API_KEY "sk-ваш-ключ"
 ```powershell
 $keyDir = "$env:APPDATA\ReportMTO"
 New-Item -ItemType Directory -Force -Path $keyDir | Out-Null
-"sk-ваш-ключ" | Out-File -FilePath "$keyDir\deepseek.key" -Encoding utf8 -NoNewline
-icacls "$keyDir\deepseek.key" /inheritance:r /grant:r "$env:USERNAME:F"
+[IO.File]::WriteAllText("$keyDir\deepseek.key", "sk-ваш-ключ", (New-Object System.Text.UTF8Encoding($false)))
+icacls "$keyDir\deepseek.key" /inheritance:r /grant:r "$($env:USERNAME):F"
 ```
 
-Файл читается как UTF-8 (модуль `modHTMLEngine.ReadUtf8`); без BOM или с BOM — без разницы.
-Перезапуск Excel не требуется.
+Файл пишется БЕЗ BOM (запись через `[IO.File]::WriteAllText` с `UTF8Encoding($false)`).
+Если `icacls` снова выдаст «Недопустимый параметр» — пропустите эту строку: папка
+`%APPDATA%\ReportMTO` и так принадлежит только вашей учётке, `icacls` нужен лишь для
+жёсткого ограничения прав. Перезапуск Excel не требуется.
 
 ### Обязательный финальный шаг
 
