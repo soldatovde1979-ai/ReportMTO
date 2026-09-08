@@ -15,6 +15,10 @@ Attribute VB_Name = "modMain"
 '   P1-13 - проверка непустой tbDATA до начала расчётов.
 '   P1-11 - путь result\ резолвится в modHTMLEngine.ResolveOutputFolder.
 '   + GetVariableDef - чтение ключа Variable со значением по умолчанию (для необязательных ключей).
+'
+' v7.1 (08.09.2026) - ключ ИИ вынесен за пределы книги:
+'   ResolveAiApiKey: AI_API_KEY (переменная окружения) -> %APPDATA%\ReportMTO\deepseek.key
+'   (UTF-8) -> лист Variable (legacy, с предупреждением в лог). Ключ в лог и HTML не пишется.
 Option Explicit
 
 Public Sub LoadSourceFile()
@@ -110,7 +114,7 @@ Public Sub GenerateReport()
     On Error Resume Next
     Dim endpoint As String, apiKey As String, requestBody As String, responseText As String
     endpoint = GetVariable("AI/ENDPOINT")
-    apiKey = GetVariable("AI/API_KEY")
+    apiKey = ResolveAiApiKey()
 
     Application.StatusBar = "Формирование запроса к ИИ..."
     requestBody = modContentMTO.BuildPrompt()
@@ -216,6 +220,43 @@ Private Function SafeRowCount() As Long
     On Error Resume Next
     SafeRowCount = ThisWorkbook.Sheets("tbDATA").ListObjects("tbDATA").ListRows.Count
     On Error GoTo 0
+End Function
+
+' Резолвер API-ключа ИИ (v7.1): приоритет источников - переменная окружения AI_API_KEY,
+' файл %APPDATA%\ReportMTO\deepseek.key (UTF-8), затем лист Variable (legacy, с предупреждением).
+' Ключ никогда не пишется в лог и в HTML-отчёт.
+Public Function ResolveAiApiKey() As String
+    ' 1) Переменная окружения пользователя (setx AI_API_KEY ...).
+    Dim envKey As String
+    envKey = Trim$(Environ$("AI_API_KEY"))
+    If Len(envKey) > 0 Then ResolveAiApiKey = envKey: Exit Function
+
+    ' 2) Файл с правами только для владельца (UTF-8; чтение существующим modHTMLEngine.ReadUtf8).
+    Dim appData As String
+    appData = Environ$("APPDATA")
+    If Len(appData) > 0 Then
+        Dim fso As Object
+        Set fso = CreateObject("Scripting.FileSystemObject")
+        Dim keyPath As String
+        keyPath = fso.BuildPath(appData, "ReportMTO\deepseek.key")
+        If fso.FileExists(keyPath) Then
+            On Error Resume Next
+            ResolveAiApiKey = Trim$(modHTMLEngine.ReadUtf8(keyPath))
+            Err.Clear
+            On Error GoTo 0
+            If Len(ResolveAiApiKey) > 0 Then Exit Function
+        End If
+    End If
+
+    ' 3) Лист Variable - небезопасно, но совместимо с прежними книгами.
+    On Error Resume Next
+    ResolveAiApiKey = GetVariable("AI/API_KEY")
+    If Err.Number <> 0 Then Err.Clear: ResolveAiApiKey = ""
+    On Error GoTo 0
+    If Len(Trim$(ResolveAiApiKey)) > 0 Then
+        modLog.WriteLogEntry Now, "Предупреждение", "Формирование отчёта", "DeepSeek", _
+            "Ключ ИИ прочитан с листа Variable - защита листа не шифрует; перенесите ключ в AI_API_KEY или %APPDATA%\ReportMTO\deepseek.key"
+    End If
 End Function
 
 ' Чтение значения из листа Variable по ключу (например "AI/ENDPOINT").

@@ -34,6 +34,13 @@ Attribute VB_Name = "modContentMTO"
 '     (BuildPlaceholders, метки bp8/bp9). Переименована в tabObj (6 мест использования).
 '   - удалена временная диагностика DbgBp / bp_log.txt.
 '
+' Версия 7.1 от 08.09.2026 - рестайлинг отчёта под дизайн-систему remzona-reports.html:
+'   - BuildDashboard: период вынесен в заголовок панели (mock-bar ttl) вместо KPI-карточки
+'     «Период»; переключатель периодов - чипы .chip/.on вместо кнопок .dash-btn; сетка KPI -
+'     классы .kpis/.kpi вместо .kpi-grid/.kpi (шаблон tmp_index.html v2.0).
+'   - DashKpiGrid: удалена первая KPI-карточка «Период»; подписи и значения - .lab/.val.
+'   - новая приватная DashPeriodCaption - единый источник заголовков периодов дашборда.
+'
 ' (!) 24.08.2026: поле arm принимает не два, а ТРИ значения - "ПК", "ПЛАНШЕТ" и "НЕ ПОДПИСАНО"
 ' (статус смены не подписан). Такие строки временно исключаются из всех блоков по решению
 ' владельца процесса. Реализовано белым списком (arm@=ПК;ПЛАНШЕТ), а не отсечением пустых
@@ -580,25 +587,30 @@ Private Function BuildDashboard(primary As String) As String
     Dim labels As Object
     Set labels = CreateObject("Scripting.Dictionary")
     labels("ytd") = "С начала года"
-    labels("prev") = "Предыдущая неделя"
+    labels("prev") = "Пред. неделя"
     labels("last") = "Последняя неделя"
 
     Dim html As String
-    html = "<div class='dashboard'>"
-    html = html & "<div class='period-switch'>"
+    ' Панель-макет в стиле remzona-reports: mock-bar (заголовок периода + чипы) и KPI-сетка.
+    html = "<div class='dashboard mock'>"
+    html = html & "<div class='mock-bar'>"
+    html = html & "<span class='ttl dash-ttl'>Дашборд · " & Esc(DashPeriodCaption(primary)) & "</span>"
+    html = html & "<div class='chips'>"
     Dim p As Variant
     For Each p In periods
         Dim cls As String
-        cls = "dash-btn"
-        If CStr(p) = primary Then cls = cls & " active"
+        cls = "chip"
+        If CStr(p) = primary Then cls = cls & " on"
         html = html & "<button class='" & cls & "' data-dash-period='" & CStr(p) & "'>" & Esc(CStr(labels(p))) & "</button>"
     Next p
-    html = html & "</div>"
+    html = html & "</div></div>"
     For Each p In periods
         Dim hidden As String
         hidden = ""
         If CStr(p) <> primary Then hidden = " hidden"
-        html = html & "<div class='kpi-grid' data-dash-panel='" & CStr(p) & "'" & hidden & ">" & DashKpiGrid(CStr(p)) & "</div>"
+        html = html & "<div class='kpis' data-dash-panel='" & CStr(p) & "'" & _
+            " data-dash-title='Дашборд · " & Esc(DashPeriodCaption(CStr(p))) & "'" & hidden & ">" & _
+            DashKpiGrid(CStr(p)) & "</div>"
     Next p
     html = html & "</div>"
 
@@ -608,26 +620,28 @@ Private Function BuildDashboard(primary As String) As String
         "Медиана - по ЗН со статусом «Готов к выбытию» в обеих дирекциях (вывод «чч:мм»).")
 End Function
 
+' Заголовок периода для mock-bar дашборда (v7.1, единый источник: заголовок панели и
+' data-dash-title чипов-переключателей).
+Private Function DashPeriodCaption(per As String) As String
+    If per = "ytd" Then
+        DashPeriodCaption = "С начала года " & CStr(Year(Date))
+    ElseIf per = "prev" Then
+        DashPeriodCaption = "Предыдущая неделя (нед. " & WeekLabel(ReportWeekValue()) & ")"
+    Else
+        DashPeriodCaption = "Последняя неделя (нед. " & WeekLabel(LatestWeekValue()) & ")"
+    End If
+End Function
+
 ' Карточки KPI одного периода.
 Private Function DashKpiGrid(per As String) As String
     Dim mm As Object
     Set mm = mDashboard(per)
 
-    Dim rw As Long
-    rw = ReportWeekValue()
-    Dim lw As Long
-    lw = LatestWeekValue()
     Dim thisYear As Long
     thisYear = Year(Date)
-
-    Dim cap As String
-    If per = "ytd" Then
-        cap = "С начала года " & CStr(thisYear)
-    ElseIf per = "prev" Then
-        cap = "Предыдущая неделя (нед. " & Esc(WeekLabel(rw)) & ")"
-    Else
-        cap = "Последняя неделя (нед. " & Esc(WeekLabel(lw)) & ")"
-    End If
+    Dim rw As Long, lw As Long
+    rw = ReportWeekValue()
+    lw = LatestWeekValue()
 
     Dim createdDrill As String, closedDrill As String, pctDrill As String, noPostDrill As String
     If per = "ytd" Then
@@ -663,17 +677,16 @@ Private Function DashKpiGrid(per As String) As String
     End If
 
     Dim html As String
-    html = "<div class='kpi'><span class='kpi-cap'>Период</span><span class='kpi-period'>" & Esc(cap) & "</span></div>"
-    html = html & "<div class='kpi'><span class='kpi-cap'>Создали заказ-нарядов</span>" & _
-        "<span class='kpi-val'" & DrillAttr(createdDrill) & ">" & CStr(mm("created").Count) & "</span></div>"
-    html = html & "<div class='kpi'><span class='kpi-cap'>Закрыли заказ-нарядов</span>" & _
-        "<span class='kpi-val'" & DrillAttr(closedDrill) & ">" & CStr(mm("closed").Count) & "</span></div>"
-    html = html & "<div class='kpi'><span class='kpi-cap'>% планшет</span>" & _
-        "<span class='kpi-val'" & DrillAttr(pctDrill) & ">" & DashPct(total, tablet) & "</span></div>"
-    html = html & "<div class='kpi'><span class='kpi-cap'>Без поста ремзоны</span>" & _
-        "<span class='kpi-val'" & DrillAttr(noPostDrill) & ">" & CStr(mm("noPost").Count) & "</span></div>"
-    html = html & "<div class='kpi'><span class='kpi-cap'>Медиана</span>" & _
-        "<span class='kpi-val'" & DrillAttr(medianDrill) & ">" & medianVal & "</span></div>"
+    html = "<div class='kpi'><div class='lab'>Создали заказ-нарядов</div>" & _
+        "<div class='val'" & DrillAttr(createdDrill) & ">" & CStr(mm("created").Count) & "</div></div>"
+    html = html & "<div class='kpi'><div class='lab'>Закрыли заказ-нарядов</div>" & _
+        "<div class='val'" & DrillAttr(closedDrill) & ">" & CStr(mm("closed").Count) & "</div></div>"
+    html = html & "<div class='kpi'><div class='lab'>% планшет</div>" & _
+        "<div class='val'" & DrillAttr(pctDrill) & ">" & DashPct(total, tablet) & "</div></div>"
+    html = html & "<div class='kpi'><div class='lab'>Без поста ремзоны</div>" & _
+        "<div class='val'" & DrillAttr(noPostDrill) & ">" & CStr(mm("noPost").Count) & "</div></div>"
+    html = html & "<div class='kpi'><div class='lab'>Медиана</div>" & _
+        "<div class='val'" & DrillAttr(medianDrill) & ">" & medianVal & "</div></div>"
     DashKpiGrid = html
 End Function
 
