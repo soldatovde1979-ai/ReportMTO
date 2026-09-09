@@ -41,6 +41,12 @@ Attribute VB_Name = "modContentMTO"
 '   - DashKpiGrid: удалена первая KPI-карточка «Период»; подписи и значения - .lab/.val.
 '   - новая приватная DashPeriodCaption - единый источник заголовков периодов дашборда.
 '
+' Версия 7.2 от 08.09.2026 - закрыты остатки tz_Reports2.md:
+'   - BuildBlock6Weekly получил параметр byDept: BLOCK_6_DENT/BLOCK_6_DGM - только «По сотрудникам»,
+'     новые плейсхолдеры BLOCK_6_DENT_DEPT/BLOCK_6_DGM_DEPT - только «По подразделениям» (ТЗ раздел 4).
+'   - пустой REPORT/SLIDE_ZONES -> BLOCK_1_*_ZONES выводят пояснение вместо пустоты (ТЗ 3.2).
+'   - «Создали ЗН» Дашборда считается без FBase - по всей истории, включая «НЕ ПОДПИСАНО» (ТЗ 3.1).
+'
 ' (!) 24.08.2026: поле arm принимает не два, а ТРИ значения - "ПК", "ПЛАНШЕТ" и "НЕ ПОДПИСАНО"
 ' (статус смены не подписан). Такие строки временно исключаются из всех блоков по решению
 ' владельца процесса. Реализовано белым списком (arm@=ПК;ПЛАНШЕТ), а не отсечением пустых
@@ -483,6 +489,7 @@ Private Sub EnsureDashboard()
     Dim n As Long
     n = modAggregate.RowCount()
     Dim r As Long
+    Dim r2 As Long, num2 As String, dte2 As Variant, wdte2 As Long
     For r = 1 To n
         If IsTrueText(modAggregate.CellText(r, "in_bounds")) Then
             Dim armT As String
@@ -492,14 +499,9 @@ Private Sub EnsureDashboard()
                 num = modAggregate.CellText(r, "number")
                 Dim sd As Variant
                 sd = modAggregate.CellRaw(r, "status_date")
-                Dim dte As Variant
-                dte = modAggregate.CellRaw(r, "date")
                 Dim wsd As Long
                 wsd = 0
                 If IsNumeric(sd) Then wsd = WeekKeyOf(CDbl(sd))
-                Dim wdte As Long
-                wdte = 0
-                If IsNumeric(dte) Then wdte = WeekKeyOf(CDbl(dte))
                 Dim ySt As Long
                 ' Год события из yearWeek (year*100+week): выгрузка 2026 не содержит
                 ' year_status, опора на него роняла отчёт (Err -2147221502).
@@ -512,16 +514,14 @@ Private Sub EnsureDashboard()
                 postN = modAggregate.CellText(r, "postN")
                 Dim mm As Object
 
-                ' «С начала года»: события текущего года (year_status), создание - по date.
+                ' «С начала года»: события текущего года (год из yearWeek).
+                ' «Создали ЗН» считается отдельным проходом ниже - без FBase (ТЗ 3.1).
                 If ySt = thisYear Then
                     Set mm = stats("ytd")
                     mm("total") = CDbl(mm("total")) + 1
                     If isTab Then mm("tablet") = CDbl(mm("tablet")) + 1
                     If isLeave Then mm("closed")(num) = True
                     If postN = "" Then mm("noPost")(num) = True
-                End If
-                If wdte > 0 And wdte \ 100 = thisYear Then
-                    stats("ytd")("created")(num) = True
                 End If
 
                 ' Предыдущая неделя (отчётная, REPORT/WEEK): по status_date.
@@ -532,9 +532,6 @@ Private Sub EnsureDashboard()
                     If isLeave Then mm("closed")(num) = True
                     If postN = "" Then mm("noPost")(num) = True
                 End If
-                If rw > 0 And wdte = rw Then
-                    stats("prev")("created")(num) = True
-                End If
 
                 ' Последняя неделя данных.
                 If lw > 0 And wsd = lw Then
@@ -544,12 +541,23 @@ Private Sub EnsureDashboard()
                     If isLeave Then mm("closed")(num) = True
                     If postN = "" Then mm("noPost")(num) = True
                 End If
-                If lw > 0 And wdte = lw Then
-                    stats("last")("created")(num) = True
-                End If
             End If
         End If
     Next r
+
+    ' «Создали ЗН» - Distinct number по дате создания (date), БЕЗ базового фильтра FBase:
+    ' создание ЗН не зависит от статуса подписи - строки «НЕ ПОДПИСАНО» участвуют (ТЗ 3.1).
+    For r2 = 1 To n
+        num2 = modAggregate.CellText(r2, "number")
+        If num2 <> "" Then
+            dte2 = modAggregate.CellRaw(r2, "date")
+            wdte2 = 0
+            If IsNumeric(dte2) Then wdte2 = WeekKeyOf(CDbl(dte2))
+            If wdte2 > 0 And wdte2 \ 100 = thisYear Then stats("ytd")("created")(num2) = True
+            If rw > 0 And wdte2 = rw Then stats("prev")("created")(num2) = True
+            If lw > 0 And wdte2 = lw Then stats("last")("created")(num2) = True
+        End If
+    Next r2
 
     Set mDashboard = stats
     mDashboardReady = True
@@ -1171,7 +1179,7 @@ End Function
 ' 7. Блок 6 (п.6): понедельная раскладка ПН-3..ПН по сотрудникам и по подразделениям
 '    (emp_dep), сортировка по «% планшет» ПН по убыванию; рейтинг - за отчётную неделю.
 ' =====================================================================================
-Private Function BuildBlock6Weekly(direction As String) As String
+Private Function BuildBlock6Weekly(direction As String, Optional byDept As Boolean = False) As String
     EnsureSnapshot
 
     Dim weeks As Variant, cnt As Long
@@ -1183,8 +1191,11 @@ Private Function BuildBlock6Weekly(direction As String) As String
 
     Dim html As String
     html = "<h3>Понедельная статистика - " & Esc(direction) & "</h3>"
-    html = html & "<h4>По сотрудникам</h4>" & Block6WeeklyCore(direction, "employee", "Сотрудник", "employee", weeks, cnt)
-    html = html & "<h4>По подразделениям</h4>" & Block6WeeklyCore(direction, "emp_dep", "Подразделение", "emp_dep", weeks, cnt)
+    If byDept Then
+        html = html & "<h4>По подразделениям</h4>" & Block6WeeklyCore(direction, "emp_dep", "Подразделение", "emp_dep", weeks, cnt)
+    Else
+        html = html & "<h4>По сотрудникам</h4>" & Block6WeeklyCore(direction, "employee", "Сотрудник", "employee", weeks, cnt)
+    End If
     html = html & Recipe("Недели ПН (REPORT/WEEK), ПН-1, ПН-2, ПН-3 - только присутствующие в данных, " & _
         "не превосходящие отчётную неделю. % планшет = ПЛАНШЕТ / (ПК + ПЛАНШЕТ) за неделю; " & _
         "ВСЕГО ПОДПИСЕЙ - события (строки tbDATA) за неделю; из них на планшете - с arm = ПЛАНШЕТ; " & _
@@ -2196,15 +2207,17 @@ Public Function BuildPlaceholders(aiSlide3 As String, aiSlide4 As String, aiSlid
     d("BLOCK_1_DENT_ALL") = BuildBlock1Table("ДЭНТ", "")
     d("BLOCK_1_DGM_ALL") = BuildBlock1Table("ДГМ", "")
     If zonesRaw = "" Then
-        ' Пустой REPORT/SLIDE_ZONES = второй экземпляр Блока 1 не выводить.
-        d("BLOCK_1_DENT_ZONES") = ""
-        d("BLOCK_1_DGM_ZONES") = ""
+        ' Пустой REPORT/SLIDE_ZONES: второй экземпляр Блока 1 заменяется пояснением (ТЗ 3.2).
+        d("BLOCK_1_DENT_ZONES") = "<p class='empty-note'>Набор ремзон не задан (Variable/REPORT/SLIDE_ZONES).</p>"
+        d("BLOCK_1_DGM_ZONES") = "<p class='empty-note'>Набор ремзон не задан (Variable/REPORT/SLIDE_ZONES).</p>"
     Else
         d("BLOCK_1_DENT_ZONES") = BuildBlock1Table("ДЭНТ", zonesRaw)
         d("BLOCK_1_DGM_ZONES") = BuildBlock1Table("ДГМ", zonesRaw)
     End If
-    d("BLOCK_6_DENT") = BuildBlock6Weekly("ДЭНТ")
-    d("BLOCK_6_DGM") = BuildBlock6Weekly("ДГМ")
+    d("BLOCK_6_DENT") = BuildBlock6Weekly("ДЭНТ", False)
+    d("BLOCK_6_DGM") = BuildBlock6Weekly("ДГМ", False)
+    d("BLOCK_6_DENT_DEPT") = BuildBlock6Weekly("ДЭНТ", True)
+    d("BLOCK_6_DGM_DEPT") = BuildBlock6Weekly("ДГМ", True)
 
     ' --- Слайд 4: синхронность ---
     d("BLOCK_7_TABLE") = BuildSyncTable(False)

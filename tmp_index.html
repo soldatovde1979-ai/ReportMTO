@@ -1,5 +1,7 @@
 <!--
   Шаблон отчёта МТО (tmp_index.html) для modHTMLEngine.RenderTemplate.
+  Версия 2.1 от 08.09.2026 — слайды ДЭНТ/ДГМ: добавлены плейсхолдеры BLOCK_6_*_DEPT
+  (понедельная раскладка по подразделениям, tz_Reports2.md раздел 4).
   Версия 2.0 от 08.09.2026
   Рестайлинг под дизайн-систему examples/remzona-reports.html: палитра ground/surface/ink/line,
   типографика (заголовки-гротеск, моно-подписи uppercase), KPI-сетка через 1px-линии,
@@ -294,6 +296,7 @@ footer{
     {{BLOCK_1_DENT_ALL}}
     {{BLOCK_1_DENT_ZONES}}
     {{BLOCK_6_DENT}}
+    {{BLOCK_6_DENT_DEPT}}
     <div class="ai-insight">
       <strong>AI</strong>
       <p>{{AI_INSIGHT_SLIDE_2}}</p>
@@ -306,6 +309,7 @@ footer{
     {{BLOCK_1_DGM_ALL}}
     {{BLOCK_1_DGM_ZONES}}
     {{BLOCK_6_DGM}}
+    {{BLOCK_6_DGM_DEPT}}
     <div class="ai-insight">
       <strong>AI</strong>
       <p>{{AI_INSIGHT_SLIDE_3}}</p>
