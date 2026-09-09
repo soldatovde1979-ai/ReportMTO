@@ -10,6 +10,24 @@
 
 ## Срочно
 
+- [x] 09.09.2026: ТЗ v1.2 — переход отчёта на 4 слайда, код внесён. T1 fnNormalizeFields.pq v7
+      (dateWeek/dateMonth/isSigned); T2 modAggregate.bas v3.2 (GroupPercentile/Percentile,
+      собственный QuickSort); T3-T7, T9 modContentMTO.bas v7.3 (FBase пуст — in_bounds не
+      фильтруется; псевдонимы «Сотрудник N»; рамка td.pct вместо заливки; SVG-примитивы;
+      блоки слайдов 1-4; промпт/разбор под 4 слайда; BuildPlaceholders и DebugCheckPlaceholders);
+      T8 tmp_index.html v3.0 и build\tmp_index.html (4 слайда, переключатель темы, data-drill
+      снят); T10 REPORT/RETENTION_WEEKS (пусто, зарезервирован) в обе build-книги
+      (tools/add_retention_key.ps1). Переимпорт в build-книгу (tools/apply_vba_tmp.ps1),
+      compile_check: COMPILE_OK. НЕ СДЕЛАНО: woff2 Oswald/IBM Plex не встроены — файлов в
+      репозитории нет, интернет на машине недоступен (TODO-блок в шаблоне); прогон
+      DebugGenerateOffline и сверка чисел на данных не выполнялись (рабочая книга вне
+      репозитория); M-код v7 в build-книгу не загружен (нужно «Загрузить» данные).
+- [x] 09.09.2026: автономный прогон рабочей книги и починка зависания. Прогоны вставали в
+      BuildPlaceholders на 136108 строках (>30 мин, прерывались): причина — O(N^2) конкатенация
+      дампа расшифровки в BuildDataDump (43,5 МБ). Исправлено: двухпроходный массив + Join и
+      поэтапные тайминги слайдов (modContentMTO.bas). Полный прогон с ИИ: result\Report_20260909_134836.html
+      за ~6,5 мин, все 7 выводов ИИ распознаны. Остаточные медленные этапы: Слайд 1 ~100 c,
+      Слайды 2/3 (Блок 6 ×4) ~270 c.
 - [x] install.ps1 v1.8 / install_prod.ps1 v1.4 (09.09.2026): подробный по-модульный вывод
       (VBA_ADDED/DIFF/SAME, PQ_ADDED/DIFF/SAME/SKIP, TPL_DIFF/SAME) и обязательная пост-установочная
       верификация по исходникам (VBA/PQ/TPL_VERIFY_OK|FAIL, VERIFY_OK|FAIL; провал -> exit 1).

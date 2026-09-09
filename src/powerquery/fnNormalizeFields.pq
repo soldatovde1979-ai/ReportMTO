@@ -1,7 +1,18 @@
 // fnNormalizeFields — CONTENT SPEC (МТО). Реализация контракта Core §5.1.
 //
 // Контракт (с v3.1): (tbl as table) as table — таблица целиком, не построчно.
-// Вход: таблица после разворачивания JSON. Выход: та же таблица + postN + yearWeek, с типами.
+// Вход: таблица после разворачивания JSON. Выход: та же таблица + postN + yearWeek + dateWeek +
+// dateMonth + isSigned, с типами.
+//
+// v7 (09.09.2026), задача T1 ТЗ v1.2 — три вычисляемых поля:
+//   dateWeek  = Year(date)*100 + WeekOfYear(date, Monday) — ось по дате создания наряда
+//               для строк без status_date (у них yearWeek = null, слайд 4 и «статистика
+//               подписания» живут на этой оси);
+//   dateMonth = Year(date)*100 + Month(date) — помесячная ось;
+//   isSigned  = arm непусто и не «НЕ ПОДПИСАНО» — единый признак подписанного события,
+//               чтобы не повторять условие в каждом блоке.
+//   Добавляются только при наличии исходных колонок date/arm (1С опускает пустые поля);
+//   пустой date -> dateWeek/dateMonth = null (терпимо).
 //
 // v5 (02.09.2026), две правки:
 //   N-1 — ДАТЫ БОЛЬШЕ НЕ РОНЯЮТ ЗАПРОС. Было: date и status_date приводились через
@@ -126,6 +137,27 @@
             each (try Number.From([year_status]) otherwise 0) * 100
                + (try Number.From([week_status]) otherwise 0),
             Int64.Type
-        )
+        ),
+
+        // T1: оси времени по date и признак подписи. Неделя — с понедельника (Day.Monday),
+        // как week_status из 1С; пустой/неразобранный date -> null.
+        DateWeekOf = (d as nullable datetime) as nullable number =>
+            if d = null then null
+            else try Date.Year(d) * 100 + Date.WeekOfYear(d, Day.Monday) otherwise null,
+        DateMonthOf = (d as nullable datetime) as nullable number =>
+            if d = null then null
+            else try Date.Year(d) * 100 + Date.Month(d) otherwise null,
+        SignedOf = (a as nullable text) as logical =>
+            a <> null and a <> "" and a <> "НЕ ПОДПИСАНО",
+
+        // Поля добавляются только при наличии исходных колонок (1С опускает пустые).
+        HasDate = List.Contains(Existing, "date"),
+        HasArm = List.Contains(Existing, "arm"),
+        WithDateWeek = if HasDate then Table.AddColumn(WithYearWeek, "dateWeek",
+            each DateWeekOf([date]), Int64.Type) else WithYearWeek,
+        WithDateMonth = if HasDate then Table.AddColumn(WithDateWeek, "dateMonth",
+            each DateMonthOf([date]), Int64.Type) else WithDateWeek,
+        WithSigned = if HasArm then Table.AddColumn(WithDateMonth, "isSigned",
+            each SignedOf([arm]), type logical) else WithDateMonth
     in
-        WithYearWeek
+        WithSigned

@@ -47,6 +47,17 @@ Attribute VB_Name = "modContentMTO"
 '   - пустой REPORT/SLIDE_ZONES -> BLOCK_1_*_ZONES выводят пояснение вместо пустоты (ТЗ 3.2).
 '   - «Создали ЗН» Дашборда считается без FBase - по всей истории, включая «НЕ ПОДПИСАНО» (ТЗ 3.1).
 '
+' Версия 7.3 от 09.09.2026 - ТЗ v1.2 (переход на 4 слайда), задачи T3-T9:
+'   T3 - фильтры: FBase() пуст (in_bounds и arm не фильтруются, P0-1), добавлены
+'        FSigned/FUnsigned/FDir; псевдонимы сотрудников «Сотрудник N» (BuildEmployeeAliases/
+'        AliasOf/DeAlias) вместо маркеров [EMP_N] в новых блоках;
+'   T4 - PctCell переведена с заливки на РАМКУ (modColor.PercentToColor -> border-color),
+'        добавлены SVG-примитивы SvgBarsV/SvgBarsH/SvgBarsLine/SvgSpark, KpiTile,
+'        FmtInt/FmtPct («чч:мм» - существующая FormatHHMM);
+'   T5-T7 - блоки слайдов 1-4; T9 - промпт, разбор и плейсхолдеры под 4 слайда.
+'   Старые функции блоков 1-9 остаются в коде, но из BuildPlaceholders не вызываются
+'   (постановка §8: снятое из презентации не удаляется из кода).
+'
 ' (!) 24.08.2026: поле arm принимает не два, а ТРИ значения - "ПК", "ПЛАНШЕТ" и "НЕ ПОДПИСАНО"
 ' (статус смены не подписан). Такие строки временно исключаются из всех блоков по решению
 ' владельца процесса. Реализовано белым списком (arm@=ПК;ПЛАНШЕТ), а не отсечением пустых
@@ -71,6 +82,9 @@ Private mInsightsReady As Boolean
 Private mEmpList As Variant       ' единый алфавитный список ФИО снимка для маркеров [EMP_N]
 Private mEmpReady As Boolean
 
+Private mAlias As Object          ' кэш псевдонимов ФИО -> «Сотрудник N» (ТЗ v1.2, T3.3)
+Private mAliasReady As Boolean
+
 Private mWeeks As Variant         ' отсортированные по возрастанию yearWeek из данных (FBase)
 Private mWeeksReady As Boolean
 Private mReportWeek As Long       ' отчётная неделя (REPORT/WEEK); -2 = не вычислена, 0 = нет данных
@@ -84,6 +98,12 @@ Private mBlock2Ready As Boolean
 
 Private mDumpJson As String       ' кэш JSON-дампа расшифровки (один раз на прогон, §3)
 Private mDumpReady As Boolean
+
+Private mSignData As Object       ' кэш статистики подписания: dir -> Dictionary (ТЗ v1.2, T6)
+Private mSignReady As Object      ' dir -> True
+
+Private mUnsigned As Object       ' кэш прохода по снимку для слайда 4 (ТЗ v1.2, T7)
+Private mUnsignedReady As Boolean
 
 ' =====================================================================================
 ' 0. Инфраструктура
@@ -116,6 +136,9 @@ Private Sub ResetContentCaches()
     mEmpReady = False
     If IsArray(mEmpList) Then Erase mEmpList
 
+    mAliasReady = False
+    Set mAlias = Nothing
+
     mWeeksReady = False
     If IsArray(mWeeks) Then Erase mWeeks
     mReportWeek = -2
@@ -129,6 +152,12 @@ Private Sub ResetContentCaches()
 
     mDumpReady = False
     mDumpJson = ""
+
+    Set mSignData = Nothing
+    Set mSignReady = Nothing
+
+    mUnsignedReady = False
+    Set mUnsigned = Nothing
 End Sub
 
 Private Sub EnsureSnapshot()
@@ -165,24 +194,36 @@ Public Function ValidateRequiredColumns() As Boolean
     ValidateRequiredColumns = True
 End Function
 
-' --- Наборы фильтров (Content Spec §5) ---
-' Базовый фильтр направления: in_bounds = ИСТИНА И arm из {ПК, ПЛАНШЕТ}.
-' (!) 24.08.2026: поле arm принимает не два, а ТРИ значения - "ПК", "ПЛАНШЕТ" и "НЕ ПОДПИСАНО"
-' (статус смены не подписан). Такие строки временно исключаются из всех блоков по решению
-' владельца процесса. Реализовано белым списком (arm@=ПК;ПЛАНШЕТ), а не отсечением пустых
-' значений ("arm<>"): "НЕ ПОДПИСАНО" - непустое значение и через прежний фильтр проходило,
-' завышая знаменатель "% планшет" и счётчики Блоков 2/9.
-' Если заказчик решит показывать неподписанные - менять только эти три функции.
+' --- Наборы фильтров (ТЗ v1.2, T3.2) ---
+' P0-1 (решение 09.09.2026): in_bounds не фильтруется - поле равно ЛОЖЬ во всех строках
+' выгрузки. Базовый фильтр FBase стал ПУСТЫМ; строка проходит любой фильтр, если не задан.
+' (!) arm принимает три значения: "ПК", "ПЛАНШЕТ" и "НЕ ПОДПИСАНО". Подписанные события
+' отбираются белым списком arm@=ПК;ПЛАНШЕТ (отсечение пустых "arm<>" пропускало
+' "НЕ ПОДПИСАНО" и завышало знаменатель «% планшет»).
+' FArm оставлен как синоним FSigned - старые функции блоков 1-9 ссылаются на него и
+' остаются компилируемыми (из BuildPlaceholders они больше не вызываются, постановка §8).
 Private Function FBase() As Variant
-    FBase = Array("in_bounds=True", "arm@=ПК;ПЛАНШЕТ")
+    FBase = Empty
+End Function
+
+Private Function FSigned() As Variant
+    FSigned = Array("arm@=ПК;ПЛАНШЕТ")
 End Function
 
 Private Function FArm() As Variant
-    FArm = FBase()
+    FArm = FSigned()
 End Function
 
 Private Function FTablet() As Variant
-    FTablet = Array("in_bounds=True", "arm=ПЛАНШЕТ")
+    FTablet = Array("arm=ПЛАНШЕТ")
+End Function
+
+Private Function FUnsigned() As Variant
+    FUnsigned = Array("arm=НЕ ПОДПИСАНО")
+End Function
+
+Private Function FDir(ByVal dir As String) As Variant
+    FDir = Array("arm@=ПК;ПЛАНШЕТ", "direction=" & dir)
 End Function
 
 ' Добавляет ещё один фильтр к набору (массивы-фильтры передаются в modAggregate).
@@ -272,11 +313,17 @@ Private Function Esc(s As Variant) As String
     Esc = modHTMLEngine.HtmlEscape(CStr(s))
 End Function
 
-' Ячейка «% планшет» с раскраской по палитре. drill - JSON-условие клик-расшифровки (п.10).
-Private Function PctCell(pct As Double, Optional drill As String) As String
+' Ячейка «% планшет» (ТЗ v1.2, T4.1): цвет шкалы уходит в РАМКУ числа, фон ячейки - фон темы.
+' hasValue=False -> <td class="pct empty">—</td> без рамки. Клик-расшифровка на процентах
+' снята вместе с data-drill (§2.7 постановки: расшифровка - вне этой итерации).
+Private Function PctCell(pct As Double, Optional hasValue As Boolean = True) As String
+    If Not hasValue Then
+        PctCell = "<td class='pct empty'>—</td>"
+        Exit Function
+    End If
     Dim color As String
     color = modColor.PercentToColor(pct, COLOR_BAD, COLOR_WARN, COLOR_GOOD)
-    PctCell = "<td class='pct'" & DrillAttr(drill) & " style='background:" & color & ";color:#fff;'>" & FormatPct(pct) & "</td>"
+    PctCell = "<td class='pct'><span style='border-color:" & color & "'>" & FmtPct(pct) & "</span></td>"
 End Function
 
 ' Числовая ячейка с клик-расшифровкой (п.10): визуально - обычный текст, data-drill для JS.
@@ -868,11 +915,11 @@ Private Function BuildBlock1Table(direction As String, zones As String) As Strin
             If DictVal(total, key) = 0 Then
                 html = html & "<td class='pct empty'>—</td>"
             Else
-                html = html & PctCell(SafePercent(tablet, total, key), J("direction", dirName) & "," & J("status_week", wkStr))
+                html = html & PctCell(SafePercent(tablet, total, key))
             End If
         Next wj
         If sumTot > 0 Then
-            html = html & PctCell(sumTab / sumTot, J("direction", dirName))
+            html = html & PctCell(sumTab / sumTot)
         Else
             html = html & "<td class='pct empty'>—</td>"
         End If
@@ -1029,9 +1076,9 @@ Private Function BuildBlock2Table() As String
         html = html & "<tr><td>" & Esc(postTitle) & "</td>" & _
             NumCell(CLng(recs), drillPost) & _
             NumCell(CLng(evs), drillPost) & _
-            PctCell(pctPost, drillPost) & _
-            PctCell(pctDGM, drillDGM) & _
-            PctCell(pctDENT, drillDENT) & _
+            PctCell(pctPost) & _
+            PctCell(pctDGM) & _
+            PctCell(pctDENT) & _
             "<td>" & Block2Grade(recs, pctPost, minPost, norma, proval, thresholdsValid) & "</td></tr>"
     Next i
 
@@ -1156,11 +1203,11 @@ Private Function BuildPctMatrixTable(rowCol As String, rowCaption As String) As 
             If DictVal(total, key) = 0 Then
                 html = html & "<td class='pct empty'>—</td>"
             Else
-                html = html & PctCell(SafePercent(tablet, total, key), J(rowCol, rowName) & "," & J("status_week", CStr(KeyPart(weeks(wj), 0))))
+                html = html & PctCell(SafePercent(tablet, total, key))
             End If
         Next wj
         If sumTot > 0 Then
-            html = html & PctCell(sumTab / sumTot, J(rowCol, rowName))
+            html = html & PctCell(sumTab / sumTot)
         Else
             html = html & "<td class='pct empty'>—</td>"
         End If
@@ -1312,7 +1359,7 @@ Private Function Block6WeeklyCore(direction As String, rowCol As String, rowCapt
             If DictVal(tot, key2) = 0 Then
                 html = html & "<td class='pct empty'>—</td>"
             Else
-                html = html & PctCell(SafePercent(tabObj, tot, key2), baseDrill)
+                html = html & PctCell(SafePercent(tabObj, tot, key2))
             End If
             html = html & NumCell(CLng(DictVal(tot, key2)), baseDrill)
             html = html & NumCell(CLng(DictVal(tabObj, key2)), baseDrill & "," & J("arm", "ПЛАНШЕТ"))
@@ -1401,7 +1448,7 @@ Private Function Block6RankedTable(topN As Long, descending As Boolean) As Strin
         drillEmp = J("employee", empName) & "," & J("status_week", CStr(rw))
 
         html = html & "<tr><td>" & Esc(empName) & "</td>" & _
-            PctCell(CDbl(pctDict(empKey)), drillEmp) & _
+            PctCell(CDbl(pctDict(empKey))) & _
             NumCell(totalCounts(empKey), drillEmp) & _
             "<td class='num'" & DrillAttr(drillEmp & "," & J("norm_status", "готов к выбытию")) & ">" & deltaVal & "</td></tr>"
         shown = shown + 1
@@ -1693,12 +1740,12 @@ Private Function BuildBlock9aTable() As String
         If DictVal(total, rowKey & "|ДГМ|") = 0 Then
             html = html & "<td class='pct empty'>—</td>"
         Else
-            html = html & PctCell(SafePercent(tablet, total, rowKey & "|ДГМ|"), drillBase & "," & J("direction", "ДГМ"))
+            html = html & PctCell(SafePercent(tablet, total, rowKey & "|ДГМ|"))
         End If
         If DictVal(total, rowKey & "|ДЭНТ|") = 0 Then
             html = html & "<td class='pct empty'>—</td>"
         Else
-            html = html & PctCell(SafePercent(tablet, total, rowKey & "|ДЭНТ|"), drillBase & "," & J("direction", "ДЭНТ"))
+            html = html & PctCell(SafePercent(tablet, total, rowKey & "|ДЭНТ|"))
         End If
         html = html & "</tr>"
     Next i
@@ -1736,26 +1783,34 @@ Private Function BuildDataDump() As String
     include(CStr(lw)) = True
     include(CStr(rw)) = True
 
+    ' (!) Построчная конкатенация s = s & ... на десятках тысяч строк дампа давала
+    ' O(N^2) копирований растущей строки: этап BuildPlaceholders занимал десятки минут
+    ' на 136k строк tbDATA. Двухпроходный сбор в массив строк + Join (паттерн RecentWeeksUpTo).
     Dim n As Long
     n = modAggregate.RowCount()
-    Dim s As String
-    s = "["
-    Dim first As Boolean
-    first = True
+    Dim cnt As Long
+    cnt = 0
     Dim r As Long
+    Dim yw As String
     For r = 1 To n
-        Dim yw As String
+        yw = modAggregate.CellText(r, "yearWeek")
+        If include.Exists(yw) Then cnt = cnt + 1
+    Next r
+
+    Dim parts() As String
+    ReDim parts(0 To cnt - 1)
+    Dim p As Long
+    p = 0
+    For r = 1 To n
         yw = modAggregate.CellText(r, "yearWeek")
         If include.Exists(yw) Then
-            If Not first Then s = s & ","
-            first = False
-            s = s & DumpRowJson(r)
+            parts(p) = DumpRowJson(r)
+            p = p + 1
         End If
     Next r
-    s = s & "]"
 
     ' «<» -> \u003c: внутри <script> последовательность «</...» не должна закрывать тег.
-    mDumpJson = Replace(s, "<", "\u003c")
+    mDumpJson = Replace("[" & Join(parts, ",") & "]", "<", "\u003c")
     mDumpReady = True
     BuildDataDump = mDumpJson
 End Function
@@ -1810,40 +1865,33 @@ End Function
 Public Function BuildPrompt() As String
     EnsureSnapshot
 
-    ' Системный промпт под 7 слайдов (spec.md §8.2, дословно).
+    ' Системный промпт под 4 слайда (ТЗ v1.2, T9.1).
     Const SYSTEM_PROMPT As String = _
-        "Ты ведущий аналитик данных. Проанализируй предоставленные агрегированные метрики " & _
-        "использования планшетов в МТО (доля планшетов по дирекциям, ремзонам и синхронность). " & _
-        "Сформируй краткие бизнес-выводы (до 4 предложений на каждый) для 7-ми слайдов. Ищи аномалии. " & _
+        "Ты ведущий аналитик данных. Проанализируй агрегированные метрики использования планшетов " & _
+        "в МТО (обзор, дирекции ДЭНТ и ДГМ, неподписанные события). Сформируй краткие бизнес-выводы " & _
+        "(до 4 предложений) для каждого из 4 слайдов. Ищи аномалии, в том числе по сотрудникам. " & _
         "Не используй данные, которых нет во входном JSON. ФИО сотрудников во входных данных заменены " & _
-        "маркерами вида [EMP_12] - не изменяй и не склоняй маркеры, в выводах ссылайся на сотрудников " & _
-        "только ими. Ответ строго в формате JSON с ключами slide1_conclusions … slide7_conclusions, " & _
-        "без markdown-разметки вокруг JSON."
+        "псевдонимами вида «Сотрудник 7» - не изменяй и не склоняй псевдонимы, ссылайся на сотрудников " & _
+        "только ими. Ответ строго в формате JSON с ключами slide1_conclusions, slide2_conclusions, " & _
+        "slide3_conclusions, slide4_conclusions, без markdown-разметки вокруг JSON."
 
-    ' Блоки собираются в отдельные переменные (порядок вычислений прежний) -
-    ' при DEBUG=2 их длины идут в лог для поиска раздутых частей промпта.
-    Dim block4 As String, block5 As String, block7 As String
-    Dim block8 As String, block9 As String, block6 As String
-    block4 = PctMatrixToJson("direction")
-    block5 = PctMatrixToJson("postN")
-    block7 = SyncToJson(False)
-    block8 = SyncToJson(True)
-    block9 = Block9ToJson()
-    block6 = Block6PeopleToJson()
+    ' Блоки собираются отдельно - при DEBUG=2 их длины идут в лог.
+    Dim slide1 As String, slide2 As String, slide3 As String, slide4 As String
+    slide1 = OverviewToJson()
+    slide2 = DirToJson("ДЭНТ")
+    slide3 = DirToJson("ДГМ")
+    slide4 = UnsignedToJson()
 
     Dim userMessage As String
-    userMessage = "{""block4_percent_by_direction"":" & block4 & _
-                  ",""block5_percent_by_post"":" & block5 & _
-                  ",""block7_sync_by_week"":" & block7 & _
-                  ",""block8_sync_by_week_post"":" & block8 & _
-                  ",""block9_defect_types"":" & block9 & _
-                  ",""block6_people"":" & block6 & "}"
+    userMessage = "{""slide1_overview"":" & slide1 & _
+                  ",""slide2_dent"":" & slide2 & _
+                  ",""slide3_dgm"":" & slide3 & _
+                  ",""slide4_unsigned"":" & slide4 & "}"
 
     Dim model As String
     model = modMain.GetVariable("AI/MODEL")
 
-    ' response_format/temperature - контентные настройки запроса: просим провайдера
-    ' гарантировать JSON-объект и снижаем вариативность формулировок.
+    ' response_format/temperature - контентные настройки запроса.
     BuildPrompt = "{""model"":""" & JsonEscape(model) & """," & _
         """temperature"":0.2," & _
         """response_format"":{""type"":""json_object""}," & _
@@ -1855,9 +1903,360 @@ Public Function BuildPrompt() As String
         "Модель: " & model & "; userMessage=" & Len(userMessage) & _
         " символов; весь запрос=" & Len(BuildPrompt)
     modLog.WriteDebug 2, "Формирование отчёта", "BuildPrompt", _
-        "Блоки: block4=" & Len(block4) & "; block5=" & Len(block5) & _
-        "; block7=" & Len(block7) & "; block8=" & Len(block8) & _
-        "; block9=" & Len(block9) & "; block6=" & Len(block6)
+        "Блоки: slide1=" & Len(slide1) & "; slide2=" & Len(slide2) & _
+        "; slide3=" & Len(slide3) & "; slide4=" & Len(slide4)
+End Function
+
+' Целое число для JSON без локали.
+Private Function JInt(v As Double) As String
+    JInt = CStr(CLng(v))
+End Function
+
+' Слайд 1 в промпт: kpi + корзины времени + zn_type + defekt_type + «без поста» по неделям.
+Private Function OverviewToJson() As String
+    EnsureSnapshot
+    Dim rw As Long
+    rw = ReportWeekValue()
+    Dim rwS As String
+    rwS = CStr(rw)
+
+    Dim opened As Double, closedN As Double
+    opened = DictVal(modAggregate.GroupCountDistinct(Array("dateWeek"), "number", FBase()), rwS & "|")
+    closedN = DictVal(modAggregate.GroupCountDistinct(Array("yearWeek"), "number", _
+        Array("ready_for=Готов к выбытию")), rwS & "|")
+
+    Dim hasMed As Boolean
+    Dim med As Double
+    med = modAggregate.Percentile("deltaHours", 0.5, Array("yearWeek=" & rwS, "ready_for=Готов к выбытию"), hasMed)
+
+    Dim armW As Object
+    Set armW = modAggregate.GroupCount(Array("arm"), Array("yearWeek=" & rwS))
+    Dim tabEv As Double, pcEv As Double
+    tabEv = DictVal(armW, "ПЛАНШЕТ|")
+    pcEv = DictVal(armW, "ПК|")
+
+    Dim allD As Object, armD As Object
+    Set allD = modAggregate.GroupCount(Array("dateWeek"), FBase())
+    Set armD = modAggregate.GroupCount(Array("arm"), Array("dateWeek=" & rwS))
+    Dim allEv As Double, unsEv As Double
+    allEv = DictVal(allD, rwS & "|")
+    unsEv = DictVal(armD, "НЕ ПОДПИСАНО|")
+
+    Dim kpi As String
+    kpi = "{""opened"":" & JInt(opened) & ",""closed"":" & JInt(closedN) & "," & _
+        """median_hours"":" & IIf(hasMed, FmtJson(med), "null") & "," & _
+        """tablet_pct"":" & FmtJson(SafePctTwo(tabEv + pcEv, tabEv)) & "," & _
+        """unsigned"":" & JInt(unsEv) & "," & _
+        """unsigned_pct"":" & FmtJson(SafePctTwo(allEv, unsEv)) & "}"
+
+    ' Корзины времени - те же границы, что BuildTimeHistogram (1/4/8/24/72 ч), обрезка p99.
+    Dim buckets As String
+    buckets = TimeBucketsToJson()
+
+    Dim zn As Object, defk As Object
+    Set zn = modAggregate.GroupCountDistinct(Array("zn_type"), "number", FBase())
+    Set defk = modAggregate.GroupCountDistinct(Array("defekt_type"), "number", FBase())
+    Dim sZn As String, sDef As String, first As Boolean, k As Variant
+    sZn = "[": sDef = "["
+    first = True
+    For Each k In zn.Keys
+        If Not first Then sZn = sZn & ","
+        first = False
+        Dim zt As String
+        zt = KeyPart(k, 0)
+        If zt = "" Then zt = "(не указан)"
+        sZn = sZn & "{""zn_type"":""" & JsonEscape(zt) & """,""orders"":" & JInt(CDbl(zn(k))) & "}"
+    Next k
+    first = True
+    For Each k In defk.Keys
+        If Not first Then sDef = sDef & ","
+        first = False
+        Dim dt As String
+        dt = KeyPart(k, 0)
+        If dt = "" Then dt = "(раздел не указан)"
+        sDef = sDef & "{""defekt_type"":""" & JsonEscape(dt) & """,""orders"":" & JInt(CDbl(defk(k))) & "}"
+    Next k
+    sZn = sZn & "]": sDef = sDef & "]"
+
+    ' «Без поста» по неделям окна.
+    Dim windowSize As Long
+    windowSize = CLng(modMain.GetVariableDef("REPORT/WEEKS_WINDOW", "8"))
+    Dim weeks As Variant, cnt As Long
+    weeks = RecentWeeksUpTo(windowSize, cnt)
+    Dim totW As Object, npW As Object
+    Set totW = modAggregate.GroupCountDistinct(Array("yearWeek"), "number", FSigned())
+    Set npW = modAggregate.GroupCountDistinct(Array("yearWeek"), "number", AppendFilter(FSigned(), "postN="))
+    Dim sNp As String, i As Long
+    sNp = "["
+    first = True
+    If cnt > 0 Then
+        For i = cnt To 1 Step -1
+            Dim wkStr As String
+            wkStr = CStr(KeyPart(weeks(i), 0))
+            If Not first Then sNp = sNp & ","
+            first = False
+            sNp = sNp & "{""week"":""" & JsonEscape(WeekLabel(KeyPart(weeks(i), 0))) & """," & _
+                """orders"":" & JInt(DictVal(totW, wkStr & "|")) & "," & _
+                """nopost_pct"":" & FmtJson(SafePercent(npW, totW, wkStr & "|")) & "}"
+        Next i
+    End If
+    sNp = sNp & "]"
+
+    OverviewToJson = "{""kpi"":" & kpi & ",""time_buckets"":" & buckets & _
+        ",""zn_types"":" & sZn & ",""defekt_sections"":" & sDef & ",""nopost_weekly"":" & sNp & "}"
+End Function
+
+' Корзины времени в ремзоне для промпта (границы совпадают с BuildTimeHistogram).
+Private Function TimeBucketsToJson() As String
+    EnsureSnapshot
+    Dim has As Boolean
+    Dim p99 As Double
+    p99 = modAggregate.Percentile("deltaHours", 0.99, Empty, has)
+    If Not has Then TimeBucketsToJson = "[]": Exit Function
+
+    Dim vals(1 To 6) As Double, i As Long
+    For i = 1 To 6: vals(i) = 0: Next i
+    Dim n As Long, r As Long
+    n = modAggregate.RowCount()
+    For r = 1 To n
+        Dim v As Variant
+        v = modAggregate.CellRaw(r, "deltaHours")
+        If IsNumeric(v) Then
+            If CDbl(v) > p99 Then
+            ElseIf CDbl(v) < 1 Then vals(1) = vals(1) + 1
+            ElseIf CDbl(v) < 4 Then vals(2) = vals(2) + 1
+            ElseIf CDbl(v) < 8 Then vals(3) = vals(3) + 1
+            ElseIf CDbl(v) < 24 Then vals(4) = vals(4) + 1
+            ElseIf CDbl(v) < 72 Then vals(5) = vals(5) + 1
+            Else vals(6) = vals(6) + 1
+            End If
+        End If
+    Next r
+
+    Dim names() As String
+    ReDim names(1 To 6)
+    names(1) = "< 1 ч": names(2) = "1–4 ч": names(3) = "4–8 ч"
+    names(4) = "8–24 ч": names(5) = "1–3 сут": names(6) = "> 3 сут"
+    Dim s As String
+    s = "["
+    For i = 1 To 6
+        If i > 1 Then s = s & ","
+        s = s & "{""bucket"":""" & JsonEscape(names(i)) & """,""pairs"":" & JInt(vals(i)) & "}"
+    Next i
+    TimeBucketsToJson = s & "]"
+End Function
+
+' Слайды 2-3 в промпт: недели, посты, люди (только псевдонимы), статистика подписания.
+Private Function DirToJson(dir As String) As String
+    EnsureSnapshot
+    Dim f As Variant
+    f = FDir(dir)
+
+    Dim windowSize As Long
+    windowSize = CLng(modMain.GetVariableDef("REPORT/WEEKS_WINDOW", "8"))
+    Dim weeks As Variant, cnt As Long
+    weeks = RecentWeeksUpTo(windowSize, cnt)
+
+    Dim totalW As Object, tabW As Object
+    Set totalW = modAggregate.GroupCount(Array("yearWeek"), f)
+    Set tabW = modAggregate.GroupCount(Array("yearWeek"), AppendFilter(FTablet(), "direction=" & dir))
+    Dim sW As String, i As Long, first As Boolean
+    sW = "["
+    first = True
+    If cnt > 0 Then
+        For i = cnt To 1 Step -1
+            Dim wkStr As String
+            wkStr = CStr(KeyPart(weeks(i), 0))
+            If Not first Then sW = sW & ","
+            first = False
+            Dim totV As Double, tabV As Double
+            totV = DictVal(totalW, wkStr & "|")
+            tabV = DictVal(tabW, wkStr & "|")
+            sW = sW & "{""week"":""" & JsonEscape(WeekLabel(KeyPart(weeks(i), 0))) & """," & _
+                """events"":" & JInt(totV) & ",""tablet"":" & JInt(tabV) & "," & _
+                """pct"":" & FmtJson(SafePctTwo(totV, tabV)) & "}"
+        Next i
+    End If
+    sW = sW & "]"
+
+    ' Посты за отчётную неделю (единица счёта - наряд).
+    Dim rw As Long
+    rw = ReportWeekValue()
+    Dim fw As Variant
+    fw = AppendFilter(f, "yearWeek=" & CStr(rw))
+    Dim rec As Object, tabRec As Object
+    Set rec = modAggregate.GroupCountDistinct(Array("postN"), "number", fw)
+    Set tabRec = modAggregate.GroupCountDistinct(Array("postN"), "number", _
+        AppendFilter(AppendFilter(FTablet(), "direction=" & dir), "yearWeek=" & CStr(rw)))
+    Dim sP As String, k As Variant
+    sP = "["
+    first = True
+    For Each k In rec.Keys
+        If Not first Then sP = sP & ","
+        first = False
+        Dim pn As String
+        pn = KeyPart(k, 0)
+        If pn = "" Then pn = "(пост не указан)"
+        sP = sP & "{""post"":""" & JsonEscape(pn) & """,""records"":" & JInt(CDbl(rec(k))) & "," & _
+            """pct"":" & FmtJson(SafePercent(tabRec, rec, CStr(k))) & "}"
+    Next k
+    sP = sP & "]"
+
+    ' Люди: только псевдонимы «Сотрудник N», понедельные агрегаты за ПН-3..ПН.
+    Dim pw As Variant, pc As Long
+    pw = RecentWeeksUpTo(4, pc)
+    Dim totP As Object, tabP As Object
+    Set totP = modAggregate.GroupCountDistinct(Array("employee", "yearWeek"), "Key", f)
+    Set tabP = modAggregate.GroupCountDistinct(Array("employee", "yearWeek"), "Key", _
+        AppendFilter(f, "arm=ПЛАНШЕТ"))
+    Dim empSet As Object
+    Set empSet = CreateObject("Scripting.Dictionary")
+    For Each k In totP.Keys
+        Dim wi As Long
+        For wi = 1 To pc
+            If KeyPart(k, 1) = CStr(KeyPart(pw(wi), 0)) Then
+                empSet(KeyPart(k, 0)) = True
+                Exit For
+            End If
+        Next wi
+    Next k
+    Dim sPe As String, e As Variant
+    sPe = "["
+    first = True
+    For Each e In empSet.Keys
+        If Not first Then sPe = sPe & ","
+        first = False
+        sPe = sPe & "{""alias"":""" & JsonEscape(AliasOf(CStr(e))) & """,""weeks"":["
+        Dim wj As Long, firstW As Boolean
+        firstW = True
+        For wj = pc To 1 Step -1
+            Dim keyP As String
+            keyP = CStr(e) & "|" & CStr(KeyPart(pw(wj), 0)) & "|"
+            If Not firstW Then sPe = sPe & ","
+            firstW = False
+            Dim totE As Double, tabE As Double
+            totE = DictVal(totP, keyP)
+            tabE = DictVal(tabP, keyP)
+            sPe = sPe & "{""week"":""" & JsonEscape(WeekLabel(KeyPart(pw(wj), 0))) & """," & _
+                """pct"":" & FmtJson(SafePctTwo(totE, tabE)) & ",""signs"":" & JInt(totE) & "," & _
+                """tablet"":" & JInt(tabE) & "}"
+        Next wj
+        sPe = sPe & "]}"
+    Next e
+    sPe = sPe & "]"
+
+    ' Статистика подписания.
+    EnsureSignData dir
+    Dim sd As Object
+    Set sd = mSignData(dir)
+    Dim both As Double, accOnly As Double, leaOnly As Double, none As Double
+    both = 0: accOnly = 0: leaOnly = 0: none = 0
+    For Each k In sd("all").Keys
+        Dim hA As Boolean, hL As Boolean
+        hA = sd("acc").Exists(k)
+        hL = sd("lea").Exists(k)
+        If hA And hL Then
+            both = both + 1
+        ElseIf hA Then
+            accOnly = accOnly + 1
+        ElseIf hL Then
+            leaOnly = leaOnly + 1
+        Else
+            none = none + 1
+        End If
+    Next k
+    Dim sS As String
+    sS = "{""total"":" & JInt(CDbl(sd("all").Count)) & ",""both"":" & JInt(both) & _
+        ",""accept_only"":" & JInt(accOnly) & ",""leave_only"":" & JInt(leaOnly) & _
+        ",""none"":" & JInt(none) & "}"
+
+    DirToJson = "{""weeks"":" & sW & ",""posts"":" & sP & ",""people"":" & sPe & ",""sign_stat"":" & sS & "}"
+End Function
+
+' Слайд 4 в промпт: KPI, старение, вид ремонта неподписанных.
+Private Function UnsignedToJson() As String
+    EnsureUnsignedData
+    Dim d As Object
+    Set d = mUnsigned
+
+    Dim none As Double, part As Double, older As Double
+    none = 0: part = 0: older = 0
+    Dim k As Variant
+    For Each k In d("all").Keys
+        Dim s As Double, rows As Double
+        s = DictVal(d("signed"), CStr(k))
+        rows = DictVal(d("rows"), CStr(k))
+        If s = 0 Then
+            none = none + 1
+            If d("dates").Exists(k) Then
+                If CDbl(d("maxDate")) - CDbl(d("dates")(k)) > 14 Then older = older + 1
+            End If
+        ElseIf rows - s >= 1 Then
+            part = part + 1
+        End If
+    Next k
+
+    ' Старение по корзинам.
+    Dim labels() As String, agesN() As Double, agesP() As Double
+    ReDim labels(1 To 5): ReDim agesN(1 To 5): ReDim agesP(1 To 5)
+    labels(1) = "0–7 дней": labels(2) = "8–14": labels(3) = "15–30": labels(4) = "31–90": labels(5) = "> 90"
+    Dim i As Long
+    For i = 1 To 5: agesN(i) = 0: agesP(i) = 0: Next i
+    For Each k In d("all").Keys
+        Dim age As Double
+        age = 0
+        If d("dates").Exists(k) Then age = CDbl(d("maxDate")) - CDbl(d("dates")(k))
+        Dim bi As Long
+        If age <= 7 Then
+            bi = 1
+        ElseIf age <= 14 Then
+            bi = 2
+        ElseIf age <= 30 Then
+            bi = 3
+        ElseIf age <= 90 Then
+            bi = 4
+        Else
+            bi = 5
+        End If
+        s = DictVal(d("signed"), CStr(k))
+        rows = DictVal(d("rows"), CStr(k))
+        If s = 0 Then agesN(bi) = agesN(bi) + 1
+        If rows - s >= 1 And s >= 1 Then agesP(bi) = agesP(bi) + 1
+    Next k
+    Dim sA As String
+    sA = "["
+    For i = 1 To 5
+        If i > 1 Then sA = sA & ","
+        sA = sA & "{""bucket"":""" & JsonEscape(labels(i)) & """,""none"":" & JInt(agesN(i)) & ",""part"":" & JInt(agesP(i)) & "}"
+    Next i
+    sA = sA & "]"
+
+    ' Вид ремонта неподписанных.
+    Dim cnt As Object
+    Set cnt = CreateObject("Scripting.Dictionary")
+    For Each k In d("all").Keys
+        If DictVal(d("signed"), CStr(k)) = 0 Then
+            Dim zt As String
+            zt = ""
+            If d("zn").Exists(k) Then zt = CStr(d("zn")(k))
+            If zt = "" Then zt = "(не указан)"
+            If cnt.Exists(zt) Then cnt(zt) = CDbl(cnt(zt)) + 1 Else cnt(zt) = 1
+        End If
+    Next k
+    Dim sZ As String, first As Boolean
+    sZ = "["
+    first = True
+    For Each k In cnt.Keys
+        If Not first Then sZ = sZ & ","
+        first = False
+        sZ = sZ & "{""zn_type"":""" & JsonEscape(CStr(k)) & """,""orders"":" & JInt(CDbl(cnt(k))) & "}"
+    Next k
+    sZ = sZ & "]"
+
+    Dim kpi As String
+    kpi = "{""none"":" & JInt(none) & ",""part"":" & JInt(part) & "," & _
+        """events_unsigned"":" & JInt(CDbl(d("unsEvents"))) & ",""older_14d"":" & JInt(older) & "}"
+    UnsignedToJson = "{""kpi"":" & kpi & ",""aging"":" & sA & ",""by_zn_type"":" & sZ & "}"
 End Function
 
 ' Матрица «строка x неделя» с долей планшета -> JSON-массив записей.
@@ -2011,9 +2410,1383 @@ Private Function EmpList() As Variant
 End Function
 
 ' =====================================================================================
+' Псевдонимы сотрудников (ТЗ v1.2, T3.3): ФИО <-> «Сотрудник N». Нумерация стабильная -
+' сортировка ФИО по возрастанию (EmpList), N с 1. Кэш сбрасывается в ResetContentCaches
+' вместе с остальными кэшами прогона.
+' =====================================================================================
+Private Sub BuildEmployeeAliases()
+    If mAliasReady Then Exit Sub
+
+    Set mAlias = CreateObject("Scripting.Dictionary")
+    Dim emps As Variant
+    emps = EmpList()
+    Dim i As Long
+    For i = LBound(emps) To UBound(emps)
+        mAlias(CStr(emps(i))) = "Сотрудник " & CStr(i - LBound(emps) + 1)
+    Next i
+    mAliasReady = True
+End Sub
+
+Private Function AliasOf(ByVal employee As String) As String
+    BuildEmployeeAliases
+    If mAlias.Exists(employee) Then AliasOf = CStr(mAlias(employee)) Else AliasOf = employee
+End Function
+
+' Обратная замена «Сотрудник N» -> ФИО в тексте ИИ-выводов, по УБЫВАНИЮ N:
+' иначе «Сотрудник 1» зацепит начало «Сотрудник 12» и оставит «ФИО2».
+Private Function DeAlias(ByVal text As String) As String
+    If Not mAliasReady Then DeAlias = text: Exit Function
+
+    Dim emps As Variant
+    emps = EmpList()
+    Dim i As Long
+    For i = UBound(emps) To LBound(emps) Step -1
+        text = Replace(text, CStr(mAlias(CStr(emps(i)))), CStr(emps(i)))
+    Next i
+    DeAlias = text
+End Function
+
+' =====================================================================================
+' Рендер-примитивы четырёх слайдов (ТЗ v1.2, T4). Все возвращают готовую HTML-строку.
+' Всё, что пришло из 1С, проходит Esc (HtmlEscape) ДО склейки. Цвета SVG - ТОЛЬКО через
+' CSS-переменные var(--...): хардкод hex ломает переключение тёмной/светлой темы.
+' viewBox задан, width/height не фиксируются - масштабирование через CSS шаблона.
+' role="img" + aria-label обязательны; пустой набор значений -> EmptyNote().
+' =====================================================================================
+' Число элементов массива (любые границы); не массив / нераспределённый -> 0.
+Private Function ArrLen(a As Variant) As Long
+    ArrLen = 0
+    If Not IsArray(a) Then Exit Function
+    On Error Resume Next
+    ArrLen = UBound(a) - LBound(a) + 1
+    If Err.Number <> 0 Then Err.Clear: ArrLen = 0
+    On Error GoTo 0
+End Function
+
+Private Function EmptyNote() As String
+    EmptyNote = "<div class='empty-note'>Нет данных</div>"
+End Function
+
+' Число для SVG-атрибута: десятичная ТОЧКА независимо от локали машины.
+Private Function FmtN(v As Double) As String
+    FmtN = Replace$(Format(v, "0.##"), ",", ".")
+End Function
+
+' 1158 -> «1 158» (неразрывный пробел U+00A0), независимо от локали.
+Private Function FmtInt(v As Double) As String
+    Dim s As String
+    s = CStr(CLng(Abs(v)))
+    Dim out As String, i As Long, grp As Long
+    out = ""
+    grp = 0
+    For i = Len(s) To 1 Step -1
+        out = Mid$(s, i, 1) & out
+        grp = grp + 1
+        If grp Mod 3 = 0 And i > 1 Then out = ChrW$(&HA0) & out
+    Next i
+    If v < 0 Then out = "−" & out
+    FmtInt = out
+End Function
+
+' 0.723 -> «72,3» (десятичная запятая независимо от локали; без знака %).
+Private Function FmtPct(v As Double) As String
+    FmtPct = Replace$(Format(v * 100, "0.0"), ".", ",")
+End Function
+
+' Вертикальные столбики с подписью значения над столбцом (гистограмма времени в ремзоне).
+Private Function SvgBarsV(labels As Variant, values As Variant, caption As String) As String
+    If ArrLen(labels) = 0 Or ArrLen(values) = 0 Then SvgBarsV = EmptyNote(): Exit Function
+
+    Dim lb As Long: lb = LBound(labels)
+    Dim n As Long: n = ArrLen(labels)
+    Dim mx As Double, i As Long
+    mx = 0
+    For i = lb To lb + n - 1
+        If CDbl(values(i)) > mx Then mx = CDbl(values(i))
+    Next i
+
+    Dim w As Long, h As Long, baseY As Long, plotH As Long
+    w = 70 + n * 64
+    h = 290
+    baseY = 240
+    plotH = 190
+
+    Dim svg As String
+    svg = "<svg viewBox='0 0 " & w & " " & h & "' role='img' aria-label='" & Esc(caption) & "'>"
+    For i = lb To lb + n - 1
+        Dim bh As Double, bw As Long, x As Long, y As Double
+        bw = 40
+        x = 50 + (i - lb) * 64
+        bh = 0
+        If mx > 0 Then bh = CDbl(values(i)) / mx * plotH
+        y = baseY - bh
+        svg = svg & "<rect x='" & x & "' y='" & FmtN(y) & "' width='" & bw & "' height='" & FmtN(bh) & "' rx='3' fill='var(--s1)'/>"
+        If CDbl(values(i)) > 0 Then
+            svg = svg & "<text x='" & (x + bw \ 2) & "' y='" & FmtN(y - 6) & "' text-anchor='middle' font-size='11' fill='var(--ink)'>" & FmtInt(CDbl(values(i))) & "</text>"
+        End If
+        svg = svg & "<text x='" & (x + bw \ 2) & "' y='" & (baseY + 18) & "' text-anchor='middle' font-size='10' fill='var(--muted)'>" & Esc(CStr(labels(i))) & "</text>"
+    Next i
+    svg = svg & "<line x1='40' y1='" & baseY & "' x2='" & (w - 24) & "' y2='" & baseY & "' stroke='var(--line-strong)' stroke-width='1'/>"
+    SvgBarsV = svg & "</svg>"
+End Function
+
+' Горизонтальные бары, две серии: totals - основная (var(--s1)), parts - «из них» (var(--s2)).
+' highlightIdx - индекс строки labels (LBound-based), которую красить критическим цветом;
+' -1 = нет подсветки.
+Private Function SvgBarsH(labels As Variant, totals As Variant, parts As Variant, highlightIdx As Long) As String
+    If ArrLen(labels) = 0 Then SvgBarsH = EmptyNote(): Exit Function
+
+    Dim lb As Long: lb = LBound(labels)
+    Dim n As Long: n = ArrLen(labels)
+    Dim mx As Double, i As Long
+    mx = 0
+    For i = lb To lb + n - 1
+        If CDbl(totals(i)) > mx Then mx = CDbl(totals(i))
+    Next i
+    If mx <= 0 Then SvgBarsH = EmptyNote(): Exit Function
+
+    Dim rowH As Long: rowH = 32
+    Dim w As Long: w = 700
+    Dim h As Long: h = n * rowH + 20
+    Dim labelW As Long: labelW = 180
+    Dim barMaxW As Long: barMaxW = (w - labelW - 150) \ 2
+
+    Dim svg As String
+    svg = "<svg viewBox='0 0 " & w & " " & h & "' role='img' aria-label='горизонтальные бары'>"
+    For i = lb To lb + n - 1
+        Dim y0 As Long: y0 = 6 + (i - lb) * rowH
+        Dim fillTxt As String, fillBar As String, fillPart As String
+        fillTxt = "var(--ink)"
+        fillBar = "var(--s1)"
+        fillPart = "var(--s2)"
+        If i = highlightIdx Then fillTxt = "var(--crit)": fillBar = "var(--crit)"
+        Dim bwT As Double, bwP As Double
+        bwT = CDbl(totals(i)) / mx * barMaxW
+        bwP = CDbl(parts(i)) / mx * barMaxW
+        svg = svg & "<text x='" & (labelW - 10) & "' y='" & (y0 + 13) & "' text-anchor='end' font-size='11' fill='" & fillTxt & "'>" & Esc(CStr(labels(i))) & "</text>"
+        svg = svg & "<rect x='" & labelW & "' y='" & y0 & "' width='" & FmtN(bwT) & "' height='12' fill='" & fillBar & "'/>"
+        svg = svg & "<rect x='" & labelW & "' y='" & (y0 + 15) & "' width='" & FmtN(bwP) & "' height='12' fill='" & fillPart & "'/>"
+        svg = svg & "<text x='" & FmtN(labelW + bwT + 6) & "' y='" & (y0 + 11) & "' font-size='10' fill='var(--ink-2)'>" & FmtInt(CDbl(totals(i))) & "</text>"
+        svg = svg & "<text x='" & FmtN(labelW + bwP + 6) & "' y='" & (y0 + 26) & "' font-size='10' fill='var(--ink-2)'>" & FmtInt(CDbl(parts(i))) & "</text>"
+    Next i
+    SvgBarsH = svg & "</svg>"
+End Function
+
+' Столбики объёма (var(--s1)) + линия доли 0..1 на второй оси (var(--s2)) с точками.
+' Для «без поста по неделям»: bars - нарядов за неделю, linePct - доля без поста.
+Private Function SvgBarsLine(labels As Variant, bars As Variant, linePct As Variant) As String
+    If ArrLen(labels) = 0 Then SvgBarsLine = EmptyNote(): Exit Function
+
+    Dim lb As Long: lb = LBound(labels)
+    Dim n As Long: n = ArrLen(labels)
+    Dim mx As Double, i As Long
+    mx = 0
+    For i = lb To lb + n - 1
+        If CDbl(bars(i)) > mx Then mx = CDbl(bars(i))
+    Next i
+    If mx <= 0 Then SvgBarsLine = EmptyNote(): Exit Function
+
+    Dim w As Long, h As Long, baseY As Long, plotH As Long
+    w = 70 + n * 56
+    h = 300
+    baseY = 250
+    plotH = 200
+
+    Dim svg As String
+    svg = "<svg viewBox='0 0 " & w & " " & h & "' role='img' aria-label='объём и доля без поста по неделям'>"
+    svg = svg & "<text x='" & (w - 8) & "' y='" & (baseY - plotH + 4) & "' text-anchor='end' font-size='9' fill='var(--muted)'>100%</text>"
+    svg = svg & "<text x='" & (w - 8) & "' y='" & (baseY + 4) & "' text-anchor='end' font-size='9' fill='var(--muted)'>0%</text>"
+
+    Dim poly As String
+    poly = ""
+    For i = lb To lb + n - 1
+        Dim x As Long, bw As Long, bh As Double, y As Double
+        bw = 28
+        x = 34 + (i - lb) * 56
+        bh = CDbl(bars(i)) / mx * plotH
+        y = baseY - bh
+        svg = svg & "<rect x='" & x & "' y='" & FmtN(y) & "' width='" & bw & "' height='" & FmtN(bh) & "' fill='var(--s1)' opacity='0.85'/>"
+        svg = svg & "<text x='" & (x + bw \ 2) & "' y='" & (baseY + 18) & "' text-anchor='middle' font-size='10' fill='var(--muted)'>" & Esc(CStr(labels(i))) & "</text>"
+        Dim py As Double
+        py = baseY - CDbl(linePct(i)) * plotH
+        If poly = "" Then poly = FmtN(x + bw \ 2) & "," & FmtN(py) Else poly = poly & " " & FmtN(x + bw \ 2) & "," & FmtN(py)
+        svg = svg & "<circle cx='" & (x + bw \ 2) & "' cy='" & FmtN(py) & "' r='3' fill='var(--s2)'/>"
+    Next i
+    svg = svg & "<polyline points='" & poly & "' fill='none' stroke='var(--s2)' stroke-width='2'/>"
+    svg = svg & "<line x1='28' y1='" & baseY & "' x2='" & (w - 20) & "' y2='" & baseY & "' stroke='var(--line-strong)' stroke-width='1'/>"
+    SvgBarsLine = svg & "</svg>"
+End Function
+
+' Спарклайн для плитки KPI (значения масштабируются по min..max). Пустой набор -> "".
+Private Function SvgSpark(values As Variant, colorVar As String) As String
+    If ArrLen(values) = 0 Then SvgSpark = "": Exit Function
+
+    Dim lb As Long: lb = LBound(values)
+    Dim n As Long: n = ArrLen(values)
+    Dim mn As Double, mx As Double, i As Long, v As Double
+    mn = CDbl(values(lb)): mx = CDbl(values(lb))
+    For i = lb + 1 To lb + n - 1
+        v = CDbl(values(i))
+        If v < mn Then mn = v
+        If v > mx Then mx = v
+    Next i
+
+    Dim W As Long: W = 100
+    Dim H As Long: H = 28
+    Dim poly As String
+    poly = ""
+    Dim range As Double
+    range = mx - mn
+    For i = lb To lb + n - 1
+        Dim px As Double, py As Double
+        If n > 1 Then px = 2 + (i - lb) * (W - 4) / (n - 1) Else px = W \ 2
+        If range <= 0 Then py = H \ 2 Else py = H - 3 - (CDbl(values(i)) - mn) / range * (H - 6)
+        If poly = "" Then poly = FmtN(px) & "," & FmtN(py) Else poly = poly & " " & FmtN(px) & "," & FmtN(py)
+    Next i
+    SvgSpark = "<svg class='spark' viewBox='0 0 " & W & " " & H & "' role='img' aria-label='тренд'>" & _
+        "<polyline points='" & poly & "' fill='none' stroke='var(--" & colorVar & ")' stroke-width='2'/></svg>"
+End Function
+
+' Одна плитка KPI: подпись, значение, единица (small), дельта, спарклайн.
+' deltaKind: "up" | "dn" | "flat" -> класс .delta.up/.dn/.flat.
+Private Function KpiTile(label As String, value As String, unit As String, _
+                         deltaText As String, deltaKind As String, spark As String) As String
+    Dim html As String
+    html = "<div class='kpi'><div class='lab'>" & Esc(label) & "</div>"
+    html = html & "<div class='val num'>" & value
+    If unit <> "" Then html = html & " <small>" & Esc(unit) & "</small>"
+    html = html & "</div><div class='row'>"
+    If deltaText <> "" Then
+        html = html & "<span class='delta " & deltaKind & "'>" & Esc(deltaText) & "</span>"
+    End If
+    If spark <> "" Then html = html & spark
+    html = html & "</div></div>"
+    KpiTile = html
+End Function
+
+' =====================================================================================
+' Блоки слайда 1 (ТЗ v1.2, T5). Единица счёта - заказ-наряд.
+' =====================================================================================
+' Подпись «как считается» под блоком (T8.2: .calc-note обязательна под каждым блоком).
+Private Function CalcNote(text As String) As String
+    CalcNote = "<p class='calc-note'>" & Esc(text) & "</p>"
+End Function
+
+' Число с десятичной запятой для HTML, независимо от локали.
+Private Function FmtD(v As Double, fmt As String) As String
+    FmtD = Replace$(Format(v, fmt), ".", ",")
+End Function
+
+' Среднее по столбцу снимка без фильтра (для чипов времени в ремзоне).
+Private Function AvgSimple(valueCol As String, ByRef hasValue As Boolean) As Double
+    AvgSimple = 0
+    hasValue = False
+    EnsureSnapshot
+    Dim n As Long
+    n = modAggregate.RowCount()
+    Dim sum As Double, cnt As Long, r As Long
+    sum = 0: cnt = 0
+    For r = 1 To n
+        Dim v As Variant
+        v = modAggregate.CellRaw(r, valueCol)
+        If IsNumeric(v) Then
+            sum = sum + CDbl(v)
+            cnt = cnt + 1
+        End If
+    Next r
+    If cnt = 0 Then Exit Function
+    hasValue = True
+    AvgSimple = sum / cnt
+End Function
+
+' Текст дельты плитки: «▲ 5 к пр. нед.» / «▼ 1,2 п.п.» / «±0». Пусто, если предыдущей нет.
+Private Function DeltaText(cur As Double, prev As Double, unit As String, hasPrev As Boolean) As String
+    DeltaText = ""
+    If Not hasPrev Then Exit Function
+    Dim d As Double
+    d = cur - prev
+    If d = 0 Then
+        DeltaText = IIf(unit = "pct", "±0,0 п.п.", "±0")
+        Exit Function
+    End If
+    Dim arrow As String
+    arrow = IIf(d > 0, "▲", "▼")
+    If unit = "pct" Then
+        DeltaText = arrow & " " & FmtPct(Abs(d)) & " п.п."
+    ElseIf unit = "hhmm" Then
+        DeltaText = arrow & " " & FormatHHMM(Abs(d))
+    Else
+        DeltaText = arrow & " " & FmtInt(Abs(d)) & " к пр. нед."
+    End If
+End Function
+
+' Класс дельты: рост «хорошей» метрики - up, «плохой» - dn; flat при равенстве/отсутствии.
+Private Function DeltaKind(cur As Double, prev As Double, betterWhenUp As Boolean, hasPrev As Boolean) As String
+    DeltaKind = "flat"
+    If Not hasPrev Then Exit Function
+    If cur = prev Then Exit Function
+    If cur > prev Then
+        DeltaKind = IIf(betterWhenUp, "up", "dn")
+    Else
+        DeltaKind = IIf(betterWhenUp, "dn", "up")
+    End If
+End Function
+
+' {{FACTS}} - четыре факта выгрузки в шапке (постановка §3.1).
+Private Function BuildFacts() As String
+    EnsureSnapshot
+    Dim n As Long
+    n = modAggregate.RowCount()
+
+    Dim nums As Object
+    Set nums = modAggregate.DistinctValues("number", FBase())
+    Dim noPostNums As Object
+    Set noPostNums = CreateObject("Scripting.Dictionary")
+
+    Dim dMin As Double, dMax As Double
+    dMin = 0: dMax = 0
+    Dim r As Long
+    For r = 1 To n
+        Dim dte As Variant
+        dte = modAggregate.CellRaw(r, "date")
+        If IsNumeric(dte) Then
+            If dMin = 0 Or CDbl(dte) < dMin Then dMin = CDbl(dte)
+            If CDbl(dte) > dMax Then dMax = CDbl(dte)
+        End If
+        If modAggregate.CellText(r, "postN") = "" Then
+            Dim num As String
+            num = modAggregate.CellText(r, "number")
+            If num <> "" Then noPostNums(num) = True
+        End If
+    Next r
+
+    Dim months As String
+    months = "—"
+    If dMin > 0 And dMax >= dMin Then
+        months = "~" & CStr(DateDiff("m", CDate(dMin), CDate(dMax))) & " мес"
+    End If
+    Dim noPostPct As String
+    If nums.Count > 0 Then
+        noPostPct = FmtPct(CDbl(noPostNums.Count) / CDbl(nums.Count)) & " %"
+    Else
+        noPostPct = "—"
+    End If
+
+    Dim html As String
+    html = "<div><dt>Событий</dt><dd class='num'>" & FmtInt(CDbl(n)) & "</dd></div>"
+    html = html & "<div><dt>Нарядов</dt><dd class='num'>" & FmtInt(CDbl(nums.Count)) & "</dd></div>"
+    html = html & "<div><dt>История</dt><dd class='num'>" & Esc(months) & "</dd></div>"
+    html = html & "<div><dt>Без поста</dt><dd class='num'>" & Esc(noPostPct) & "</dd></div>"
+    BuildFacts = html
+End Function
+
+' {{KPI_OVERVIEW}} - семь плиток за отчётную неделю с дельтой к ПН-1 и спарклайном за окно.
+Private Function BuildKpiOverview() As String
+    EnsureSnapshot
+    Dim windowSize As Long
+    windowSize = CLng(modMain.GetVariableDef("REPORT/WEEKS_WINDOW", "8"))
+
+    Dim weeks As Variant, cnt As Long
+    weeks = RecentWeeksUpTo(windowSize, cnt)
+    If cnt = 0 Then BuildKpiOverview = EmptyNote(): Exit Function
+
+    ' Карта yearWeek -> индекс окна (1 = ПН, самая свежая из окна).
+    Dim wmap As Object
+    Set wmap = CreateObject("Scripting.Dictionary")
+    Dim i As Long
+    For i = 1 To cnt
+        wmap(CStr(KeyPart(weeks(i), 0))) = i
+    Next i
+
+    ' Множества номеров нарядов и счётчики по неделям.
+    Dim opened() As Object, closed() As Object, noPost() As Object
+    ReDim opened(1 To cnt): ReDim closed(1 To cnt): ReDim noPost(1 To cnt)
+    Dim allEv() As Double, unsEv() As Double, pctTot() As Double, pctTab() As Double
+    ReDim allEv(1 To cnt): ReDim unsEv(1 To cnt): ReDim pctTot(1 To cnt): ReDim pctTab(1 To cnt)
+    For i = 1 To cnt
+        Set opened(i) = CreateObject("Scripting.Dictionary")
+        Set closed(i) = CreateObject("Scripting.Dictionary")
+        Set noPost(i) = CreateObject("Scripting.Dictionary")
+        allEv(i) = 0: unsEv(i) = 0: pctTot(i) = 0: pctTab(i) = 0
+    Next i
+
+    Dim n As Long
+    n = modAggregate.RowCount()
+    Dim r As Long
+    For r = 1 To n
+        Dim wd As Long, ws As Long
+        wd = WeekKeyOfSafe(modAggregate.CellRaw(r, "date"))
+        ws = 0
+        Dim ywT As String
+        ywT = modAggregate.CellText(r, "yearWeek")
+        If ywT <> "" And IsNumeric(ywT) Then ws = CLng(ywT)
+
+        Dim armT As String
+        armT = modAggregate.CellText(r, "arm")
+        Dim num As String
+        num = modAggregate.CellText(r, "number")
+        Dim idxD As Long, idxS As Long
+        idxD = 0: idxS = 0
+        If wd > 0 Then
+            If wmap.Exists(CStr(wd)) Then idxD = CLng(wmap(CStr(wd)))
+        End If
+        If ws > 0 Then
+            If wmap.Exists(CStr(ws)) Then idxS = CLng(wmap(CStr(ws)))
+        End If
+
+        ' По дате создания: открытые, без поста, события недели (знаменатель «не подписано»).
+        If idxD > 0 Then
+            allEv(idxD) = allEv(idxD) + 1
+            If num <> "" Then
+                opened(idxD)(num) = True
+                If modAggregate.CellText(r, "postN") = "" Then noPost(idxD)(num) = True
+            End If
+            If armT = "НЕ ПОДПИСАНО" Then unsEv(idxD) = unsEv(idxD) + 1
+        End If
+        ' По дате статуса: % планшета, закрытые.
+        If idxS > 0 Then
+            If armT = "ПК" Or armT = "ПЛАНШЕТ" Then
+                pctTot(idxS) = pctTot(idxS) + 1
+                If armT = "ПЛАНШЕТ" Then pctTab(idxS) = pctTab(idxS) + 1
+            End If
+            If IsStatusReadyToLeave(modAggregate.CellText(r, "ready_for")) Then
+                If num <> "" Then closed(idxS)(num) = True
+            End If
+        End If
+    Next r
+
+    ' Медианы deltaHours по неделям (строки «Готов к выбытию»).
+    Dim medD As Object
+    Set medD = modAggregate.GroupPercentile(Array("yearWeek"), "deltaHours", 0.5, _
+        Array("ready_for=Готов к выбытию"))
+    Dim med() As Double
+    ReDim med(1 To cnt)
+    For i = 1 To cnt
+        med(i) = DictVal(medD, CStr(KeyPart(weeks(i), 0)) & "|")
+    Next i
+
+    ' «Висит на конец недели» - накопительно по возрастанию недель окна.
+    Dim hang() As Double
+    ReDim hang(1 To cnt)
+    Dim cumOp As Double, cumCl As Double, j As Long
+    cumOp = 0: cumCl = 0
+    For j = cnt To 1 Step -1
+        cumOp = cumOp + CDbl(opened(j).Count)
+        cumCl = cumCl + CDbl(closed(j).Count)
+        hang(j) = cumOp - cumCl
+    Next j
+
+    ' Спарклайны (по возрастанию недель окна).
+    Dim spOpen() As Double, spClose() As Double, spHang() As Double, spMed() As Double
+    Dim spNoPost() As Double, spPct() As Double, spUns() As Double
+    ReDim spOpen(1 To cnt): ReDim spClose(1 To cnt): ReDim spHang(1 To cnt): ReDim spMed(1 To cnt)
+    ReDim spNoPost(1 To cnt): ReDim spPct(1 To cnt): ReDim spUns(1 To cnt)
+    For j = 1 To cnt
+        Dim src As Long
+        src = cnt - j + 1
+        spOpen(j) = CDbl(opened(src).Count)
+        spClose(j) = CDbl(closed(src).Count)
+        spHang(j) = hang(src)
+        spMed(j) = med(src)
+        spNoPost(j) = SafePercentNo(opened(src).Count, noPost(src).Count)
+        spPct(j) = SafePctTwo(pctTot(src), pctTab(src))
+        spUns(j) = SafePctTwo(allEv(src), unsEv(src))
+    Next j
+
+    Dim hasPrev As Boolean
+    hasPrev = (cnt >= 2)
+
+    Dim pctCur As Double, pctPrev As Double
+    pctCur = SafePctTwo(pctTot(1), pctTab(1))
+    pctPrev = 0
+    If hasPrev Then pctPrev = SafePctTwo(pctTot(2), pctTab(2))
+    Dim npCur As Double, npPrev As Double
+    npCur = SafePercentNo(opened(1).Count, noPost(1).Count)
+    npPrev = 0
+    If hasPrev Then npPrev = SafePercentNo(opened(2).Count, noPost(2).Count)
+    Dim unsCur As Double, unsPrev As Double
+    unsCur = SafePctTwo(allEv(1), unsEv(1))
+    unsPrev = 0
+    If hasPrev Then unsPrev = SafePctTwo(allEv(2), unsEv(2))
+
+    Dim medVal As String, medDelta As String, medKind As String
+    If med(1) > 0 Then
+        medVal = FormatHHMM(med(1))
+        medDelta = DeltaText(med(1), med(2), "hhmm", hasPrev)
+        medKind = DeltaKind(med(1), med(2), False, hasPrev)
+    Else
+        medVal = "н/д"
+        medDelta = ""
+        medKind = "flat"
+    End If
+
+    Dim html As String
+    html = KpiTile("Нарядов открыто", FmtInt(CDbl(opened(1).Count)), "", _
+        DeltaText(CDbl(opened(1).Count), CDbl(opened(2).Count), "num", hasPrev), _
+        DeltaKind(CDbl(opened(1).Count), CDbl(opened(2).Count), True, hasPrev), SvgSpark(spOpen, "s1"))
+    html = html & KpiTile("Закрыто нарядов", FmtInt(CDbl(closed(1).Count)), "", _
+        DeltaText(CDbl(closed(1).Count), CDbl(closed(2).Count), "num", hasPrev), _
+        DeltaKind(CDbl(closed(1).Count), CDbl(closed(2).Count), True, hasPrev), SvgSpark(spClose, "s3"))
+    html = html & KpiTile("Висит на конец недели", FmtInt(hang(1)), "", _
+        DeltaText(hang(1), hang(2), "num", hasPrev), _
+        DeltaKind(hang(1), hang(2), False, hasPrev), SvgSpark(spHang, "s2"))
+    html = html & KpiTile("Медиана в ремзоне", medVal, "", medDelta, medKind, SvgSpark(spMed, "s1"))
+    html = html & KpiTile("Без поста ремзоны", FmtInt(CDbl(noPost(1).Count)), "· " & FmtPct(npCur) & " %", _
+        DeltaText(npCur, npPrev, "pct", hasPrev), DeltaKind(npCur, npPrev, False, hasPrev), SvgSpark(spNoPost, "s4"))
+    html = html & KpiTile("% планшета", FmtPct(pctCur), "%", _
+        DeltaText(pctCur, pctPrev, "pct", hasPrev), DeltaKind(pctCur, pctPrev, True, hasPrev), SvgSpark(spPct, "s3"))
+    html = html & KpiTile("Не подписано", FmtInt(unsEv(1)), "· " & FmtPct(unsCur) & " %", _
+        DeltaText(unsCur, unsPrev, "pct", hasPrev), DeltaKind(unsCur, unsPrev, False, hasPrev), SvgSpark(spUns, "s2"))
+
+    html = html & "<p class='calc-note'>⚠️ Медиана меряет всё время от приёмки до подписания выбытия, включая очередь и ожидание запчастей; для «плана против факта» непригодна.</p>"
+    html = html & CalcNote("За отчётную неделю (REPORT/WEEK). Открыто/без поста/не подписано - по дате создания (date), " & _
+        "закрыто/% планшета/медиана - по дате статуса (status_date). Наряды - уникальные number; " & _
+        "дельта - к предыдущей неделе окна, спарклайн - за WEEKS_WINDOW недель.")
+    BuildKpiOverview = html
+End Function
+
+' Доля без деления на ноль; parts/count - счётчики (Double).
+Private Function SafePercentNo(count As Double, parts As Double) As Double
+    If count > 0 Then SafePercentNo = parts / count Else SafePercentNo = 0
+End Function
+
+Private Function SafePctTwo(total As Double, part As Double) As Double
+    If total > 0 Then SafePctTwo = part / total Else SafePctTwo = 0
+End Function
+
+' {{BLOCK_TIME_STATS}} - чипы медиана/среднее/p90 по deltaHours (без обрезки).
+Private Function BuildTimeStats() As String
+    EnsureSnapshot
+    Dim has As Boolean
+    Dim med As Double, p90 As Double
+    med = modAggregate.Percentile("deltaHours", 0.5, Empty, has)
+    If Not has Then BuildTimeStats = EmptyNote(): Exit Function
+    p90 = modAggregate.Percentile("deltaHours", 0.9, Empty, has)
+
+    Dim avg As Double, avgHas As Boolean
+    avg = AvgSimple("deltaHours", avgHas)
+
+    Dim html As String
+    html = "<div class='chips' style='margin:10px 0 6px'>"
+    html = html & "<span class='chip'>медиана " & FormatHHMM(med) & "</span>"
+    If avgHas Then html = html & "<span class='chip'>среднее " & FmtD(avg, "0.0") & " ч</span>"
+    html = html & "<span class='chip'>p90 " & FmtD(p90, "0.0") & " ч</span>"
+    html = html & "</div>"
+    html = html & "<p class='calc-note'>Среднее перекошено хвостом распределения — ориентироваться на медиану.</p>"
+    BuildTimeStats = html
+End Function
+
+' {{BLOCK_TIME_HIST}} - корзины времени в ремзоне, обрезка p99 (ТЗ T5.3).
+Private Function BuildTimeHistogram() As String
+    EnsureSnapshot
+    Const BIN1 As Double = 1
+    Const BIN4 As Double = 4
+    Const BIN8 As Double = 8
+    Const BIN24 As Double = 24
+    Const BIN72 As Double = 72
+
+    Dim has As Boolean
+    Dim p99 As Double
+    p99 = modAggregate.Percentile("deltaHours", 0.99, Empty, has)
+    If Not has Then BuildTimeHistogram = EmptyNote(): Exit Function
+
+    Dim labels() As Variant, values() As Double
+    ReDim labels(1 To 6): ReDim values(1 To 6)
+    labels(1) = "< 1 ч": labels(2) = "1–4 ч": labels(3) = "4–8 ч"
+    labels(4) = "8–24 ч": labels(5) = "1–3 сут": labels(6) = "> 3 сут"
+    Dim i As Long
+    For i = 1 To 6: values(i) = 0: Next i
+
+    Dim n As Long, r As Long, dropped As Long
+    n = modAggregate.RowCount()
+    dropped = 0
+    For r = 1 To n
+        Dim v As Variant
+        v = modAggregate.CellRaw(r, "deltaHours")
+        If IsNumeric(v) Then
+            If CDbl(v) > p99 Then
+                dropped = dropped + 1
+            ElseIf CDbl(v) < BIN1 Then
+                values(1) = values(1) + 1
+            ElseIf CDbl(v) < BIN4 Then
+                values(2) = values(2) + 1
+            ElseIf CDbl(v) < BIN8 Then
+                values(3) = values(3) + 1
+            ElseIf CDbl(v) < BIN24 Then
+                values(4) = values(4) + 1
+            ElseIf CDbl(v) < BIN72 Then
+                values(5) = values(5) + 1
+            Else
+                values(6) = values(6) + 1
+            End If
+        End If
+    Next r
+
+    Dim html As String
+    html = SvgBarsV(labels, values, "Время в ремзоне по корзинам, часов")
+    html = html & CalcNote("Пары (наряд × дирекция) с заполненным deltaHours; верхний 1 % значений обрезан " & _
+        "(p99 = " & FmtD(p99, "0.0") & " ч) — отброшено " & FmtInt(CDbl(dropped)) & " строк.")
+    BuildTimeHistogram = html
+End Function
+
+' {{BLOCK_FLOW_ZNTYPE}} - виды ремонта: нарядов и доля.
+Private Function BuildFlowByZnType() As String
+    EnsureSnapshot
+    Dim counts As Object
+    Set counts = modAggregate.GroupCountDistinct(Array("zn_type"), "number", FBase())
+    If counts.Count = 0 Then BuildFlowByZnType = EmptyNote(): Exit Function
+
+    Dim total As Double
+    total = CDbl(modAggregate.DistinctValues("number", FBase()).Count)
+
+    Dim sorted As Variant
+    sorted = modAggregate.SortDictionaryKeysByValue(counts, True)
+
+    Dim html As String, i As Long
+    html = "<table class='block-table'><thead><tr><th>Вид ремонта</th><th>Нарядов</th><th>%</th></tr></thead><tbody>"
+    For i = LBound(sorted) To UBound(sorted)
+        Dim k As String
+        k = CStr(sorted(i))
+        Dim title As String
+        title = KeyPart(k, 0)
+        If title = "" Then title = "(не указан)"
+        html = html & "<tr><td>" & Esc(title) & "</td><td class='num'>" & FmtInt(CDbl(counts(k))) & "</td>"
+        If total > 0 Then
+            html = html & "<td class='num'>" & FmtPct(CDbl(counts(k)) / total) & "</td></tr>"
+        Else
+            html = html & "<td class='num'>—</td></tr>"
+        End If
+    Next i
+    html = html & "</tbody></table>"
+    html = html & CalcNote("Вид ремонта (zn_type) за весь период выгрузки; нарядов — уникальные number; % — от всех нарядов периода. " & _
+        "Поток на три четверти — внеплановый ремонт; плановое ТО в ремзоне почти не видно — стоит проверить у заказчика.")
+    BuildFlowByZnType = html
+End Function
+
+' {{BLOCK_FLOW_DEFEKT}} - бары по разделам дефекта; пустое - отдельной строкой.
+Private Function BuildFlowByDefekt() As String
+    EnsureSnapshot
+    Dim counts As Object
+    Set counts = modAggregate.GroupCountDistinct(Array("defekt_type"), "number", FBase())
+    If counts.Count = 0 Then BuildFlowByDefekt = EmptyNote(): Exit Function
+
+    Dim emptyCnt As Double
+    emptyCnt = DictVal(counts, "|")
+    Dim sorted As Variant
+    sorted = modAggregate.SortDictionaryKeysByValue(counts, True)
+    Dim nRows As Long, i As Long
+    nRows = UBound(sorted) - LBound(sorted) + 1
+    If emptyCnt > 0 Then nRows = nRows - 1
+    If nRows <= 0 Then
+        BuildFlowByDefekt = "<p class='calc-note'>Раздел не указан: " & FmtInt(emptyCnt) & " нарядов</p>" & _
+            CalcNote("defekt_type — разделы классификатора, а не диагнозы (12 значений на весь массив); метрику повторного ремонта на них строить нельзя.")
+        Exit Function
+    End If
+
+    Dim labels() As Variant, vals() As Double, parts() As Double
+    ReDim labels(1 To nRows): ReDim vals(1 To nRows): ReDim parts(1 To nRows)
+    Dim pos As Long
+    pos = 0
+    For i = LBound(sorted) To UBound(sorted)
+        Dim k As String
+        k = CStr(sorted(i))
+        If KeyPart(k, 0) <> "" Then
+            pos = pos + 1
+            labels(pos) = KeyPart(k, 0)
+            vals(pos) = CDbl(counts(k))
+            parts(pos) = 0
+        End If
+    Next i
+
+    Dim html As String
+    html = SvgBarsH(labels, vals, parts, -1)
+    If emptyCnt > 0 Then
+        html = html & "<p class='calc-note'>Раздел не указан: " & FmtInt(emptyCnt) & " нарядов</p>"
+    End If
+    html = html & CalcNote("defekt_type — разделы классификатора, а не диагнозы (12 значений на весь массив); метрику повторного ремонта на них строить нельзя.")
+    BuildFlowByDefekt = html
+End Function
+
+' {{BLOCK_NOPOST_WEEKLY}} - столбики объёма + линия доли без поста по неделям окна.
+Private Function BuildNoPostWeekly() As String
+    EnsureSnapshot
+    Dim windowSize As Long
+    windowSize = CLng(modMain.GetVariableDef("REPORT/WEEKS_WINDOW", "8"))
+
+    Dim weeks As Variant, cnt As Long
+    weeks = RecentWeeksUpTo(windowSize, cnt)
+    If cnt = 0 Then BuildNoPostWeekly = EmptyNote(): Exit Function
+
+    ' Ось - yearWeek по status_date (постановка §3.5); строка с пустым постом - фильтр «postN=».
+    Dim total As Object, noPost As Object
+    Set total = modAggregate.GroupCountDistinct(Array("yearWeek"), "number", FSigned())
+    Set noPost = modAggregate.GroupCountDistinct(Array("yearWeek"), "number", _
+        AppendFilter(FSigned(), "postN="))
+    If total.Count = 0 Then BuildNoPostWeekly = EmptyNote(): Exit Function
+
+    Dim labels() As Variant, bars() As Double, pct() As Double
+    ReDim labels(1 To cnt): ReDim bars(1 To cnt): ReDim pct(1 To cnt)
+    Dim i As Long
+    For i = 1 To cnt
+        Dim wkStr As String
+        wkStr = CStr(KeyPart(weeks(i), 0))
+        labels(i) = WeekLabel(KeyPart(weeks(i), 0))
+        bars(i) = DictVal(total, wkStr & "|")
+        pct(i) = SafePercent(noPost, total, wkStr & "|")
+    Next i
+
+    Dim html As String
+    html = SvgBarsLine(labels, bars, pct)
+    html = html & "<p class='calc-note'>Доля без поста в последней неделе окна: " & FmtPct(pct(1)) & " %.</p>"
+    html = html & CalcNote("Недели окна WEEKS_WINDOW по yearWeek (status_date), подписанные события; столбики — нарядов за неделю " & _
+        "(уникальные number), линия — доля нарядов с пустым post на правой оси 0–100 %. «Без поста» и «не подписано» — по данным один дефект (мост к слайду 4).")
+    BuildNoPostWeekly = html
+End Function
+
+' =====================================================================================
+' Блоки слайдов 2-3 (ТЗ v1.2, T6). Все функции параметризуются дирекцией ("ДЭНТ" | "ДГМ"):
+' двух копий кода быть не должно, слайд 3 отличается только значением параметра.
+' =====================================================================================
+' {{BLOCK_WEEKS_<DIR>}} / {{BLOCK_WEEKS_ZONES_<DIR>}} - понедельная таблица использования планшета.
+Private Function BuildWeeksTable(dir As String, zonesFilter As String) As String
+    EnsureSnapshot
+    Dim f As Variant, ft As Variant
+    f = FDir(dir)
+    ft = AppendFilter(FTablet(), "direction=" & dir)
+    If Trim$(zonesFilter) <> "" Then
+        f = AppendFilter(f, "postN@=" & zonesFilter)
+        ft = AppendFilter(ft, "postN@=" & zonesFilter)
+    End If
+
+    Dim total As Object, tablet As Object
+    Set total = modAggregate.GroupCount(Array("yearWeek"), f)
+    Set tablet = modAggregate.GroupCount(Array("yearWeek"), ft)
+    If total.Count = 0 Then
+        BuildWeeksTable = "<h3>" & Esc(dir) & " · по неделям</h3>" & EmptyNote()
+        Exit Function
+    End If
+
+    ' Окно WEEKS_WINDOW недель <= отчётной, по убыванию (weeks(1) = ПН).
+    Dim windowSize As Long
+    windowSize = CLng(modMain.GetVariableDef("REPORT/WEEKS_WINDOW", "8"))
+    Dim weeks As Variant, cnt As Long
+    weeks = RecentWeeksUpTo(windowSize, cnt)
+    If cnt = 0 Then
+        BuildWeeksTable = "<h3>" & Esc(dir) & " · по неделям</h3>" & EmptyNote()
+        Exit Function
+    End If
+
+    Dim title As String
+    title = dir
+    If Trim$(zonesFilter) <> "" Then
+        title = title & " · ремзоны: " & Esc(Replace(Trim$(zonesFilter), ";", ", "))
+    Else
+        title = title & " · все ремзоны"
+    End If
+
+    Dim html As String, wj As Long
+    html = "<h3>" & Esc(title) & "</h3>"
+    html = html & "<div class='scroll'><table class='block-table matrix'><thead><tr><th>" & Esc(dir) & "</th>"
+    For wj = cnt To 1 Step -1
+        html = html & "<th>" & Esc(WeekLabel(KeyPart(weeks(wj), 0))) & "</th>"
+    Next wj
+    html = html & "</tr></thead><tbody>"
+
+    ' Строки: всего событий -> % -> ПЛАНШЕТ -> ПК.
+    html = html & "<tr><th class='row-head'>" & Esc(dir) & "</th>"
+    For wj = cnt To 1 Step -1
+        Dim wkStr As String
+        wkStr = CStr(KeyPart(weeks(wj), 0))
+        html = html & "<td class='num'>" & FmtInt(DictVal(total, wkStr & "|")) & "</td>"
+    Next wj
+    html = html & "</tr>"
+
+    html = html & "<tr class='pct-row'><th class='row-head'>%</th>"
+    For wj = cnt To 1 Step -1
+        wkStr = CStr(KeyPart(weeks(wj), 0))
+        If DictVal(total, wkStr & "|") = 0 Then
+            html = html & PctCell(0, False)
+        Else
+            html = html & PctCell(SafePercent(tablet, total, wkStr & "|"))
+        End If
+    Next wj
+    html = html & "</tr>"
+
+    html = html & "<tr><th class='row-head'>ПЛАНШЕТ</th>"
+    For wj = cnt To 1 Step -1
+        wkStr = CStr(KeyPart(weeks(wj), 0))
+        html = html & "<td class='num'>" & FmtInt(DictVal(tablet, wkStr & "|")) & "</td>"
+    Next wj
+    html = html & "</tr>"
+
+    html = html & "<tr><th class='row-head'>ПК</th>"
+    For wj = cnt To 1 Step -1
+        wkStr = CStr(KeyPart(weeks(wj), 0))
+        html = html & "<td class='num'>" & FmtInt(DictVal(total, wkStr & "|") - DictVal(tablet, wkStr & "|")) & "</td>"
+    Next wj
+    html = html & "</tr>"
+
+    html = html & "</tbody></table></div>"
+    html = html & CalcNote("Окно WEEKS_WINDOW недель <= REPORT/WEEK, события с arm из {ПК, ПЛАНШЕТ}; % = ПЛАНШЕТ / (ПК + ПЛАНШЕТ) за неделю; пустые ячейки — нет событий.")
+    BuildWeeksTable = html
+End Function
+
+' {{BLOCK_POSTS_<DIR>}} - бары по постам за отчётную неделю + оценки (pill).
+Private Function BuildPostsChart(dir As String) As String
+    EnsureSnapshot
+    Dim rw As Long
+    rw = ReportWeekValue()
+    Dim f As Variant, ft As Variant
+    f = AppendFilter(FDir(dir), "yearWeek=" & CStr(rw))
+    ft = AppendFilter(FTablet(), "direction=" & dir)
+    ft = AppendFilter(ft, "yearWeek=" & CStr(rw))
+
+    ' Единица счёта - наряд: Count(Distinct number).
+    Dim records As Object, tabRec As Object
+    Set records = modAggregate.GroupCountDistinct(Array("postN"), "number", f)
+    Set tabRec = modAggregate.GroupCountDistinct(Array("postN"), "number", ft)
+    If records.Count = 0 Then
+        BuildPostsChart = "<h3>" & Esc(dir) & " · по постам</h3>" & EmptyNote()
+        Exit Function
+    End If
+
+    Dim sorted As Variant
+    sorted = modAggregate.SortDictionaryKeysByValue(records, True)
+    Dim nRows As Long, i As Long
+    nRows = UBound(sorted) - LBound(sorted) + 1
+
+    Dim labels() As Variant, vals() As Double, parts() As Double
+    ReDim labels(1 To nRows): ReDim vals(1 To nRows): ReDim parts(1 To nRows)
+    Dim hlIdx As Long
+    hlIdx = -1
+    For i = 1 To nRows
+        Dim k As String
+        k = CStr(sorted(i - 1))
+        Dim pn As String
+        pn = KeyPart(k, 0)
+        If pn = "" Then
+            labels(i) = "Пост не указан"
+            hlIdx = i
+        Else
+            labels(i) = pn
+        End If
+        vals(i) = DictVal(records, pn & "|")
+        parts(i) = DictVal(tabRec, pn & "|")
+    Next i
+
+    Dim html As String
+    html = "<h3>" & Esc(dir) & " · где подписывают с ПК (нед. " & Esc(WeekLabel(rw)) & ")</h3>"
+    html = html & "<p class='calc-note'>Единица счёта — наряд (уникальные number), соседние блоки считают события.</p>"
+    html = html & SvgBarsH(labels, vals, parts, hlIdx)
+
+    ' Оценки постов (pill): норма/провал/мало данных.
+    Dim minPost As Long, norma As Double, proval As Double
+    minPost = CLng(modMain.GetVariableDef("REPORT/MIN_POST_RECORDS", "10"))
+    norma = CDbl(Val(Replace(modMain.GetVariableDef("NormaForPlanshet", "90"), ",", ".")))
+    proval = CDbl(Val(Replace(modMain.GetVariableDef("ProvalForPlanshet", "50"), ",", ".")))
+    html = html & "<table class='block-table'><thead><tr><th>Пост</th><th>Нарядов</th><th>% планшет</th><th>Оценка</th></tr></thead><tbody>"
+    For i = 1 To nRows
+        Dim pct As Double
+        pct = SafePercentNo(vals(i), parts(i))
+        Dim grade As String
+        If vals(i) < minPost Then
+            grade = "<span class='pill warn'>мало данных</span>"
+        ElseIf proval < norma And pct * 100 >= norma Then
+            grade = "<span class='pill good'>норма</span>"
+        ElseIf proval < norma And pct * 100 < proval Then
+            grade = "<span class='pill crit'>провал</span>"
+        Else
+            grade = "—"
+        End If
+        html = html & "<tr><td>" & Esc(labels(i)) & "</td><td class='num'>" & FmtInt(vals(i)) & "</td>" & _
+            PctCell(pct) & "<td>" & grade & "</td></tr>"
+    Next i
+    html = html & "</tbody></table>"
+    html = html & CalcNote("За отчётную неделю (REPORT/WEEK, yearWeek статуса); пост — родитель поста, строки читаются как площадки; " & _
+        "оценка: норма при % >= NormaForPlanshet, провал при % < ProvalForPlanshet, «мало данных» при нарядов < REPORT/MIN_POST_RECORDS.")
+    BuildPostsChart = html
+End Function
+
+' {{BLOCK_PEOPLE_<DIR>}} / {{BLOCK_DEPS_<DIR>}} - понедельная раскладка ПН-3..ПН по людям.
+' groupField = "employee" либо "emp_dep" - одна функция на обе таблицы.
+Private Function BuildPeopleWeekly(dir As String, groupField As String) As String
+    EnsureSnapshot
+    Dim weeks As Variant, cnt As Long
+    weeks = RecentWeeksUpTo(4, cnt)
+    If cnt = 0 Then
+        BuildPeopleWeekly = "<h4>По " & Esc(groupField) & "</h4>" & EmptyNote()
+        Exit Function
+    End If
+
+    Dim f As Variant
+    f = FDir(dir)
+
+    ' Всего подписей = Count(Distinct Key) за неделю.
+    Dim tot As Object, tabObj As Object, tabAcc As Object, tabLeave As Object, delAvg As Object
+    Set tot = modAggregate.GroupCountDistinct(Array(groupField, "yearWeek"), "Key", f)
+    Set tabObj = modAggregate.GroupCountDistinct(Array(groupField, "yearWeek"), "Key", _
+        AppendFilter(f, "arm=ПЛАНШЕТ"))
+    Set tabAcc = modAggregate.GroupCountDistinct(Array(groupField, "yearWeek"), "Key", _
+        AppendFilter(f, "arm=ПЛАНШЕТ;ready_for=Готов к приемке"))
+    Set tabLeave = modAggregate.GroupCountDistinct(Array(groupField, "yearWeek"), "Key", _
+        AppendFilter(f, "arm=ПЛАНШЕТ;ready_for=Готов к выбытию"))
+    Set delAvg = modAggregate.GroupAverage(Array(groupField, "yearWeek"), "deltaHours", f)
+
+    If tot.Count = 0 Then
+        BuildPeopleWeekly = "<h4>По " & Esc(groupField) & "</h4>" & EmptyNote()
+        Exit Function
+    End If
+
+    ' Строки и их сортировка по «% планшет» за ПН (weeks(1)), по убыванию.
+    Dim rowSet As Object, pctDict As Object
+    Set rowSet = CreateObject("Scripting.Dictionary")
+    Set pctDict = CreateObject("Scripting.Dictionary")
+    Dim k As Variant
+    For Each k In tot.Keys
+        rowSet(KeyPart(k, 0)) = True
+    Next k
+    Dim wPN As String
+    wPN = CStr(KeyPart(weeks(1), 0))
+    Dim rv As Variant
+    For Each rv In rowSet.Keys
+        Dim keyTot As String
+        keyTot = CStr(rv) & "|" & wPN & "|"
+        If DictVal(tot, keyTot) = 0 Then
+            pctDict(rv) = -1
+        Else
+            pctDict(rv) = SafePercent(tabObj, tot, keyTot)
+        End If
+    Next rv
+    Dim sorted As Variant
+    sorted = modAggregate.SortDictionaryKeysByValue(pctDict, True)
+
+    Dim caption As String
+    If groupField = "employee" Then caption = "Сотрудник" Else caption = "Подразделение"
+
+    Dim html As String, i As Long, wj As Long
+    html = "<h4>" & Esc(caption) & "</h4>"
+    html = html & "<div class='scroll'><table class='block-table people'><thead><tr><th rowspan='2'>" & Esc(caption) & "</th>"
+    For wj = cnt To 1 Step -1
+        Dim grp As String
+        If wj = 1 Then
+            grp = "ПН (" & Esc(WeekLabel(KeyPart(weeks(wj), 0))) & ")"
+        Else
+            grp = "ПН-" & CStr(wj - 1) & " (" & Esc(WeekLabel(KeyPart(weeks(wj), 0))) & ")"
+        End If
+        html = html & "<th colspan='6'>" & grp & "</th>"
+    Next wj
+    html = html & "</tr><tr>"
+    For wj = cnt To 1 Step -1
+        html = html & "<th>% планшет</th><th>Всего подписей</th><th>Из них на планшете</th>" & _
+            "<th>из них Готов к приемке</th><th>из них Готов к выбытию</th><th>Среднее время</th>"
+    Next wj
+    html = html & "</tr></thead><tbody>"
+
+    For i = LBound(sorted) To UBound(sorted)
+        Dim nameVal As String
+        nameVal = CStr(sorted(i))
+        html = html & "<tr><th class='row-head'>" & Esc(nameVal) & "</th>"
+        For wj = cnt To 1 Step -1
+            Dim wkStr As String
+            wkStr = CStr(KeyPart(weeks(wj), 0))
+            Dim key2 As String
+            key2 = nameVal & "|" & wkStr & "|"
+            If DictVal(tot, key2) = 0 Then
+                html = html & PctCell(0, False)
+            Else
+                html = html & PctCell(SafePercent(tabObj, tot, key2))
+            End If
+            html = html & "<td class='num'>" & FmtInt(DictVal(tot, key2)) & "</td>"
+            html = html & "<td class='num'>" & FmtInt(DictVal(tabObj, key2)) & "</td>"
+            html = html & "<td class='num'>" & FmtInt(DictVal(tabAcc, key2)) & "</td>"
+            html = html & "<td class='num'>" & FmtInt(DictVal(tabLeave, key2)) & "</td>"
+            If delAvg.Exists(key2) Then
+                html = html & "<td class='num'>" & FormatHHMM(CDbl(delAvg(key2))) & "</td>"
+            Else
+                html = html & "<td class='num'>—</td>"
+            End If
+        Next wj
+        html = html & "</tr>"
+    Next i
+    html = html & "</tbody></table></div>"
+
+    If groupField = "emp_dep" Then
+        html = html & CalcNote("Те же метрики по подразделениям (emp_dep); % планшет = ПЛАНШЕТ / (ПК + ПЛАНШЕТ) событий за неделю, «Среднее время» — средняя deltaHours по неделе, «чч:мм».")
+    Else
+        html = html & CalcNote("Недели ПН-3…ПН, присутствующие в данных; % планшет = ПЛАНШЕТ / (ПК + ПЛАНШЕТ) событий сотрудника за неделю; " & _
+            "всего подписей — уникальные Key; «Готов к приемке»/«Готов к выбытию» сравниваются с нормализацией «ё»→«е»; сортировка по % планшет за ПН, по убыванию.")
+    End If
+    BuildPeopleWeekly = html
+End Function
+
+' Кэш статистики подписания по дирекции: all/acc/lea/dates/maxDate (один проход на дирекцию).
+Private Sub EnsureSignData(dir As String)
+    If Not mSignReady Is Nothing Then
+        If mSignReady.Exists(dir) Then Exit Sub
+    End If
+    EnsureSnapshot
+    If mSignReady Is Nothing Then Set mSignReady = CreateObject("Scripting.Dictionary")
+    If mSignData Is Nothing Then Set mSignData = CreateObject("Scripting.Dictionary")
+
+    Dim d As Object
+    Set d = CreateObject("Scripting.Dictionary")
+    Set d("all") = CreateObject("Scripting.Dictionary")
+    Set d("acc") = CreateObject("Scripting.Dictionary")
+    Set d("lea") = CreateObject("Scripting.Dictionary")
+    Set d("dates") = CreateObject("Scripting.Dictionary")
+
+    Dim n As Long, r As Long
+    n = modAggregate.RowCount()
+    Dim maxDate As Double
+    maxDate = 0
+    For r = 1 To n
+        Dim dte As Variant
+        dte = modAggregate.CellRaw(r, "date")
+        If IsNumeric(dte) Then
+            If CDbl(dte) > maxDate Then maxDate = CDbl(dte)
+        End If
+
+        If modAggregate.CellText(r, "direction") = dir Then
+            Dim num As String
+            num = modAggregate.CellText(r, "number")
+            If num <> "" Then
+                d("all")(num) = True
+                If IsNumeric(dte) Then
+                    If Not d("dates").Exists(num) Then
+                        d("dates")(num) = CDbl(dte)
+                    ElseIf CDbl(dte) < CDbl(d("dates")(num)) Then
+                        d("dates")(num) = CDbl(dte)
+                    End If
+                End If
+                Dim armT As String
+                armT = modAggregate.CellText(r, "arm")
+                If armT = "ПК" Or armT = "ПЛАНШЕТ" Then
+                    Dim rf As String
+                    rf = modAggregate.CellText(r, "ready_for")
+                    If IsStatusReadyToAccept(rf) Then d("acc")(num) = True
+                    If IsStatusReadyToLeave(rf) Then d("lea")(num) = True
+                End If
+            End If
+        End If
+    Next r
+    d("maxDate") = maxDate
+    Set mSignData(dir) = d
+    mSignReady(dir) = True
+End Sub
+
+' {{BLOCK_SIGNSTAT_<DIR>}} - пять чисел по дирекции (весь период выгрузки, без отсечения «НЕ ПОДПИСАНО»).
+Private Function BuildSignStat(dir As String) As String
+    EnsureSignData dir
+    Dim d As Object
+    Set d = mSignData(dir)
+
+    Dim both As Double, accOnly As Double, leaOnly As Double, none As Double
+    both = 0: accOnly = 0: leaOnly = 0: none = 0
+    Dim k As Variant
+    For Each k In d("all").Keys
+        Dim hasAcc As Boolean, hasLea As Boolean
+        hasAcc = d("acc").Exists(k)
+        hasLea = d("lea").Exists(k)
+        If hasAcc And hasLea Then
+            both = both + 1
+        ElseIf hasAcc Then
+            accOnly = accOnly + 1
+        ElseIf hasLea Then
+            leaOnly = leaOnly + 1
+        Else
+            none = none + 1
+        End If
+    Next k
+
+    Dim html As String
+    html = "<div class='kpis'>"
+    html = html & KpiTile("Всего заказ-нарядов", FmtInt(CDbl(d("all").Count)), "", "", "flat", "")
+    html = html & KpiTile("Подписаны полностью", FmtInt(both), "", "", "flat", "")
+    html = html & KpiTile("Только «Готов к приемке»", FmtInt(accOnly), "", "", "flat", "")
+    html = html & KpiTile("Только «Готов к выбытию»", FmtInt(leaOnly), "", "", "flat", "")
+    html = html & KpiTile("Не подписаны ни разу", FmtInt(none), "", "", "flat", "")
+    html = html & "</div>"
+    html = html & CalcNote("Весь период выгрузки, направление " & Esc(dir) & ", без отсечения «НЕ ПОДПИСАНО» (они и есть предмет). " & _
+        "«Полностью» — оба статуса с arm из {ПК, ПЛАНШЕТ}; «ни разу» — ни одного статуса с arm из {ПК, ПЛАНШЕТ}.")
+    BuildSignStat = html
+End Function
+
+' {{BLOCK_UNSIGNED_AGE_<DIR>}} - старение неподписанных статусов по дирекции (ось — date).
+Private Function BuildUnsignedAgeByDir(dir As String) As String
+    EnsureSignData dir
+    Dim d As Object
+    Set d = mSignData(dir)
+    Dim maxDate As Double
+    maxDate = CDbl(d("maxDate"))
+    If maxDate <= 0 Then BuildUnsignedAgeByDir = EmptyNote(): Exit Function
+
+    ' Корзины: до 1 дня, 1-7, 7-30, >30 (постановка §4.4).
+    Dim labels() As Variant, unAcc() As Double, unLea() As Double
+    ReDim labels(1 To 4): ReDim unAcc(1 To 4): ReDim unLea(1 To 4)
+    labels(1) = "до 1 дня": labels(2) = "1–7 дней": labels(3) = "7–30 дней": labels(4) = "> 30 дней"
+    Dim i As Long
+    For i = 1 To 4: unAcc(i) = 0: unLea(i) = 0: Next i
+
+    Dim k As Variant
+    For Each k In d("all").Keys
+        Dim ageDays As Double
+        ageDays = 0
+        If d("dates").Exists(k) Then ageDays = maxDate - CDbl(d("dates")(k))
+        Dim bi As Long
+        If ageDays < 1 Then
+            bi = 1
+        ElseIf ageDays < 7 Then
+            bi = 2
+        ElseIf ageDays < 30 Then
+            bi = 3
+        Else
+            bi = 4
+        End If
+        If Not d("acc").Exists(k) Then unAcc(bi) = unAcc(bi) + 1
+        If Not d("lea").Exists(k) Then unLea(bi) = unLea(bi) + 1
+    Next k
+
+    Dim html As String
+    html = SvgBarsH(labels, unAcc, unLea, -1)
+    html = html & CalcNote("Возраст наряда от даты создания (date) до конца выгрузки; серии — «не подписана приёмка» и «не подписано выбытие»; ось — date, не yearWeek (у неподписанных yearWeek = null).")
+    BuildUnsignedAgeByDir = html
+End Function
+
+' =====================================================================================
+' Блоки слайда 4 (ТЗ v1.2, T7). Ось времени - ТОЛЬКО date (у неподписанных yearWeek = null).
+' =====================================================================================
+' Один проход по снимку: all/signed/rows/dates/noPost/zn по нарядам + счётчик событий
+' «НЕ ПОДПИСАНО» + max(date).
+Private Sub EnsureUnsignedData()
+    If mUnsignedReady Then Exit Sub
+    EnsureSnapshot
+
+    Dim d As Object
+    Set d = CreateObject("Scripting.Dictionary")
+    Set d("all") = CreateObject("Scripting.Dictionary")
+    Set d("signed") = CreateObject("Scripting.Dictionary")
+    Set d("rows") = CreateObject("Scripting.Dictionary")
+    Set d("dates") = CreateObject("Scripting.Dictionary")
+    Set d("noPost") = CreateObject("Scripting.Dictionary")
+    Set d("zn") = CreateObject("Scripting.Dictionary")
+
+    Dim n As Long, r As Long
+    n = modAggregate.RowCount()
+    Dim unsEvents As Double, maxDate As Double
+    unsEvents = 0: maxDate = 0
+    For r = 1 To n
+        Dim dte As Variant
+        dte = modAggregate.CellRaw(r, "date")
+        If IsNumeric(dte) Then
+            If CDbl(dte) > maxDate Then maxDate = CDbl(dte)
+        End If
+        Dim num As String
+        num = modAggregate.CellText(r, "number")
+        If num = "" Then GoTo NextUnsRow
+        d("all")(num) = True
+        AddCnt d("rows"), num, 1
+        If IsNumeric(dte) Then
+            If Not d("dates").Exists(num) Then
+                d("dates")(num) = CDbl(dte)
+            ElseIf CDbl(dte) < CDbl(d("dates")(num)) Then
+                d("dates")(num) = CDbl(dte)
+            End If
+        End If
+        If modAggregate.CellText(r, "postN") = "" Then d("noPost")(num) = True
+        If Not d("zn").Exists(num) Then d("zn")(num) = modAggregate.CellText(r, "zn_type")
+        Dim armT As String
+        armT = modAggregate.CellText(r, "arm")
+        If armT = "ПК" Or armT = "ПЛАНШЕТ" Then AddCnt d("signed"), num, 1
+        If armT = "НЕ ПОДПИСАНО" Then unsEvents = unsEvents + 1
+NextUnsRow:
+    Next r
+    d("unsEvents") = unsEvents
+    d("maxDate") = maxDate
+    Set mUnsigned = d
+    mUnsignedReady = True
+End Sub
+
+' {{KPI_UNSIGNED}} - четыре KPI + плашка «Что это значит для отчёта» (§6.5, числа считаются).
+Private Function BuildUnsignedKpi() As String
+    EnsureUnsignedData
+    Dim d As Object
+    Set d = mUnsigned
+
+    ' «Без единой подписи» = ни одной строки с arm из {ПК, ПЛАНШЕТ}; «частично» = есть подписанные и есть неподписанные.
+    Dim none As Double, part As Double
+    none = 0: part = 0
+    Dim k As Variant
+    For Each k In d("all").Keys
+        Dim s As Double, rows As Double
+        s = DictVal(d("signed"), CStr(k))
+        rows = DictVal(d("rows"), CStr(k))
+        If s = 0 Then
+            none = none + 1
+        ElseIf rows - s >= 1 Then
+            part = part + 1
+        End If
+    Next k
+
+    ' Старше двух недель: из «без единой подписи», возраст от date до max(date) > 14 дней.
+    Dim older As Double
+    older = 0
+    For Each k In d("all").Keys
+        If DictVal(d("signed"), CStr(k)) = 0 Then
+            If d("dates").Exists(k) Then
+                If CDbl(d("maxDate")) - CDbl(d("dates")(k)) > 14 Then older = older + 1
+            End If
+        End If
+    Next k
+
+    Dim totalNum As Double, totalRows As Double
+    totalNum = CDbl(d("all").Count)
+    totalRows = CDbl(modAggregate.RowCount())
+
+    Dim html As String
+    html = "<div class='kpis'>"
+    html = html & KpiTile("ЗН без единой подписи", FmtInt(none), "· " & FmtPct(SafePercentNo(totalNum, none)) & " %", "", "flat", "")
+    html = html & KpiTile("ЗН подписаны частично", FmtInt(part), "", "", "flat", "")
+    html = html & KpiTile("Событий без подписи", FmtInt(CDbl(d("unsEvents"))), "· " & FmtPct(SafePercentNo(totalRows, CDbl(d("unsEvents")))) & " %", "", "flat", "")
+    html = html & KpiTile("Старше двух недель", FmtInt(older), "", "", "flat", "")
+    html = html & "</div>"
+    html = html & CalcNote("ЗН без единой подписи — ни одна строка наряда не имеет arm из {ПК, ПЛАНШЕТ}; частично — часть строк подписана, часть нет; " & _
+        "событий без подписи — строки arm = НЕ ПОДПИСАНО; «старше» — из «без единой подписи», возраст от date до конца выгрузки > 14 дней.")
+
+    ' Плашка «Что это значит для отчёта» (постановка §6.5): оба процента считаются, не хардкодятся.
+    Dim armCnt As Object
+    Set armCnt = modAggregate.GroupCount(Array("arm"), FBase())
+    Dim tabEv As Double, pcEv As Double
+    tabEv = DictVal(armCnt, "ПЛАНШЕТ|")
+    pcEv = DictVal(armCnt, "ПК|")
+    If tabEv + pcEv > 0 Then
+        Dim pctFiltered As Double, pctAll As Double
+        pctFiltered = tabEv / (tabEv + pcEv)
+        pctAll = SafePercentNo(totalRows, tabEv)
+        html = html & "<div class='note'><strong>Что это значит для отчёта.</strong> При фильтре arm ∈ {ПК, ПЛАНШЕТ} отчёт показывает " & _
+            FmtPct(pctFiltered) & " % и выглядит удовлетворительно; с учётом неподписанных доля событий, прошедших через планшет, — " & _
+            FmtPct(pctAll) & " %. Оба числа верные, но отвечают на разные вопросы: первое — «чем подписывают», второе — «подписывают ли вообще».</div>"
+    End If
+    BuildUnsignedKpi = html
+End Function
+
+' {{BLOCK_UNSIGNED_AGE}} - старение: корзины 0-7, 8-14, 15-30, 31-90, >90 дней, две серии.
+Private Function BuildUnsignedAging() As String
+    EnsureUnsignedData
+    Dim d As Object
+    Set d = mUnsigned
+    Dim maxDate As Double
+    maxDate = CDbl(d("maxDate"))
+    If maxDate <= 0 Then BuildUnsignedAging = EmptyNote(): Exit Function
+
+    Dim labels() As Variant, none() As Double, part() As Double
+    ReDim labels(1 To 5): ReDim none(1 To 5): ReDim part(1 To 5)
+    labels(1) = "0–7 дней": labels(2) = "8–14": labels(3) = "15–30": labels(4) = "31–90": labels(5) = "> 90"
+    Dim i As Long
+    For i = 1 To 5: none(i) = 0: part(i) = 0: Next i
+
+    Dim k As Variant
+    For Each k In d("all").Keys
+        Dim age As Double
+        age = 0
+        If d("dates").Exists(k) Then age = maxDate - CDbl(d("dates")(k))
+        Dim bi As Long
+        If age <= 7 Then
+            bi = 1
+        ElseIf age <= 14 Then
+            bi = 2
+        ElseIf age <= 30 Then
+            bi = 3
+        ElseIf age <= 90 Then
+            bi = 4
+        Else
+            bi = 5
+        End If
+        Dim s As Double, rows As Double
+        s = DictVal(d("signed"), CStr(k))
+        rows = DictVal(d("rows"), CStr(k))
+        If s = 0 Then
+            none(bi) = none(bi) + 1
+        ElseIf rows - s >= 1 Then
+            part(bi) = part(bi) + 1
+        End If
+    Next k
+
+    Dim html As String
+    html = SvgBarsH(labels, none, part, -1)
+    html = html & CalcNote("Возраст от date до конца выгрузки; серии — «без единой подписи» и «подписан частично». " & _
+        "Чем старше корзина, тем она больше: событие прошло, подписывать нечего.")
+    BuildUnsignedAging = html
+End Function
+
+' {{BLOCK_UNSIGNED_SOURCE}} - «откуда берутся»: неподписанные с пустым постом.
+Private Function BuildUnsignedSource() As String
+    EnsureUnsignedData
+    Dim d As Object
+    Set d = mUnsigned
+    Dim none As Double, noneNoPost As Double
+    none = 0: noneNoPost = 0
+    Dim k As Variant
+    For Each k In d("all").Keys
+        If DictVal(d("signed"), CStr(k)) = 0 Then
+            none = none + 1
+            If d("noPost").Exists(k) Then noneNoPost = noneNoPost + 1
+        End If
+    Next k
+    If none = 0 Then BuildUnsignedSource = EmptyNote(): Exit Function
+
+    Dim html As String
+    html = "<p class='lede'><strong>" & FmtInt(noneNoPost) & " из " & FmtInt(none) & "</strong> неподписанных нарядов имеют пустой пост.</p>"
+    html = html & CalcNote("«Без поста» и «не подписано» — один дефект, а не два: наряд, не привязанный к посту ремзоны, не подписывает никто.")
+    BuildUnsignedSource = html
+End Function
+
+' {{BLOCK_UNSIGNED_ZNTYPE}} - неподписанные наряды по виду ремонта.
+Private Function BuildUnsignedByZnType() As String
+    EnsureUnsignedData
+    Dim d As Object
+    Set d = mUnsigned
+
+    Dim cnt As Object
+    Set cnt = CreateObject("Scripting.Dictionary")
+    Dim none As Double
+    none = 0
+    Dim k As Variant
+    For Each k In d("all").Keys
+        If DictVal(d("signed"), CStr(k)) = 0 Then
+            none = none + 1
+            Dim zt As String
+            zt = ""
+            If d("zn").Exists(k) Then zt = CStr(d("zn")(k))
+            If zt = "" Then zt = "(не указан)"
+            If cnt.Exists(zt) Then cnt(zt) = CDbl(cnt(zt)) + 1 Else cnt(zt) = 1
+        End If
+    Next k
+    If cnt.Count = 0 Then BuildUnsignedByZnType = EmptyNote(): Exit Function
+
+    Dim sorted As Variant
+    sorted = modAggregate.SortDictionaryKeysByValue(cnt, True)
+    Dim html As String, i As Long
+    html = "<table class='block-table'><thead><tr><th>Вид ремонта</th><th>ЗН</th><th>%</th></tr></thead><tbody>"
+    For i = LBound(sorted) To UBound(sorted)
+        Dim nameVal As String
+        nameVal = CStr(sorted(i))
+        html = html & "<tr><td>" & Esc(nameVal) & "</td><td class='num'>" & FmtInt(CDbl(cnt(nameVal))) & "</td>"
+        If none > 0 Then
+            html = html & "<td class='num'>" & FmtPct(CDbl(cnt(nameVal)) / none) & "</td></tr>"
+        Else
+            html = html & "<td class='num'>—</td></tr>"
+        End If
+    Next i
+    html = html & "</tbody></table>"
+    html = html & CalcNote("Наряды без единой подписи (ни в одной строке нет arm из {ПК, ПЛАНШЕТ}) по виду ремонта; % — от числа неподписанных нарядов.")
+    BuildUnsignedByZnType = html
+End Function
+
+' =====================================================================================
 ' 12. ParseAIResponse - двухшаговый разбор ответа Chat Completions (P0-4).
-'     Все 7 ключей slide1..slide7_conclusions складываются в module-level кэш mInsights;
-'     через ByRef slide3/4/5 наружу возвращаются прежние 3 значения (контракт, §5.1).
+'     Четыре ключа slide1..slide4_conclusions складываются в module-level кэш mInsights
+'     (ТЗ v1.2, T9.2). Контракт Core не меняется: ByRef slide3/4/5 наружу возвращают
+'     выводы слайдов 2/3/4, вывод слайда 1 - только через кэш mInsights("slide1").
 ' =====================================================================================
 Public Function ParseAIResponse(responseText As String, ByRef slide3 As String, ByRef slide4 As String, ByRef slide5 As String) As Boolean
     slide3 = AI_FALLBACK: slide4 = AI_FALLBACK: slide5 = AI_FALLBACK
@@ -2046,7 +3819,7 @@ Public Function ParseAIResponse(responseText As String, ByRef slide3 As String, 
     Dim missing As String
     missing = ""
     Dim i As Long, v As String
-    For i = 1 To 7
+    For i = 1 To 4
         v = JsonUnescape(ExtractJsonStringValue(payload, "slide" & CStr(i) & "_conclusions"))
         If v <> "" Then
             ins("slide" & CStr(i)) = v
@@ -2057,13 +3830,14 @@ Public Function ParseAIResponse(responseText As String, ByRef slide3 As String, 
         End If
     Next i
 
-    slide3 = ins("slide3")
-    slide4 = ins("slide4")
-    slide5 = ins("slide5")
+    ' Контракт Core: параметрами наружу - выводы слайдов 2/3/4, слайд 1 - только кэш.
+    slide3 = ins("slide2")
+    slide4 = ins("slide3")
+    slide5 = ins("slide4")
 
     If ok Then
         modLog.WriteDebug 1, "Формирование отчёта", "ParseAIResponse", _
-            "Распознаны все 7 ключей slide1..slide7_conclusions"
+            "Распознаны все 4 ключа slide1..slide4_conclusions"
     Else
         modLog.WriteDebug 1, "Формирование отчёта", "ParseAIResponse", _
             "Не распознаны: " & Left$(missing, Len(missing) - 2) & _
@@ -2193,66 +3967,76 @@ Public Function BuildPlaceholders(aiSlide3 As String, aiSlide4 As String, aiSlid
     Dim d As Object
     Set d = CreateObject("Scripting.Dictionary")
 
-    ' --- Слайд 1: два Дашборда + Блок 2 + график ---
-    d("DASH_1_YTD") = BuildDashboard("ytd")
-    d("DASH_1_PREV") = BuildDashboard("prev")
-    d("BLOCK_2_PREV") = BuildBlock2Table()
-    d("BLOCK_2_CHART") = BuildBlock2Chart()
-
-    ' --- Слайды 2/3: Блок 1 (все ремзоны / набор SLIDE_ZONES) + Блок 6 ---
     Dim zonesRaw As String
     zonesRaw = Trim$(modMain.GetVariableDef("REPORT/SLIDE_ZONES", "СТК+ПРК"))
-    d("BLOCK_1_DENT_ALL") = BuildBlock1Table("ДЭНТ", "")
-    d("BLOCK_1_DGM_ALL") = BuildBlock1Table("ДГМ", "")
+    Dim zonesNorm As String
+    zonesNorm = NormalizeZones(zonesRaw)
+
+    ' --- Общие: заголовок, период, неделя, факты ---
+    d("REPORT_TITLE") = "Отчёт МТО"
+    d("REPORT_PERIOD") = ReportPeriodCaption()
+    d("REPORT_WEEK_LABEL") = WeekLabelCaption(ReportWeekValue())
+    d("FACTS") = BuildFacts()
+
+    ' --- Слайд 1 ---
+    d("KPI_OVERVIEW") = BuildKpiOverview()
+    d("BLOCK_TIME_STATS") = BuildTimeStats()
+    d("BLOCK_TIME_HIST") = BuildTimeHistogram()
+    d("BLOCK_FLOW_ZNTYPE") = BuildFlowByZnType()
+    d("BLOCK_FLOW_DEFEKT") = BuildFlowByDefekt()
+    d("BLOCK_NOPOST_WEEKLY") = BuildNoPostWeekly()
+    modLog.WriteDebug 1, "Формирование отчёта", "BuildPlaceholders", _
+        "Слайд 1 готов: " & Round(Timer - t0, 2) & " c"
+
+    ' --- Слайды 2/3: одни функции, параметр - дирекция ---
+    d("BLOCK_WEEKS_DENT") = BuildWeeksTable("ДЭНТ", "")
+    d("BLOCK_WEEKS_DGM") = BuildWeeksTable("ДГМ", "")
     If zonesRaw = "" Then
-        ' Пустой REPORT/SLIDE_ZONES: второй экземпляр Блока 1 заменяется пояснением (ТЗ 3.2).
-        d("BLOCK_1_DENT_ZONES") = "<p class='empty-note'>Набор ремзон не задан (Variable/REPORT/SLIDE_ZONES).</p>"
-        d("BLOCK_1_DGM_ZONES") = "<p class='empty-note'>Набор ремзон не задан (Variable/REPORT/SLIDE_ZONES).</p>"
+        ' Пустой REPORT/SLIDE_ZONES: второй экземпляр таблицы не выводится (ТЗ T6.1).
+        d("BLOCK_WEEKS_ZONES_DENT") = "<p class='empty-note'>Набор ремзон не задан (Variable/REPORT/SLIDE_ZONES).</p>"
+        d("BLOCK_WEEKS_ZONES_DGM") = "<p class='empty-note'>Набор ремзон не задан (Variable/REPORT/SLIDE_ZONES).</p>"
     Else
-        d("BLOCK_1_DENT_ZONES") = BuildBlock1Table("ДЭНТ", zonesRaw)
-        d("BLOCK_1_DGM_ZONES") = BuildBlock1Table("ДГМ", zonesRaw)
+        d("BLOCK_WEEKS_ZONES_DENT") = BuildWeeksTable("ДЭНТ", zonesNorm)
+        d("BLOCK_WEEKS_ZONES_DGM") = BuildWeeksTable("ДГМ", zonesNorm)
     End If
-    d("BLOCK_6_DENT") = BuildBlock6Weekly("ДЭНТ", False)
-    d("BLOCK_6_DGM") = BuildBlock6Weekly("ДГМ", False)
-    d("BLOCK_6_DENT_DEPT") = BuildBlock6Weekly("ДЭНТ", True)
-    d("BLOCK_6_DGM_DEPT") = BuildBlock6Weekly("ДГМ", True)
+    d("BLOCK_POSTS_DENT") = BuildPostsChart("ДЭНТ")
+    d("BLOCK_POSTS_DGM") = BuildPostsChart("ДГМ")
+    d("BLOCK_PEOPLE_DENT") = BuildPeopleWeekly("ДЭНТ", "employee")
+    d("BLOCK_PEOPLE_DGM") = BuildPeopleWeekly("ДГМ", "employee")
+    d("BLOCK_DEPS_DENT") = "<details><summary>По подразделениям</summary>" & BuildPeopleWeekly("ДЭНТ", "emp_dep") & "</details>"
+    d("BLOCK_DEPS_DGM") = "<details><summary>По подразделениям</summary>" & BuildPeopleWeekly("ДГМ", "emp_dep") & "</details>"
+    d("BLOCK_SIGNSTAT_DENT") = BuildSignStat("ДЭНТ")
+    d("BLOCK_SIGNSTAT_DGM") = BuildSignStat("ДГМ")
+    d("BLOCK_UNSIGNED_AGE_DENT") = BuildUnsignedAgeByDir("ДЭНТ")
+    d("BLOCK_UNSIGNED_AGE_DGM") = BuildUnsignedAgeByDir("ДГМ")
+    modLog.WriteDebug 1, "Формирование отчёта", "BuildPlaceholders", _
+        "Слайды 2/3 готовы: " & Round(Timer - t0, 2) & " c"
 
-    ' --- Слайд 4: синхронность ---
-    d("BLOCK_7_TABLE") = BuildSyncTable(False)
-    d("BLOCK_8_TABLE") = BuildSyncTable(True)
+    ' --- Слайд 4 ---
+    d("KPI_UNSIGNED") = BuildUnsignedKpi()
+    d("BLOCK_UNSIGNED_AGE") = BuildUnsignedAging()
+    d("BLOCK_UNSIGNED_SOURCE") = BuildUnsignedSource()
+    d("BLOCK_UNSIGNED_ZNTYPE") = BuildUnsignedByZnType()
+    modLog.WriteDebug 1, "Формирование отчёта", "BuildPlaceholders", _
+        "Слайд 4 готов: " & Round(Timer - t0, 2) & " c"
 
-    ' --- Слайд 5: дефекты и рейтинг ---
-    d("BLOCK_9_TABLE") = BuildBlock9Table()
-    d("BLOCK_9A_TABLE") = BuildBlock9aTable()
-    d("BLOCK_6_RATING") = BuildBlock6Rating()
-
-    ' --- Слайды 6/7: динамика ---
-    d("BLOCK_4_TABLE") = BuildPctMatrixTable("direction", "Дирекция")
-    d("BLOCK_5_TABLE") = BuildPctMatrixTable("postN", "Пост")
-
-    ' --- Дамп расшифровки (п.10): JsonEscape, без HtmlEscape (§5.4) ---
-    d("DATA_DUMP") = "<script type='application/json' id='drill-dump'>" & BuildDataDump() & "</script>"
-
-    ' --- Выводы ИИ: из кэша при mInsightsReady, иначе fallback (1/2/6/7 - заглушка) ---
+    ' --- Выводы ИИ: кэш при mInsightsReady, иначе fallback (контракт: aiSlide3/4/5 = слайды 2/3/4) ---
     Dim ai As Object
     Set ai = CreateObject("Scripting.Dictionary")
     Dim i As Long
     If mInsightsReady Then
-        For i = 1 To 7
+        For i = 1 To 4
             ai("slide" & CStr(i)) = CStr(mInsights("slide" & CStr(i)))
         Next i
     Else
         ai("slide1") = AI_FALLBACK
-        ai("slide2") = AI_FALLBACK
-        ai("slide3") = aiSlide3
-        ai("slide4") = aiSlide4
-        ai("slide5") = aiSlide5
-        ai("slide6") = AI_FALLBACK
-        ai("slide7") = AI_FALLBACK
+        ai("slide2") = aiSlide3
+        ai("slide3") = aiSlide4
+        ai("slide4") = aiSlide5
     End If
-    For i = 1 To 7
-        ' Обратная замена [EMP_N] -> ФИО (по убыванию номеров), затем HtmlEscape.
-        d("AI_INSIGHT_SLIDE_" & CStr(i)) = Esc(ReplaceEmpMarkers(CStr(ai("slide" & CStr(i)))))
+    For i = 1 To 4
+        ' Обратная замена псевдонимов «Сотрудник N» -> ФИО, затем HtmlEscape.
+        d("AI_INSIGHT_SLIDE_" & CStr(i)) = Esc(DeAlias(CStr(ai("slide" & CStr(i)))))
     Next i
 
     modLog.WriteDebug 1, "Формирование отчёта", "BuildPlaceholders", _
@@ -2272,6 +4056,81 @@ Public Function BuildPlaceholders(aiSlide3 As String, aiSlide4 As String, aiSlid
 
     Set BuildPlaceholders = d
 End Function
+
+' Подпись периода выгрузки для шапки ({{REPORT_PERIOD}}).
+Private Function ReportPeriodCaption() As String
+    EnsureSnapshot
+    Dim n As Long, r As Long
+    n = modAggregate.RowCount()
+    Dim dMin As Double, dMax As Double
+    dMin = 0: dMax = 0
+    For r = 1 To n
+        Dim dte As Variant
+        dte = modAggregate.CellRaw(r, "date")
+        If IsNumeric(dte) Then
+            If dMin = 0 Or CDbl(dte) < dMin Then dMin = CDbl(dte)
+            If CDbl(dte) > dMax Then dMax = CDbl(dte)
+        End If
+    Next r
+    If dMin = 0 Then ReportPeriodCaption = "": Exit Function
+    ReportPeriodCaption = "Выгрузка " & Format(CDate(dMin), "dd.mm.yyyy") & " — " & Format(CDate(dMax), "dd.mm.yyyy")
+End Function
+
+' «неделя 202635 (нед. 35/2026)» для {{REPORT_WEEK_LABEL}}.
+Private Function WeekLabelCaption(rw As Long) As String
+    If rw = 0 Then WeekLabelCaption = "отчётная неделя не определена": Exit Function
+    WeekLabelCaption = "неделя " & CStr(rw) & " (нед. " & CStr(rw Mod 100) & "/" & CStr(rw \ 100) & ")"
+End Function
+
+' Отладочная сверка плейсхолдеров: каждый {{...}} шаблона есть в словаре и наоборот (приёмка T9).
+' templatePath: пусто -> ThisWorkbook.Path & "\tmp_index.html". Результат - в Immediate.
+Public Sub DebugCheckPlaceholders(Optional templatePath As String = "")
+    Dim p As String
+    p = templatePath
+    If Trim$(p) = "" Then p = ThisWorkbook.Path & "\tmp_index.html"
+
+    Dim html As String
+    On Error GoTo ErrRead
+    html = modHTMLEngine.ReadUtf8(p)
+    On Error GoTo 0
+
+    Dim tpl As Object
+    Set tpl = CreateObject("Scripting.Dictionary")
+    Dim pos As Long
+    pos = InStr(html, "{{")
+    Do While pos > 0
+        Dim posEnd As Long
+        posEnd = InStr(pos + 2, html, "}}")
+        If posEnd = 0 Then Exit Do
+        Dim name As String
+        name = Mid$(html, pos + 2, posEnd - pos - 2)
+        tpl(name) = True
+        pos = InStr(posEnd + 2, html, "{{")
+    Loop
+
+    Dim d As Object
+    Set d = BuildPlaceholders(AI_FALLBACK, AI_FALLBACK, AI_FALLBACK)
+
+    Dim missing As String, extra As String
+    missing = "": extra = ""
+    Dim k As Variant
+    For Each k In tpl.Keys
+        If Not d.Exists(k) Then missing = missing & k & ", "
+    Next k
+    For Each k In d.Keys
+        If Not tpl.Exists(k) Then extra = extra & k & ", "
+    Next k
+
+    If missing = "" And extra = "" Then
+        Debug.Print "DebugCheckPlaceholders: OK (" & d.Count & " плейсхолдеров, расхождений нет)"
+    Else
+        Debug.Print "В шаблоне, но НЕ в словаре: " & IIf(missing = "", "нет", missing)
+        Debug.Print "В словаре, но НЕ в шаблоне: " & IIf(extra = "", "нет", extra)
+    End If
+    Exit Sub
+ErrRead:
+    Debug.Print "DebugCheckPlaceholders: не удалось прочитать шаблон " & p & " - " & Err.Description
+End Sub
 
 ' =====================================================================================
 ' 14. Статусы (п.13): единое правило сравнения через NormStatus.

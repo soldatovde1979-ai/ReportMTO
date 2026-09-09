@@ -11,6 +11,14 @@ Attribute VB_Name = "modAggregate"
 '   P2-2  - данные читаются в память ОДИН раз на прогон (BeginSnapshot), а не в каждом GroupCount.
 '   P1-13 - пустая tbDATA (DataBodyRange = Nothing) не роняет модуль: RowCount = 0.
 '
+' v3.2 (09.09.2026), ТЗ v1.2 задача T2:
+'   T2  - GroupPercentile/Percentile: перцентили по числовому столбцу с тем же снимком и
+'         теми же фильтрами, что остальные агрегации. Метод - линейная интерполяция между
+'         соседями отсортированного ряда (как EXCEL.PERCENTILE.INC), чтобы числа сходились
+'         с ручной проверкой в книге. Сортировка - собственный QuickSort, без
+'         Application.WorksheetFunction. Пустые/нечисловые значения в выборку не попадают;
+'         группа без значений в результат не включается.
+'
 ' КОНТРАКТ ИСПОЛЬЗОВАНИЯ (изменён в v3.1):
 '   modAggregate.BeginSnapshot lo      ' один раз перед серией агрегаций
 '   ... GroupCount / GroupCountDistinct / GroupAverage / DistinctValues ...
@@ -289,6 +297,202 @@ Public Function GroupAverage(groupCols As Variant, valueCol As String, Optional 
     For Each k In sums.Keys
         avgs(k) = sums(k) / counts(k)
     Next k
+End Function
+
+' =====================================================================================
+' Перцентили (v3.2, T2). Возвращают перцентиль p (0..1) по числовому столбцу valueCol.
+' =====================================================================================
+' Возвращает Dictionary: ключ группировки ("знач1|знач2|", как у GroupCount)
+'                        -> значение перцентиля p по valueCol.
+' Пустые/нечисловые значения valueCol в выборку не попадают.
+' Если после фильтрации в группе нет ни одного значения - группа в результат не включается.
+Public Function GroupPercentile(ByVal groupCols As Variant, _
+                                ByVal valueCol As String, _
+                                ByVal p As Double, _
+                                Optional ByVal filters As Variant) As Object
+    RequireSnapshot
+    ValidatePercentile p
+    Dim d As Object: Set d = CreateObject("Scripting.Dictionary")
+    Set GroupPercentile = d
+    If mRows = 0 Then Exit Function
+
+    Dim gi() As Long: gi = ColIndexes(groupCols)
+    Dim vci As Long: vci = ColIndex(valueCol)
+
+    ' Проход 1: подсчёт числовых значений по группам (точный ReDim ниже - без ReDim Preserve).
+    Dim counts As Object: Set counts = CreateObject("Scripting.Dictionary")
+    Dim total As Long: total = 0
+    Dim r As Long, key As String, v As Variant
+    For r = 1 To mRows
+        If RowMatchesFilters(r, filters) Then
+            v = mData(r, vci)
+            If Not IsEmpty(v) Then
+                If Not IsError(v) Then
+                    If IsNumeric(v) Then
+                        key = GroupKey(r, gi)
+                        If counts.Exists(key) Then counts(key) = counts(key) + 1 Else counts(key) = 1
+                        total = total + 1
+                    End If
+                End If
+            End If
+        End If
+    Next r
+    If total = 0 Then Exit Function
+
+    ' Стабильная нумерация групп и плоские массивы значений.
+    Dim groupList() As String
+    ReDim groupList(0 To counts.Count - 1)
+    Dim gnum As Object: Set gnum = CreateObject("Scripting.Dictionary")
+    Dim idx As Long: idx = 0
+    Dim k As Variant
+    For Each k In counts.Keys
+        groupList(idx) = CStr(k)
+        gnum(CStr(k)) = idx
+        idx = idx + 1
+    Next k
+
+    Dim vals() As Double, gids() As Long
+    ReDim vals(0 To total - 1)
+    ReDim gids(0 To total - 1)
+
+    ' Проход 2: заполнение плоских массивов.
+    Dim pos As Long: pos = 0
+    For r = 1 To mRows
+        If RowMatchesFilters(r, filters) Then
+            v = mData(r, vci)
+            If Not IsEmpty(v) Then
+                If Not IsError(v) Then
+                    If IsNumeric(v) Then
+                        key = GroupKey(r, gi)
+                        vals(pos) = CDbl(v)
+                        gids(pos) = CLng(gnum(key))
+                        pos = pos + 1
+                    End If
+                End If
+            End If
+        End If
+    Next r
+
+    ' Перенос значений группы, сортировка, перцентиль.
+    Dim g As Long
+    For g = 0 To counts.Count - 1
+        Dim gv() As Double
+        ReDim gv(0 To CLng(counts(groupList(g))) - 1)
+        Dim gpos As Long: gpos = 0
+        Dim s As Long
+        For s = 0 To total - 1
+            If gids(s) = g Then
+                gv(gpos) = vals(s)
+                gpos = gpos + 1
+            End If
+        Next s
+        QSortD gv, 0, UBound(gv)
+        d(groupList(g)) = PctlOfSorted(gv, UBound(gv) + 1, p)
+    Next g
+End Function
+
+' Перцентиль по всему отфильтрованному набору, без группировки. Возвращает Double.
+' При отсутствии значений возвращает 0 и выставляет ByRef-флаг hasValue = False.
+Public Function Percentile(ByVal valueCol As String, _
+                           ByVal p As Double, _
+                           Optional ByVal filters As Variant, _
+                           Optional ByRef hasValue As Boolean) As Double
+    Percentile = 0
+    hasValue = False
+    RequireSnapshot
+    ValidatePercentile p
+    If mRows = 0 Then Exit Function
+
+    Dim vci As Long: vci = ColIndex(valueCol)
+
+    ' Проход 1: подсчёт числовых значений.
+    Dim total As Long: total = 0
+    Dim r As Long, v As Variant
+    For r = 1 To mRows
+        If RowMatchesFilters(r, filters) Then
+            v = mData(r, vci)
+            If Not IsEmpty(v) Then
+                If Not IsError(v) Then
+                    If IsNumeric(v) Then total = total + 1
+                End If
+            End If
+        End If
+    Next r
+    If total = 0 Then Exit Function
+
+    ' Проход 2: заполнение (один ReDim, без Preserve).
+    Dim vals() As Double
+    ReDim vals(0 To total - 1)
+    Dim pos As Long: pos = 0
+    For r = 1 To mRows
+        If RowMatchesFilters(r, filters) Then
+            v = mData(r, vci)
+            If Not IsEmpty(v) Then
+                If Not IsError(v) Then
+                    If IsNumeric(v) Then
+                        vals(pos) = CDbl(v)
+                        pos = pos + 1
+                    End If
+                End If
+            End If
+        End If
+    Next r
+
+    QSortD vals, 0, total - 1
+    hasValue = True
+    Percentile = PctlOfSorted(vals, total, p)
+End Function
+
+' p вне диапазона 0..1 - ошибка с внятным текстом (до обращения к снимку).
+Private Sub ValidatePercentile(ByVal p As Double)
+    If p < 0 Or p > 1 Then
+        Err.Raise vbObjectError + 5, , "modAggregate: перцентиль p вне диапазона 0..1: " & CStr(p)
+    End If
+End Sub
+
+' Быстрая сортировка Double (0..n-1). Мелкие отрезки (<32) - сортировка вставками:
+' глубина рекурсии ограничена ~log2(n/32), стек VBA не переполняется.
+Private Sub QSortD(ByRef a() As Double, ByVal lo As Long, ByVal hi As Long)
+    If hi - lo < 32 Then
+        Dim k As Long, m As Long, t As Double
+        For k = lo + 1 To hi
+            t = a(k)
+            m = k - 1
+            Do While m >= lo
+                If a(m) <= t Then Exit Do
+                a(m + 1) = a(m)
+                m = m - 1
+            Loop
+            a(m + 1) = t
+        Next k
+        Exit Sub
+    End If
+
+    Dim i As Long, j As Long, piv As Double
+    i = lo: j = hi
+    piv = a((lo + hi) \ 2)
+    Do While i <= j
+        Do While a(i) < piv: i = i + 1: Loop
+        Do While a(j) > piv: j = j - 1: Loop
+        If i <= j Then
+            t = a(i): a(i) = a(j): a(j) = t
+            i = i + 1: j = j - 1
+        End If
+    Loop
+    If lo < j Then QSortD a, lo, j
+    If i < hi Then QSortD a, i, hi
+End Sub
+
+' Перцентиль по отсортированному ряду: линейная интерполяция, метод EXCEL.PERCENTILE.INC
+' (rank = (n-1)*p, дробная часть - интерполяция между соседями).
+Private Function PctlOfSorted(ByRef a() As Double, ByVal n As Long, ByVal p As Double) As Double
+    If n <= 1 Then PctlOfSorted = a(0): Exit Function
+    Dim rank As Double, lo As Long, hi As Long
+    rank = (n - 1) * p
+    lo = Int(rank)
+    hi = lo + 1
+    If hi > n - 1 Then hi = n - 1
+    PctlOfSorted = a(lo) + (rank - lo) * (a(hi) - a(lo))
 End Function
 
 ' Уникальные значения столбца (с учётом фильтров): значение -> количество строк.
