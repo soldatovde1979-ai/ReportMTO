@@ -143,10 +143,8 @@ End Sub
 ' вместо падения на 13-й секунде с Err -2147221502 «Столбец не найден».
 Public Function ValidateRequiredColumns() As Boolean
     EnsureSnapshot
-    Dim required As Variant
-    required = Array("yearWeek", "postN", "Key", "in_bounds", "arm", _
-                     "number", "ready_for", "status_date", "date", "direction", _
-                     "zn_type", "defekt_type")
+    Dim required() As String
+    required = Split("yearWeek,postN,Key,in_bounds,arm,number,ready_for,status_date,date,direction,zn_type,defekt_type", ",")
     Dim missing As String
     missing = ""
     Dim i As Long

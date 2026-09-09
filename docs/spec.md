@@ -321,8 +321,8 @@ Core **не хранит** формулу `Key` (и других вычисля�
     "date": { "type": "string", "format": "date-time", "description": "Дата и время создания заказ-наряда" },
     "ready_for": {
       "type": "string",
-      "enum": ["Готов к приёмке", "Готов к выбытию"],
-      "description": "Статус заказ-наряда"
+      "enum": ["Готов к приемке", "Готов к выбытию"],
+      "description": "Статус заказ-наряда. 1С пишет через «е» («Готов к приемке»); сравнения в коде нормализуют (NormStatus)"
     },
     "direction": {
       "type": "string",
@@ -395,7 +395,7 @@ Core **не хранит** формулу `Key` (и других вычисля�
     },
     "deltaHours": {
       "type": ["number", "null"],
-      "description": "Вычисляемое поле. Часы между status_date записи «Готов к приёмке» и записи «Готов к выбытию» в рамках одной пары (number, direction). Присваивается ТОЛЬКО строке со статусом «Готов к выбытию»; у строки «Готов к приёмке» — null. ⚠️ При >2 статусных записей на пару (number, direction) берутся min/max по status_date — не подтверждено заказчиком",
+      "description": "Вычисляемое поле. Часы между status_date записи «Готов к приемке» и записи «Готов к выбытию» в рамках одной пары (number, direction). Присваивается ТОЛЬКО строке со статусом «Готов к выбытию»; у строки «Готов к приемке» — null. ⚠️ При >2 статусных записей на пару (number, direction) берутся min/max по status_date — не подтверждено заказчиком. Статус 1С пишет через «е»; сравнение нормализует (NormStatus)",
       "computed_by": "fnComputeGroupMetrics"
     },
     "isWait": {
@@ -486,7 +486,7 @@ Core **не хранит** формулу `Key` (и других вычисля�
         WithDelta = Table.TransformColumns(Grouped, {"GroupRows", each
             let
                 g = _,
-                startRows = Table.SelectRows(g, each [ready_for] = "Готов к приёмке" and [status_date] <> null),
+                startRows = Table.SelectRows(g, each [ready_for] = "Готов к приемке" and [status_date] <> null), // 1С пишет через «е»
                 endRows   = Table.SelectRows(g, each [ready_for] = "Готов к выбытию" and [status_date] <> null),
                 tStart = if Table.IsEmpty(startRows) then null else List.Min(startRows[status_date]),
                 tEnd   = if Table.IsEmpty(endRows)   then null else List.Max(endRows[status_date]),

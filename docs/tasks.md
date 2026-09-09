@@ -24,6 +24,27 @@
       «НЕ ПОДПИСАНО»). Правки: modContentMTO v7.2, tmp_index.html v2.1 (корень и build\). Компиляция
       VBA в Excel и e2e не прогонялись.
 - [x] Обновить [`docs/rules.md`](rules.md) — дополнен 08.09.2026 (правила cmd/PowerShell, search_files/JSON, выгрузка 2026)
+- [x] ФАЗА 1 (09.09.2026): Compile error «ByRef argument type mismatch» в ValidateRequiredColumns
+      устранён объявлением `Dim required() As String` + `Split(...)` (modContentMTO.bas); компиляция
+      всего VBAProject пройдена автоматически через COM Run — COMPILE_OK (tools/compile_check.ps1).
+      Вопрос владельцу: менять ли Core HasColumn на `ByVal columnName As String` — ждёт решения.
+- [x] ФАЗА 2 (09.09.2026): ретеншн tbDATA (инструкция §4) — qKeepWeeks.pq (лист Variable, ключ
+      DATA/KEEP_WEEKS), финальный шаг R-1 в Query-ImportJSON v7.3 (опорная дата status_date, иначе
+      date; отсечка от самой свежей недели данных; 0 = выключено; строка без даты сохраняется).
+      Ключ DATA/KEEP_WEEKS=52 добавлен в tblVariable build-книг (tools/add_keep_weeks_key.ps1).
+      install.ps1 на build: все VERIFY_OK. Проверка ретеншна на тестовом JSON
+      (tools/check_retention.ps1): KW0=23 / KW52=22 / KW1=22, повторные прогоны идемпотентны —
+      отсечена единственная строка вне окна (2025-08-25). Перенос в рабочую книгу — не сделан
+      (книга вне репозитория, нужен ручной «Загрузить» и контроль KEEP_WEEKS=1).
+- [x] ФАЗА 3.2 (09.09.2026): документация приведена к инварианту «е» — «Готов к приемке» в
+      docs/spec.md (enum, deltaHours, образец M-кода) и docs/specs/content-spec.md с пояснением
+      «1С пишет через «е», сравнение нормализует (NormStatus)»; docs/archive не тронут.
+- [ ] Ждут решения владельца: (1) HasColumn ByVal в Core; (2) ФАЗА 3.1 развилка norm_status —
+      столбец в fnNormalizeFields (а) или нормализация в modAggregate (б); (3) ФАЗА 4.1 парсер
+      операторов фильтра (латентный дефект «по левому вхождению»); (4) допущение ретеншна —
+      отсечка от свежей недели данных и KEEP_WEEKS=52 как стартовое значение.
+- [ ] НЕ СДЕЛАНО: ФАЗА 4.2 синхронизация claude_spec/claude_data/claude_next-steps.md —
+      файлы приложены к проекту Claude вне репозитория; в workspace их нет.
 - [ ] Разобрать ошибки ИИ-слоя из логов книги: «Слой ИИ пропущен: Столбец 'year_status' не найден в tbDATA», «Ошибка -2147221502: Столбец 'year_status' не найден в tbDATA», «Ответ ИИ не распознан или недоступен - используются заглушки». Переоткрыто 08.09.2026: первопричина — рабочая книга (вне репозитория, 136108 строк) содержит M-код v5, где `*_status` не вычисляются из `status_date`, а выгрузка 2026 их не отдаёт -> столбцы `year_status`/`week_status` исчезли из tbDATA, VBA падал на ColIndex. Сделано: VBA больше не опирается на `year_status` (год из `yearWeek`), добавлен `ValidateRequiredColumns`; M-код v6 доставлен в корневую ReportMTO.xlsm. Осталось: доставить v6 в рабочую книгу из лога и перезагрузить данные.
 - [x] Зафиксировать, что при чек-ине и arm = НЕ ПОДПИСАНО планшет приложен к метке, но документ не подписан — arm корректен (записано в [`docs/spec.md`](spec.md) и [`docs/data.md`](data.md) 08.09.2026)
 - [x] Расширенное логирование (08.09.2026): ключ `DEBUG` на листе Variable (0 — штатно, 1 — этапы и
