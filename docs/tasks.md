@@ -10,6 +10,13 @@
 
 ## Срочно
 
+- [x] install.ps1 v1.8 / install_prod.ps1 v1.4 (09.09.2026): подробный по-модульный вывод
+      (VBA_ADDED/DIFF/SAME, PQ_ADDED/DIFF/SAME/SKIP, TPL_DIFF/SAME) и обязательная пост-установочная
+      верификация по исходникам (VBA/PQ/TPL_VERIFY_OK|FAIL, VERIFY_OK|FAIL; провал -> exit 1).
+      Лог человекочитаемый (русские пояснения + позиция первого отличия и коды символов, UTF-8 консоль).
+      Диагностикой найдены и убраны ложные различия: Attribute-строка VBA (не возвращается
+      CodeModule.Lines) и конечный перевод строки PQ (обрезается Excel при Save). Контрольный прогон
+      install_prod 09.09.2026: все SAME + все VERIFY_OK, exit 0.
 - [x] tz_Reports2.md: проверено, что уже реализовано, и закрыты остатки — `BuildBlock6Weekly` с
       параметром `byDept` и новые плейсхолдеры `BLOCK_6_DENT_DEPT`/`BLOCK_6_DGM_DEPT` (понедельная
       раскладка по подразделениям) на слайдах 2/3; пустой `REPORT/SLIDE_ZONES` -> пояснение в

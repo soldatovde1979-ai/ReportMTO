@@ -37,6 +37,8 @@
 - `[Excel/диагностика]` «Зависание» COM-прогона = модальный диалог VBA (Compile/Run-time error) или VBE в Break. -> Перечисляй окна процесса EXCEL.EXE через user32 `EnumWindows` (заголовок диалога) и `VBE.ActiveCodePane.GetSelection` (текущая строка).
 - `[Excel/COM]` `Workbooks.Open` с относительным путём падает («не удалось открыть файл»), хотя `Test-Path` его видит. -> В COM-скриптах пути всегда абсолютные (`Resolve-Path`).
 - `[Power Query/диагностика]` Refresh падает с `[Expression.Error]`, а формулы книги равны исходникам. -> Локализуй постадийно: замени формулу запроса на голый `Json.Document(File.Contents(prmSourcePath), 65001)` и наращивай шаги конвейера до отказа; полный текст ошибки лови VBA-макросом с `On Error` + запись `Err.Description` в файл.
+- `[VBA/CodeModule]` CodeModule.Lines не возвращает строку `Attribute VB_Name = ...` — исходник .bas всегда «отличается» от модуля в позиции 0. -> Перед сравнением вырезай Attribute-строки из исходника (regex).
+- `[Excel/PQ]` Query.Formula после Save теряет конечный перевод строки, а .pq оканчивается на \r\n — сравнение «в лоб» всегда ложно-различно. -> Сравнивай формулы с TrimEnd().
 
 ## Git
 
