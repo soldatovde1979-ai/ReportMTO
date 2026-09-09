@@ -1,0 +1,59 @@
+SHEETS: Pivots, Main, Variable, Logs, tbDATA
+VAR TABLE: tblVariable rows=14
+VAR[1]: AI/PROVIDER = DeepSeek
+VAR[2]: AI/API_KEY = <HIDDEN len=0>
+VAR[3]: AI/MODEL = deepseek-chat
+VAR[4]: AI/ENDPOINT = https://api.deepseek.com/chat/completions
+VAR[5]: REPORT/WEEKS_WINDOW = 8
+VAR[6]: REPORT/SYNC_THRESHOLD_MIN = 5
+VAR[7]: REPORT/TOPN = 10
+VAR[8]: OUTPUT/RESULT_FOLDER = C:\Projects\ReportMTO\result
+VAR[9]: REPORT/WEEK = 0
+VAR[10]: REPORT/MIN_POST_RECORDS = 10
+VAR[11]: REPORT/SLIDE_ZONES = СТК+ПРК
+VAR[12]: NormaForPlanshet = 90
+VAR[13]: ProvalForPlanshet = 50
+VAR[14]: DEBUG = 2
+LOGS TABLE: tbLogs rows=75
+LOGLAST[1]: 46274.3698958333 | Отладка | Снимок данных | modAggregate.ColIndex | Столбец 'year_status' отсутствует в tbDATA. Имеющиеся столбцы: number, date, ready_for, direction, status_date, employee, arm, post, post_raw, zn_type, emp_dep, model_type, in_bounds, defekt_type, defect_desc, owner_dep, TekStatusPoDoc, vehicle_group, vehicle_number, hourdlit, MadeYear, Sektor, cost_parts, cost_Trudozatrat, ts, zn_closed, odometer, engine_hours, postN, yearWeek, Key, deltaHours
+LOGLAST[2]: 46274.3698958333 | Ошибка | Формирование отчёта | GenerateReport | Ошибка -2147221502: Столбец 'year_status' не найден в tbDATA
+LOGLAST[3]: 46274.3698958333 | Отладка | Формирование отчёта | GenerateReport | Падение через 18,16 c от старта: 0 ()
+tbDATA TABLE: tbDATA rows=136108 cols=32
+---QUERIES---
+Q: prmSourcePath => "C:\Change\AI_ERP\sppr_tablet_20260908_113928_17552rec.json" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+Q: fnNormalizeFields => // fnNormalizeFields — CONTENT SPEC (МТО). Реализация контракта Core §5.1.
+//
+// Контракт (с v3.1): (tbl as table) as table — таблица целиком, не построчно.
+// Вход: таблица после разворачивания JSON....
+Q: fnComputeKey => // fnComputeKey — CONTENT SPEC (МТО). Реализация контракта Core §5.1.
+// Вход: запись строки (уже типизированная, с postN), выход: текст ключа.
+//
+// v7 (06.09.2026), одна правка:
+//   K-3 — statu...
+Q: fnComputeGroupMetrics => // fnComputeGroupMetrics — CONTENT SPEC (МТО). Реализация контракта Core §5.1.
+// Вход/выход: вся таблица (после добавления Key). Обеспечивает Отчёт №1 «Дельта статусов».
+//
+// v5 (02.09.2026), две пр...
+Q: fnUpsert => // fnUpsert — CORE, generic (не зависит от полей направления).
+// Контракт: обе таблицы содержат столбец "Key" (имя фиксировано, см. Architecture Core §5.1).
+// Семантика (неизменна): строки newData З...
+Q: Query-ImportJSON => // Query - ImportJSON — CORE, generic ETL-пайплайн (Architecture Core §5, §5.1).
+// Вызывает по фиксированным именам контракта: fnNormalizeFields, fnComputeKey,
+// fnDedupByKey, fnComputeGroupMetric...
+Q: qExistingData => // qExistingData — CORE, generic. НОВЫЙ запрос версии v5 (02.09.2026).
+// Единственная задача: отдать текущее содержимое листовой таблицы tbDATA.
+//
+// Зачем отдельным запросом: см. L-2 в Query-Import...
+Q: fnDedupByKey => // fnDedupByKey — CONTENT SPEC (МТО). Новая функция контракта, введена v7 (06.09.2026).
+//
+// НАЗНАЧЕНИЕ. Обеспечить уникальность Key в newData ДО передачи в fnUpsert.
+// fnUpsert (Core) склеивает ...
+Q: qKeepWeeks => // qKeepWeeks — CORE, generic. Новый запрос v7.3: глубина хранения tbDATA в неделях.
+// Возвращает число. 0 = ретеншн выключен (ключа нет, пусто, ноль или мусор в значении).
+//
+// Источник — лист Vari...
+---CONNECTIONS---
+C: Запрос — prmSourcePath (1)
+C: Запрос — qExistingData (1)
+C: Запрос — Query-ImportJSON (1)
+C: Подключение (1)

@@ -35,6 +35,30 @@
       Диагностикой найдены и убраны ложные различия: Attribute-строка VBA (не возвращается
       CodeModule.Lines) и конечный перевод строки PQ (обрезается Excel при Save). Контрольный прогон
       install_prod 09.09.2026: все SAME + все VERIFY_OK, exit 0.
+- [x] 09.09.2026: install_prod падал на VERIFY_FAIL VBA:modContentMTO. Причина: VBE при импорте
+      .bas сам добавляет `:` после `Else` с оператором на той же строке (строка `Else vals(6)=...`
+      → в книге `Else: vals(6)=...`), поэтому книга всегда отличалась от исходника. Исправлен
+      исходник modContentMTO.bas (`Else:`), повторный install_prod: все SAME + VERIFY_OK, exit 0;
+      compile_check: COMPILE_OK. Отдельно: в modContentMTO.bas 10 юникод-символов вне cp1251
+      (⚠▲▼→∈×−) превращаются в «?» при импорте через ANSI — верификация этого не ловит (roundtrip).
+- [x] 09.09.2026: «Method or data member not found» на modAggregate.Percentile в корневой книге.
+      Причина: install.ps1 ставил только modMain/modContentMTO, а modAggregate v3.2 (Percentile,
+      GroupPercentile) в книгу не попадал — новый modContentMTO вызывал отсутствующие функции.
+      Сделано: modAggregate добавлен в install.ps1 (установка + верификация), корневая книга и
+      build обновлены (VERIFY_OK), compile_check корневой: COMPILE_OK. В e2e добавлен STEP0_COMPILE
+      (полная компиляция проекта до импорта тестового модуля).
+- [x] 09.09.2026: e2e доведён до зелёного. Починено: «Subscript out of range» в
+      BuildKpiOverview (окно из одной недели: opened(2)/closed(2)/hang(2)/med(2) без
+      защиты hasPrev — ретеншн отсекает вторую неделю тестового JSON) — предвычисление
+      cur/prev; эталоны modSelfTest.bas v1.2 переписаны под 4 слайда и 22 строки,
+      e2e-скрипт: STEP0_COMPILE, ожидания 22, маркеры STEP4 (mto-report/slide-nav вместо
+      удалённого drill-dump), печать всех CHECK в терминал. Прогон: ALL PASSED
+      (35 CHECK=1 + upsert). Прод обновлён (install_prod: modContentMTO/modAggregate
+      переустановлены, VERIFY_OK). Отчёт на проде: result\Report_20260909_233710.html
+      (1,37 МБ, 36 c) — ИИ вернул 0 символов, выводы заглушки (ключи на месте:
+      AI_API_KEY/ deepseek.key; причина — недоступность провайдера, не код).
+- [x] tests/expected.md дополнен актуальными эталонами e2e v7 (22 строки, 4 слайда,
+      ключевые цифры). Полная переработка остального документа (эталоны v6.1) — не делалась.
 - [x] tz_Reports2.md: проверено, что уже реализовано, и закрыты остатки — `BuildBlock6Weekly` с
       параметром `byDept` и новые плейсхолдеры `BLOCK_6_DENT_DEPT`/`BLOCK_6_DGM_DEPT` (понедельная
       раскладка по подразделениям) на слайдах 2/3; пустой `REPORT/SLIDE_ZONES` -> пояснение в
@@ -77,6 +101,10 @@
 ## Бэклог
 
 - [ ] Сделать свёртку БД
-- [ ] Обновить ожидания e2e/self-test под fnDedupByKey v7: e2e ждёт 25 строк и `DASH_YTD_476`,
-      факт — 23 строки (дедупликация ключей) и иное YTD; обновить [`tests/expected.md`](../tests/expected.md)
-      и CHECK-константы [`tests/modSelfTest.bas`](../tests/modSelfTest.bas)
+- [ ] Обновить эталоны e2e/self-test под текущую логику (прогон 09.09.2026): e2e ждёт 25 строк и
+      CHECK-константы 7 слайдов/BLOCK6/EMP1 (tests/modSelfTest.bas); факт — 22 строки (дедупликация
+      ключей + ретеншн KEEP_WEEKS=52: KW0=23/KW52=22 по tools/check_retention.ps1) и промпт 4 слайда
+      (ТЗ v1.2); STEP4 не создал свежий debug_*.html: DebugGenerateOffline падает с «Subscript out
+      of range» (лог %TEMP%\ReportMTO_log.txt, запись 09.09.2026 22:36). Обновить
+      tests/expected.md и CHECK-константы tests/modSelfTest.bas, локализовать строку ошибки
+      (DEBUG=1 / VBE break), затем перепрогнать e2e.

@@ -1,0 +1,5 @@
+00:14:48 | Opening C:\Projects\ReportMTO\ReportMTO.xlsm
+00:15:14 | STARTED GenerateReport via OnTime at 00:14:57
+00:19:48 | DONE at 37s: Report_20260910_001948.html
+00:19:48 | t=37s tail: 2026-09-10 00:19:48 | Отладка | Формирование отчёта | SaveHTMLFile | Папка: C:\Projects\ReportMTO\result; сохранён: C:\Projects\ReportMTO\result\Report_20260910_001948.html /// 2026-09-10 00:19:48 | Инфо | Формирование отчёта | C:\Projects\ReportMTO\result | Сохранён: C:\Projects\ReportMTO\result\Report_20260910_001948.html
+00:19:51 | Saving and closing book

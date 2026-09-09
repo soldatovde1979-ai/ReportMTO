@@ -2028,7 +2028,7 @@ Private Function TimeBucketsToJson() As String
             ElseIf CDbl(v) < 8 Then vals(3) = vals(3) + 1
             ElseIf CDbl(v) < 24 Then vals(4) = vals(4) + 1
             ElseIf CDbl(v) < 72 Then vals(5) = vals(5) + 1
-            Else vals(6) = vals(6) + 1
+            Else: vals(6) = vals(6) + 1
             End If
         End If
     Next r
@@ -2909,11 +2909,24 @@ Private Function BuildKpiOverview() As String
     unsPrev = 0
     If hasPrev Then unsPrev = SafePctTwo(allEv(2), unsEv(2))
 
+    ' Защита от окна из одной недели: обращение к (2) допустимо только при hasPrev,
+    ' иначе «Subscript out of range» (массивы открытых/закрытых имеют размер cnt).
+    Dim opCur As Double, opPrev As Double, clCur As Double, clPrev As Double
+    opCur = CDbl(opened(1).Count): opPrev = 0
+    clCur = CDbl(closed(1).Count): clPrev = 0
+    If hasPrev Then opPrev = CDbl(opened(2).Count): clPrev = CDbl(closed(2).Count)
+    Dim hangPrev As Double
+    hangPrev = 0
+    If hasPrev Then hangPrev = hang(2)
+
     Dim medVal As String, medDelta As String, medKind As String
+    Dim medPrev As Double
+    medPrev = 0
+    If hasPrev Then medPrev = med(2)
     If med(1) > 0 Then
         medVal = FormatHHMM(med(1))
-        medDelta = DeltaText(med(1), med(2), "hhmm", hasPrev)
-        medKind = DeltaKind(med(1), med(2), False, hasPrev)
+        medDelta = DeltaText(med(1), medPrev, "hhmm", hasPrev)
+        medKind = DeltaKind(med(1), medPrev, False, hasPrev)
     Else
         medVal = "н/д"
         medDelta = ""
@@ -2921,15 +2934,15 @@ Private Function BuildKpiOverview() As String
     End If
 
     Dim html As String
-    html = KpiTile("Нарядов открыто", FmtInt(CDbl(opened(1).Count)), "", _
-        DeltaText(CDbl(opened(1).Count), CDbl(opened(2).Count), "num", hasPrev), _
-        DeltaKind(CDbl(opened(1).Count), CDbl(opened(2).Count), True, hasPrev), SvgSpark(spOpen, "s1"))
-    html = html & KpiTile("Закрыто нарядов", FmtInt(CDbl(closed(1).Count)), "", _
-        DeltaText(CDbl(closed(1).Count), CDbl(closed(2).Count), "num", hasPrev), _
-        DeltaKind(CDbl(closed(1).Count), CDbl(closed(2).Count), True, hasPrev), SvgSpark(spClose, "s3"))
+    html = KpiTile("Нарядов открыто", FmtInt(opCur), "", _
+        DeltaText(opCur, opPrev, "num", hasPrev), _
+        DeltaKind(opCur, opPrev, True, hasPrev), SvgSpark(spOpen, "s1"))
+    html = html & KpiTile("Закрыто нарядов", FmtInt(clCur), "", _
+        DeltaText(clCur, clPrev, "num", hasPrev), _
+        DeltaKind(clCur, clPrev, True, hasPrev), SvgSpark(spClose, "s3"))
     html = html & KpiTile("Висит на конец недели", FmtInt(hang(1)), "", _
-        DeltaText(hang(1), hang(2), "num", hasPrev), _
-        DeltaKind(hang(1), hang(2), False, hasPrev), SvgSpark(spHang, "s2"))
+        DeltaText(hang(1), hangPrev, "num", hasPrev), _
+        DeltaKind(hang(1), hangPrev, False, hasPrev), SvgSpark(spHang, "s2"))
     html = html & KpiTile("Медиана в ремзоне", medVal, "", medDelta, medKind, SvgSpark(spMed, "s1"))
     html = html & KpiTile("Без поста ремзоны", FmtInt(CDbl(noPost(1).Count)), "· " & FmtPct(npCur) & " %", _
         DeltaText(npCur, npPrev, "pct", hasPrev), DeltaKind(npCur, npPrev, False, hasPrev), SvgSpark(spNoPost, "s4"))

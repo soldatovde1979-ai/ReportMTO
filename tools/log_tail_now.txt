@@ -1,0 +1,6 @@
+2026-09-09 13:51:49 | Отладка | Формирование отчёта | BuildPlaceholders | Готово: 27 плейсхолдеров за 567,24 c
+2026-09-09 13:51:49 | Отладка | Формирование отчёта | BuildPlaceholders | Размеры плейсхолдеров: DASH_1_YTD=3386; DASH_1_PREV=3394; BLOCK_2_PREV=6451; BLOCK_2_CHART=2205; BLOCK_1_DENT_ALL=1391; BLOCK_1_DGM_ALL=1383; BLOCK_1_DENT_ZONES=1396; BLOCK_1_DGM_ZONES=1388; BLOCK_6_DENT=66790; BLOCK_6_DGM=53869; BLOCK_6_DENT_DEPT=1888; BLOCK_6_DGM_DEPT=1880; BLOCK_7_TABLE=2844; BLOCK_8_TABLE=1980; BLOCK_9_TABLE=12202; BLOCK_9A_TABLE=30614; BLOCK_6_RATING=11687; BLOCK_4_TABLE=968; BLOCK_5_TABLE=2530; DATA_DUMP=43506892; AI_INSIGHT_SLIDE_1=54; AI_INSIGHT_SLIDE_2=54; AI_INSIGHT_SLIDE_3=54; AI_INSIGHT_SLIDE_4=54; AI_INSIGHT_SLIDE_5=54; AI_INSIGHT_SLIDE_6=54; AI_INSIGHT_SLIDE_7=54
+2026-09-09 13:51:49 | Отладка | Формирование отчёта | BuildPlaceholders | Плейсхолдеры готовы: 624,55 c от старта
+2026-09-09 13:51:52 | Отладка | Формирование отчёта | RenderTemplate | HTML собран: 43732854 символов, 626,92 c от старта
+2026-09-09 13:51:53 | Отладка | Формирование отчёта | SaveHTMLFile | Папка: C:\Projects\ReportMTO\result; сохранён: C:\Projects\ReportMTO\result\Report_20260909_135152.html
+2026-09-09 13:51:53 | Инфо | Формирование отчёта | C:\Projects\ReportMTO\result | Сохранён: C:\Projects\ReportMTO\result\Report_20260909_135152.html
