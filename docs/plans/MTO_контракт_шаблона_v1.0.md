@@ -71,6 +71,33 @@
 Подписи в полосах обрезаются по ширине колонки подписи: `maxch = (labw − 10) / 6.4`,
 хвост заменяется на `…`. Без этого длинные названия статусов налезают на полосу.
 
+## Год в номере недели
+
+Везде, где показывается неделя, формат **`ГГГГ-НН`** (`2026-13`), а не один номер.
+Причина: планируется сравнение с прошлым годом, и без года недели двух лет
+схлопываются в одну ось. Внутренний ключ `yearWeek` уже хранит `год*100 + неделя` —
+меняется только отображение.
+
+## Символы, которые нельзя писать литералом
+
+Модули импортируются в VBE через перекодировку UTF-8 → ANSI-1251, и всё, чего нет
+в 1251, молча превращается в `?`. На этом уже терялись стрелки дельты в плитках KPI.
+Проверка — `tools/vba_lint_v1.0/vba_lint.py`, правило `ENC1251`.
+
+В эталоне остались шесть таких символов. В коде их писать только через `ChrW$`:
+
+| Символ | Код | Вхождений | Как писать в VBA | В каких блоках |
+|---|---|---|---|---|
+| ₽ | U+20BD | 42 | `ChrW$(&H20BD)` | AI_INSIGHT_SLIDE_6, AI_INSIGHT_SLIDE_8, BLOCK_ABC, BLOCK_AGING, BLOCK_CHRONICS |
+| → | U+2192 | 19 | `ChrW$(&H2192)` | AI_INSIGHT_SLIDE_1, AI_INSIGHT_SLIDE_2, AI_INSIGHT_SLIDE_3, AI_INSIGHT_SLIDE_7, BLOCK_LIMITS |
+| ▲ | U+25B2 | 4 | `ChrW$(&H25B2)` | KPI_OVERVIEW |
+| ▼ | U+25BC | 4 | `ChrW$(&H25BC)` | KPI_OVERVIEW |
+| ∈ | U+2208 | 2 | `ChrW$(&H2208)` | BLOCK_WEEKS_DENT, BLOCK_WEEKS_DGM |
+| ≥ | U+2265 | 2 | `ChrW$(&H2265)` | BLOCK_POSTS_DENT, BLOCK_POSTS_DGM |
+
+Неразрывный пробел в разрядах чисел — это **U+00A0**, он в 1251 есть; в коде уже
+используется `ChrW$(&HA0)`. Узкий неразрывный (U+202F) не применять.
+
 ## Плейсхолдеры
 
 ### `{{REPORT_TITLE}}`
@@ -161,24 +188,34 @@
 Первая строка таблицы в эталоне:
 
 ```html
-<tr><td class="head">A</td><td class="n">130</td><td class="n">63,23 млн ₽</td><td class="n">80,1</td></tr>
+<tr><td class="head">A</td><td class="n">130</td><td class="n">63,23 млн ₽</td><td class="n">80,1</td></tr>
 ```
 
-### `{{BLOCK_AGING}}`
+### `{{BLOCK_AGE_CURVE}}`
 
-**Где:** слайд 5. **Что подставляет VBA:** SVG столбики+линия по когортам, <div class="legend">, <table> когорт, calc-note.
+**Где:** слайд 5. **Что подставляет VBA:** SVG столбики (машин по году выпуска) + линия (внеплановых нарядов на машину), legend, calc-note. Годы с числом машин меньше трёх не показываются.
 
 ```html
-<svg>
+<figure>
+  <svg>
+  <figcaption>
 <div .legend>
   <span>
   <span>
-<table>
+<div .calc-note>
+```
+
+### `{{BLOCK_AGE_MATRIX}}`
+
+**Где:** слайд 5. **Что подставляет VBA:** <table class="matrix"> когорта × узел: машин, внеплановых/машину, плановых/машину, затем проценты по группам дефекта в <td class="pct">, затем всего; calc-note.
+
+```html
+<table .matrix>
   <thead>
   <tbody>
 <div .calc-note>
   <b>
-  <code>
+  <b>
   <code>
   <code>
 ```
@@ -186,7 +223,24 @@
 Первая строка таблицы в эталоне:
 
 ```html
-<tr><td>до 5 лет</td><td class="n">96</td><td class="n">11,1</td><td class="n">4 тыс ₽</td><td class="n">896</td></tr>
+<tr><td class="head">до 5 лет</td><td class="n">96</td><td class="n">9,5</td><td class="n">3,6</td><td class="pct"><span style="border-color:#e56333">23</span></td><td class="pct"><span style="border-color:#e56432">24</span></td><td class="pct"><span style="border-color:#e56233">23</span></td><td class="pct"><span style="border-color:#e34e38">5</span></td><td class="pct"><span style="border-color:#e35137">8</span></td><td class="n">915</td></tr>
+```
+
+### `{{BLOCK_AGING}}`
+
+**Где:** слайд 5. **Что подставляет VBA:** <table> когорт по 5 лет: машин, заездов/машину, материалы/машину, часов/машину; calc-note.
+
+```html
+<table>
+  <thead>
+  <tbody>
+<div .calc-note>
+```
+
+Первая строка таблицы в эталоне:
+
+```html
+<tr><td>до 5 лет</td><td class="n">96</td><td class="n">11,1</td><td class="n">4 тыс ₽</td><td class="n">896</td></tr>
 ```
 
 ### `{{BLOCK_CHRONICS}}`
@@ -203,7 +257,27 @@
 Первая строка таблицы в эталоне:
 
 ```html
-<tr><td class="n mono" style="text-align:left;font-size:14px">2-29</td><td style="color:var(--ink-2)">Автобус перронный</td><td class="n">61</td><td class="n">86</td><td class="n">1 845</td><td class="n">212 тыс ₽</td><td class="n">7,7</td><td class="n mono">1 / 95 / 84</td><td><span class="pill crit">по заездам</span></td></tr>
+<tr><td class="n mono" style="text-align:left;font-size:14px">2-29</td><td style="color:var(--ink-2)">Автобус перронный</td><td class="n">61</td><td class="n">86</td><td class="n">1 845</td><td class="n">212 тыс ₽</td><td class="n">7,7</td><td class="n mono">1 / 95 / 84</td><td><span class="pill crit">по заездам</span></td></tr>
+```
+
+### `{{BLOCK_DEFECT_DETAIL}}`
+
+**Где:** слайд 6. **Что подставляет VBA:** <div class="two-col">: слева таблица «характер работы» (уровень 0), справа прокручиваемая таблица «группа и узел» (уровень 1) — строка группы с классом total, под ней узлы с отступом; calc-note с величиной остатка «(не классифицировано)».
+
+```html
+<div .two-col>
+  <div>
+  <div>
+<div .calc-note>
+  <code>
+  <b>
+  <code>
+```
+
+Первая строка таблицы в эталоне:
+
+```html
+<tr class="total"><td>Отказ</td><td class="n">5 500</td><td class="n">49,1</td></tr>
 ```
 
 ### `{{BLOCK_FLOW_DEFEKT}}`
@@ -230,7 +304,7 @@
 Первая строка таблицы в эталоне:
 
 ```html
-<tr><td>Внеплановый ремонт</td><td class="n">6 489</td><td class="n">73,2</td></tr>
+<tr><td>Внеплановый ремонт</td><td class="n">6 489</td><td class="n">73,2</td></tr>
 ```
 
 ### `{{BLOCK_LIMITS}}`
@@ -264,7 +338,7 @@
 Первая строка таблицы в эталоне:
 
 ```html
-<tr><td>Ходовая часть / Управление / Тормозная система</td><td class="n">22,23 млн ₽</td><td class="n">31,0</td></tr>
+<tr><td>Ходовая часть / Управление / Тормозная система</td><td class="n">22,23 млн ₽</td><td class="n">31,0</td></tr>
 ```
 
 ### `{{BLOCK_NOPOST_WEEKLY}}`
@@ -298,7 +372,7 @@
 Первая строка таблицы в эталоне:
 
 ```html
-<tr><td>8 ч</td><td class="n">12 956</td><td class="n">14,7 %</td></tr>
+<tr><td>8 ч</td><td class="n">12 956</td><td class="n">14,7 %</td></tr>
 ```
 
 ### `{{BLOCK_PARETO}}`
@@ -319,18 +393,25 @@
 Первая строка таблицы в эталоне:
 
 ```html
-<tr><td>Ходовая часть / Управление / Тормозная система</td><td class="n">2 847</td><td class="n">25,4</td><td class="n">25,4</td></tr>
+<tr><td>Ходовая часть / Управление / Тормозная система</td><td class="n">2 847</td><td class="n">25,4</td><td class="n">25,4</td></tr>
 ```
 
 ### `{{BLOCK_PEOPLE_DENT}}`
 
-**Где:** слайд 2. **Что подставляет VBA:** <div class="scroll"><table> с двумя строками шапки: 4 недели × 6 метрик. Первая колонка — ФИО как есть, <td class="head">.
+**Где:** слайд 2. **Что подставляет VBA:** <table> с двумя строками шапки: слева ЧЕТЫРЕ колонки «% планшета» за ПН-3…ПН, справа ПЯТЬ колонок только за отчётную неделю (всего подписей, из них планшет, приёмка, выбытие, ср. время). Первая колонка группы «отчётная неделя» помечается классом sep-l. ФИО как есть, <td class="head">.
 
 ```html
-<div .scroll>
-  <table>
+<table>
+  <thead>
+  <tbody>
 <div .calc-note>
   <b>
+```
+
+Первая строка таблицы в эталоне:
+
+```html
+<tr><td class="head">Зорин Дмитрий Александрович</td><td class="pct"><span style="border-color:#5aac53">88</span></td><td class="pct"><span style="border-color:#3bae5f">94</span></td><td class="pct"><span style="border-color:#4dad58">91</span></td><td class="pct"><span style="border-color:#2cae65">97</span></td><td class="n sep-l">155</td><td class="n">151</td><td class="n">77</td><td class="n">74</td><td class="n">17 мин</td></tr>
 ```
 
 ### `{{BLOCK_PEOPLE_DGM}}`
@@ -338,10 +419,17 @@
 **Где:** слайд 3. **Что подставляет VBA:** То же, что BLOCK_PEOPLE_DENT, дирекция ДГМ.
 
 ```html
-<div .scroll>
-  <table>
+<table>
+  <thead>
+  <tbody>
 <div .calc-note>
   <b>
+```
+
+Первая строка таблицы в эталоне:
+
+```html
+<tr><td class="head">Пермяков Михаил Геннадьевич</td><td class="pct"><span style="border-color:#3fad5e">94</span></td><td class="pct"><span style="border-color:#45ad5b">92</span></td><td class="pct"><span style="border-color:#1faf6a">100</span></td><td class="pct"><span style="border-color:#1faf6a">100</span></td><td class="n sep-l">69</td><td class="n">69</td><td class="n">33</td><td class="n">36</td><td class="n">1,3 ч</td></tr>
 ```
 
 ### `{{BLOCK_PHASES}}`
@@ -423,7 +511,7 @@
 
 ### `{{BLOCK_REPEATS}}`
 
-**Где:** слайд 6. **Что подставляет VBA:** <div class="scroll"><table> кандидатов на повтор + calc-note с дисклеймером.
+**Где:** слайд 6. **Что подставляет VBA:** <div class="scroll"><table> рабочий список кандидатов на повтор + calc-note с дисклеймером. Метрика возвратов считается в блоках BLOCK_RET_*, здесь — только список для мастера.
 
 ```html
 <div .scroll>
@@ -456,15 +544,32 @@
 <tr><td class="n">1</td><td>Отдельная отметка времени подписи у каждой дирекции в документе ЗН. Сейчас на обе стоит одно поле — <code>т1кДатаПриемки</code> и <code>т1кДатаВыдачи</code>, различаются только сотрудники</td><td>«Готово, но не забрано», синхронность дирекций, реальный простой техники</td></tr>
 ```
 
-### `{{BLOCK_SIGNSTAT_DENT}}`
+### `{{BLOCK_RETURN_HANG}}`
 
-**Где:** слайд 2. **Что подставляет VBA:** <table> неделя / ПК / планшет / % / нарядов без подписи.
+**Где:** слайд 7. **Что подставляет VBA:** <div class="scroll"><table> нарядов с подписанным выбытием, но не закрытых + calc-note.
 
 ```html
-<table>
-  <thead>
-  <tbody>
+<div .scroll>
+  <table>
 <div .calc-note>
+```
+
+Первая строка таблицы в эталоне:
+
+```html
+<tr><td class="mono">000312574</td><td class="mono">5-27</td><td class="n">90 сут</td><td>03.01</td><td>(не указан)</td><td style="color:var(--ink-2)">Ожидание ТМЦ</td></tr>
+```
+
+### `{{BLOCK_RETURN_HIST}}`
+
+**Где:** слайд 7. **Что подставляет VBA:** <div class="two-col">: слева SVG-полосы распределения «выбытие → закрытие», справа таблица по площадкам; calc-note с оговоркой про одно поле даты на обе дирекции.
+
+```html
+<div .two-col>
+  <div>
+  <div>
+<div .calc-note>
+  <b>
   <b>
   <code>
 ```
@@ -472,7 +577,110 @@
 Первая строка таблицы в эталоне:
 
 ```html
-<tr><td>6 <span class="mono" style="color:var(--muted)">2–8 фев</span></td><td class="n">1 549</td><td class="n">527</td><td class="pct"><span style="border-color:#e66532">25</span></td><td class="n">337</td></tr>
+<tr><td>СТК, цех 1</td><td class="n">4 598</td><td class="n">8 мин</td></tr>
+```
+
+### `{{BLOCK_RETURN_KPI}}`
+
+**Где:** слайд 7. **Что подставляет VBA:** Четыре плитки .kpi: застряли в ремзоне, готово но не закрыто, медиана «выбытие → закрытие», хвост дольше 7 суток.
+
+```html
+<div .kpis>
+  <div .kpi>
+  <div .kpi>
+  <div .kpi>
+  <div .kpi>
+```
+
+### `{{BLOCK_RETURN_STUCK}}`
+
+**Где:** слайд 7. **Что подставляет VBA:** <div class="scroll"><table> нарядов с приёмкой без выбытия, самые старые + calc-note.
+
+```html
+<div .scroll>
+  <table>
+<div .calc-note>
+```
+
+Первая строка таблицы в эталоне:
+
+```html
+<tr><td class="mono">000312674</td><td class="mono">5-52</td><td class="n">90 сут</td><td>01.01</td><td>(не указан)</td><td style="color:var(--ink-2)">Отменен, требует повторного планирования</td></tr>
+```
+
+### `{{BLOCK_RET_KPI}}`
+
+**Где:** слайд 6. **Что подставляет VBA:** Четыре плитки .kpi: возвратов по отказу (crit), по подкатегории, по группе дефекта, медиана интервала. Определение возврата стоит В ШАБЛОНЕ отдельным блоком .note перед плиткой — из VBA не меняется.
+
+```html
+<div .kpis>
+  <div .kpi>
+  <div .kpi>
+  <div .kpi>
+  <div .kpi>
+```
+
+### `{{BLOCK_RET_MONTH}}`
+
+**Где:** слайд 6. **Что подставляет VBA:** SVG: столбики — отказов за месяц, линия — доля возвратов. Периоды за границей «окно не закрыто» рисуются приглушённо (opacity 0.18), линия там пунктиром, граница — вертикальная пунктирная линия с подписью. Плюс legend и calc-note.
+
+```html
+<svg>
+<div .legend>
+  <span>
+  <span>
+<div .calc-note>
+```
+
+### `{{BLOCK_RET_NODE}}`
+
+**Где:** слайд 6. **Что подставляет VBA:** <table> узел / группа дефекта / отказов / возвратов / % в <td class="pct">; узлы от 40 отказов; calc-note.
+
+```html
+<table>
+  <thead>
+  <tbody>
+<div .calc-note>
+  <b>
+  <b>
+```
+
+Первая строка таблицы в эталоне:
+
+```html
+<tr><td class="head">Пуск и работа двигателя</td><td style="color:var(--ink-2)">ДВС</td><td class="n">781</td><td class="n">475</td><td class="pct"><span style="border-color:#c79331">61</span></td></tr>
+```
+
+### `{{BLOCK_RET_WEEK}}`
+
+**Где:** слайд 6. **Что подставляет VBA:** То же за 8 недель. Подписи оси — ГОД-НЕДЕЛЯ (2026-13), не один номер.
+
+```html
+<svg>
+<div .legend>
+  <span>
+  <span>
+<div .calc-note>
+  <b>
+```
+
+### `{{BLOCK_SIGNSTAT_DENT}}`
+
+**Где:** слайд 2. **Что подставляет VBA:** Блок по эскизу заказчика: <div class="two-col wide-l">, слева <table> «всего заказ-нарядов / подписаны полностью (с разбивкой планшет-вперемешку-ПК) / только приёмка / только выбытие / ни одного статуса», справа парные столбики возраста неподписанных статусов по двум статусам; calc-note.
+
+```html
+<div .two-col wide-l>
+  <div>
+  <div>
+<div .calc-note>
+  <b>
+  <b>
+```
+
+Первая строка таблицы в эталоне:
+
+```html
+<tr class="total"><td class="head">Всего заказ-нарядов</td><td class="n">15 231</td><td class="n">100,0 %</td></tr>
 ```
 
 ### `{{BLOCK_SIGNSTAT_DGM}}`
@@ -480,18 +688,18 @@
 **Где:** слайд 3. **Что подставляет VBA:** То же, что BLOCK_SIGNSTAT_DENT, дирекция ДГМ.
 
 ```html
-<table>
-  <thead>
-  <tbody>
+<div .two-col wide-l>
+  <div>
+  <div>
 <div .calc-note>
   <b>
-  <code>
+  <b>
 ```
 
 Первая строка таблицы в эталоне:
 
 ```html
-<tr><td>6 <span class="mono" style="color:var(--muted)">2–8 фев</span></td><td class="n">1 374</td><td class="n">702</td><td class="pct"><span style="border-color:#e76f2f">34</span></td><td class="n">337</td></tr>
+<tr class="total"><td class="head">Всего заказ-нарядов</td><td class="n">15 231</td><td class="n">100,0 %</td></tr>
 ```
 
 ### `{{BLOCK_TAIL_AGE}}`
@@ -635,6 +843,8 @@
   <li>
   <li>
   <li>
+  <li>
+  <li>
 ```
 
 ### `{{AI_INSIGHT_SLIDE_3}}`
@@ -643,6 +853,8 @@
 
 ```html
 <ul>
+  <li>
+  <li>
   <li>
   <li>
   <li>
@@ -687,6 +899,7 @@
 
 ```html
 <ul>
+  <li>
   <li>
   <li>
   <li>

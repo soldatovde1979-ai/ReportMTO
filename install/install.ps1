@@ -27,10 +27,14 @@
 #   VBA compare drops "Attribute VB_Name = ..." lines (CodeModule.Lines never
 #   returns them), PQ compare trims trailing whitespace (Excel drops the final
 #   line break of a stored formula on Save).
+# Version 1.9 / 2026-09-10: modContentZone и modContentDisc добавлены в список
+#   устанавливаемых модулей: без них шаблон v4.0 нечем заполнять (33 + 13
+#   плейсхолдеров живут в них).
 # Version 1.8 / 2026-09-09: set console output to UTF-8 so the Russian
 #   messages are readable in the terminal.
 # Applies the v7.1 patch to existing ReportMTO workbooks in place (Path A):
-#   - replaces VBA modules modMain, modContentMTO and modAggregate (Remove + Import,
+#   - replaces VBA modules modMain, modContentMTO, modContentZone, modContentDisc
+#     and modAggregate (Remove + Import,
 #     source re-encoded UTF-8 -> ANSI 1251, as VBE reads .bas only as ANSI);
 #   - copies the v2.0 template tmp_index.html next to each patched workbook;
 #   - makes timestamped backups of the workbook and the old template first.
@@ -146,7 +150,7 @@ foreach ($bookItem in $books) {
         $verifyFail = ""
 
         # VBA modules: add when missing, replace when different, skip when same.
-        foreach ($mod in @("modMain", "modContentMTO", "modAggregate")) {
+        foreach ($mod in @("modMain", "modContentMTO", "modContentZone", "modContentDisc", "modAggregate")) {
             $src = Join-Path $vbaDir ($mod + ".bas")
             $utf8 = [System.IO.File]::ReadAllText($src)
             $ansiText = $ansi.GetString($ansi.GetBytes($utf8))
@@ -201,7 +205,7 @@ foreach ($bookItem in $books) {
         $wb.Save()
 
         # Mandatory verification: installed code/formulas must match the sources.
-        foreach ($mod in @("modMain", "modContentMTO", "modAggregate")) {
+        foreach ($mod in @("modMain", "modContentMTO", "modContentZone", "modContentDisc", "modAggregate")) {
             $src = Join-Path $vbaDir ($mod + ".bas")
             $utf8 = [System.IO.File]::ReadAllText($src)
             $ansiText = $ansi.GetString($ansi.GetBytes($utf8))

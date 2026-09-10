@@ -8,10 +8,16 @@
 ```bash
 python3 compute.py      # слайды 1-4 -> metrics_a.json
 python3 compute_b.py    # слайды 5-8 -> metrics_b.json
+python3 compute_x.py    # статистика по дирекции, возврат техники, кривая -> metrics_x.json
+python3 compute_ret2.py # возвраты и классификатор дефекта -> metrics_ret2.json
 python3 render.py       # эталон: temp/MTO_макет_отчета_v4.0.html
 python3 build_tpl.py    # шаблон:  temp/tmp_index_v4.0.html
 python3 contract.py     # тело контракта плейсхолдеров
 ```
+
+`classify.py` — словарь классификатора описаний дефекта (два уровня: характер
+работы и узел внутри группы). Правила привязаны к группе, свободных категорий нет;
+остаток «(не классифицировано)» считается и показывается, а не прячется.
 
 Python 3, без внешних пакетов. Источник — `data/pri.json`.
 Отчётная неделя задана константой `RW` в `compute.py` и `compute_b.py`.

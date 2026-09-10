@@ -2,6 +2,38 @@ Attribute VB_Name = "modContentMTO"
 ' modContentMTO - CONTENT SPEC (МТО). Реализует 4 функции по контракту modMain.bas (Core):
 '   BuildPivots, BuildPrompt, ParseAIResponse, BuildPlaceholders(s3, s4, s5).
 '
+' Версия 8.0 от 10.09.2026: переход на шаблон v4.0 (8 слайдов, 59 плейсхолдеров).
+'   - модуль стал оркестратором: шапка, подвал, выводы ИИ и сборка словаря;
+'     содержимое слайдов 1 и 5-8 отдаёт modContentZone, слайдов 2-4 - modContentDisc;
+'   - BuildPlaceholders переписан под 59 ключей эталона MTO_макет_отчета_v4.0.html;
+'   - ParseAIResponse читает slide1..slide8_conclusions, промпт описывает 8 слайдов
+'     и получает сводку части «Техника» (ZoneFactsJson). Сигнатуры контракта Core
+'     не менялись: BuildPivots, BuildPrompt, ParseAIResponse(s3,s4,s5),
+'     BuildPlaceholders(s3,s4,s5);
+'   - AiList: вывод ИИ оборачивается в <ul><li>, как в эталоне;
+'   - PctBorderColor: шкала рамки процента 0/50/75/100 (Core modColor не менялся,
+'     используется только InterpolateHex);
+'   - WeeksList: запасной путь, если колонка yearWeek в книге мертва (нули) -
+'     ось времени берётся из даты создания наряда, факт пишется в лог.
+'   ВНИМАНИЕ: построители слайдов 1-4 версий <= 7.4 (BuildKpiOverview,
+'   BuildWeeksTable, BuildPostsChart, BuildPeopleWeekly, BuildSignStat,
+'   BuildUnsigned*, BuildDashboard и их помощники) больше НИКЕМ не вызываются.
+'   Не удалены намеренно - решение об удалении за автором проекта.
+'
+' Версия 7.4 от 10.09.2026:
+'   P0-1 - символы вне ANSI-1251 вынесены в ChrW$: стрелки дельты, минус, знак
+'          умножения, стрелка и знак принадлежности. При импорте .bas в VBE
+'          (UTF-8 -> 1251) они молча превращались в '?', и в отчёте вместо
+'          «(треугольник) 5 к пр. нед.» печаталось «? 5 к пр. нед.».
+'          Проверка: tools/vba_lint_v1.0/vba_lint.py.
+'   P0-2 - OverviewToJson больше не падает, когда в tbDATA нет столбца dateWeek
+'          (данные загружены до M v7). Раньше Err -2147221502 обрывал ВЕСЬ запрос
+'          к ИИ и все четыре вывода уходили в заглушки - см. журнал 09.09 8:52 и
+'          10.09 0:19. Теперь opened/unsigned отдаются как null, промпт собирается.
+'   P0-3 - помощники Esc, FmtInt, FmtPct, FormatHHMM, CalcNote, PctCell, EmptyNote,
+'          WeekLabel, RecentWeeksUpTo сделаны Public: их переиспользует
+'          modContentZone (часть «Техника», слайды 5-8) вместо дублирования.
+'
 ' v3.1 - переработан по итогам ревью 24.08.2026. Ключевые изменения:
 '   P1-1/2/3 - Блоки 1, 4, 5, 9 БОЛЬШЕ НЕ СТРОЯТСЯ ЧЕРЕЗ PivotTable. Причина: Pivot без Data
 '              Model не фильтрует поле в области страницы (оставался «(Все)»), строка «% планшет»
@@ -132,6 +164,8 @@ Private Sub ResetContentCaches()
 
     mInsightsReady = False
     Set mInsights = Nothing
+    modContentZone.ResetZone
+    modContentDisc.ResetDisc
 
     mEmpReady = False
     If IsArray(mEmpList) Then Erase mEmpList
@@ -263,7 +297,7 @@ Private Function IsMultiYear() As Boolean
 End Function
 
 ' yearWeek (202643) -> подпись столбца ("43" либо "43/2026").
-Private Function WeekLabel(yw As Variant) As String
+Public Function WeekLabel(yw As Variant) As String
     Dim n As Long
     If Not IsNumeric(yw) Then WeekLabel = CStr(yw): Exit Function
     n = CLng(yw)
@@ -309,14 +343,14 @@ Private Function FormatPct(pct As Double) As String
     FormatPct = Format(pct * 100, "0.0") & "%"
 End Function
 
-Private Function Esc(s As Variant) As String
+Public Function Esc(s As Variant) As String
     Esc = modHTMLEngine.HtmlEscape(CStr(s))
 End Function
 
 ' Ячейка «% планшет» (ТЗ v1.2, T4.1): цвет шкалы уходит в РАМКУ числа, фон ячейки - фон темы.
 ' hasValue=False -> <td class="pct empty">—</td> без рамки. Клик-расшифровка на процентах
 ' снята вместе с data-drill (§2.7 постановки: расшифровка - вне этой итерации).
-Private Function PctCell(pct As Double, Optional hasValue As Boolean = True) As String
+Public Function PctCell(pct As Double, Optional hasValue As Boolean = True) As String
     If Not hasValue Then
         PctCell = "<td class='pct empty'>—</td>"
         Exit Function
@@ -363,8 +397,32 @@ Private Function WeeksList() As Variant
     Dim d As Object
     Set d = modAggregate.DistinctValues("yearWeek", FBase())
     mWeeks = modAggregate.SortKeys(d, True)
+
+    ' Запасной путь: старый Power Query писал в yearWeek ноль на всех строках,
+    ' и ось времени умирала молча. Если в колонке нет ни одной осмысленной недели,
+    ' берём недели, посчитанные из даты создания наряда, и пишем это в лог.
+    If Not WeeksUsable(mWeeks) Then
+        mWeeks = modContentZone.WeeksFromDate()
+        modLog.WriteDebug 1, "Формирование отчёта", "WeeksList", _
+            "Колонка yearWeek не содержит недель (устаревший Power Query). " & _
+            "Ось времени взята из поля date: недель " & CStr(ArrLen(mWeeks)) & "."
+    End If
+
     mWeeksReady = True
     WeeksList = mWeeks
+End Function
+
+' Список недель годен, если в нём есть хотя бы одно значение больше нуля.
+Private Function WeeksUsable(ByVal weeks As Variant) As Boolean
+    WeeksUsable = False
+    If ArrLen(weeks) = 0 Then Exit Function
+    Dim i As Long
+    For i = LBound(weeks) To UBound(weeks)
+        If Val(KeyPart(weeks(i), 0)) > 0 Then
+            WeeksUsable = True
+            Exit Function
+        End If
+    Next i
 End Function
 
 ' Отчётная неделя (ключ REPORT/WEEK, task-for-coder §1):
@@ -447,7 +505,7 @@ Private Function PrevWeekBefore(w As Long) As String
 End Function
 
 ' Последние limit присутствующих yearWeek <= отчётной недели, по УБЫВАНИЮ, массив 1..count.
-Private Function RecentWeeksUpTo(limit As Long, ByRef count As Long) As Variant
+Public Function RecentWeeksUpTo(limit As Long, ByRef count As Long) As Variant
     Dim weeks As Variant
     weeks = WeeksList()
     If UBound(weeks) < LBound(weeks) Then
@@ -643,7 +701,7 @@ Private Function MedianFromPairs() As Double
 End Function
 
 ' Часы -> «чч:мм» с округлением до минут (решение заказчика).
-Private Function FormatHHMM(hours As Double) As String
+Public Function FormatHHMM(hours As Double) As String
     Dim totalMin As Long
     totalMin = CLng(Round(hours * 60))
     FormatHHMM = CStr(totalMin \ 60) & ":" & Right$("0" & CStr(totalMin Mod 60), 2)
@@ -1865,15 +1923,20 @@ End Function
 Public Function BuildPrompt() As String
     EnsureSnapshot
 
-    ' Системный промпт под 4 слайда (ТЗ v1.2, T9.1).
-    Const SYSTEM_PROMPT As String = _
-        "Ты ведущий аналитик данных. Проанализируй агрегированные метрики использования планшетов " & _
-        "в МТО (обзор, дирекции ДЭНТ и ДГМ, неподписанные события). Сформируй краткие бизнес-выводы " & _
-        "(до 4 предложений) для каждого из 4 слайдов. Ищи аномалии, в том числе по сотрудникам. " & _
-        "Не используй данные, которых нет во входном JSON. ФИО сотрудников во входных данных заменены " & _
-        "псевдонимами вида «Сотрудник 7» - не изменяй и не склоняй псевдонимы, ссылайся на сотрудников " & _
-        "только ими. Ответ строго в формате JSON с ключами slide1_conclusions, slide2_conclusions, " & _
-        "slide3_conclusions, slide4_conclusions, без markdown-разметки вокруг JSON."
+    ' Системный промпт под 8 слайдов: две части, ИИ только интерпретирует готовые числа.
+    Dim SYSTEM_PROMPT As String
+    SYSTEM_PROMPT = _
+        "Ты ведущий аналитик данных. Отчёт состоит из двух частей: слайды 1-4 - дисциплина " & _
+        "подписания на планшете (обзор недели, дирекции ДЭНТ и ДГМ, неподписанные наряды), " & _
+        "слайды 5-8 - операционка ремзоны (парк и заезды, что ломается и что возвращается, " & _
+        "фазы наряда и хвост незакрытого, материалы и качество учёта). Сформируй краткие " & _
+        "бизнес-выводы (2-3 пункта, каждый одним предложением) для каждого из 8 слайдов. "
+    SYSTEM_PROMPT = SYSTEM_PROMPT & _
+        "Ничего не вычисляй сам и не делай прогнозов: все числа уже посчитаны, твоя работа - " & _
+        "их интерпретация. Не оценивай людей. Не используй данных, которых нет во входном JSON. " & _
+        "ФИО сотрудников во входных данных заменены псевдонимами вида «Сотрудник 7» - не изменяй " & _
+        "и не склоняй псевдонимы, ссылайся на сотрудников только ими. Ответ строго в формате JSON " & _
+        "с ключами slide1_conclusions ... slide8_conclusions, без markdown-разметки вокруг JSON."
 
     ' Блоки собираются отдельно - при DEBUG=2 их длины идут в лог.
     Dim slide1 As String, slide2 As String, slide3 As String, slide4 As String
@@ -1883,10 +1946,13 @@ Public Function BuildPrompt() As String
     slide4 = UnsignedToJson()
 
     Dim userMessage As String
+    Dim zoneFacts As String
+    zoneFacts = modContentZone.ZoneFactsJson()
     userMessage = "{""slide1_overview"":" & slide1 & _
                   ",""slide2_dent"":" & slide2 & _
                   ",""slide3_dgm"":" & slide3 & _
-                  ",""slide4_unsigned"":" & slide4 & "}"
+                  ",""slide4_unsigned"":" & slide4 & _
+                  ",""part_b_zone"":" & zoneFacts & "}"
 
     Dim model As String
     model = modMain.GetVariable("AI/MODEL")
@@ -1920,8 +1986,24 @@ Private Function OverviewToJson() As String
     Dim rwS As String
     rwS = CStr(rw)
 
+    ' P0-2 (10.09.2026): столбец dateWeek появляется только в M v7. Если tbDATA
+    ' собрана прежней версией запроса, столбца нет - и обращение к нему роняло
+    ' ВЕСЬ запрос к ИИ (Err -2147221502), после чего все четыре вывода уходили
+    ' в заглушки. Подтверждено журналом прогонов 09.09 8:52 и 10.09 0:19.
+    ' Теперь метрики по неделе СОЗДАНИЯ наряда отдаются как null, остальной
+    ' промпт собирается штатно. Полностью восстанавливается загрузкой M v7.
+    Dim hasDW As Boolean
+    hasDW = modAggregate.HasColumn("dateWeek")
+    If Not hasDW Then
+        modLog.WriteDebug 1, "Формирование отчёта", "OverviewToJson", _
+            "Столбца dateWeek нет в tbDATA (данные загружены до M v7): " & _
+            "opened/unsigned уходят в промпт как null, остальные метрики считаются."
+    End If
+
     Dim opened As Double, closedN As Double
-    opened = DictVal(modAggregate.GroupCountDistinct(Array("dateWeek"), "number", FBase()), rwS & "|")
+    If hasDW Then
+        opened = DictVal(modAggregate.GroupCountDistinct(Array("dateWeek"), "number", FBase()), rwS & "|")
+    End If
     closedN = DictVal(modAggregate.GroupCountDistinct(Array("yearWeek"), "number", _
         Array("ready_for=Готов к выбытию")), rwS & "|")
 
@@ -1936,18 +2018,20 @@ Private Function OverviewToJson() As String
     pcEv = DictVal(armW, "ПК|")
 
     Dim allD As Object, armD As Object
-    Set allD = modAggregate.GroupCount(Array("dateWeek"), FBase())
-    Set armD = modAggregate.GroupCount(Array("arm"), Array("dateWeek=" & rwS))
     Dim allEv As Double, unsEv As Double
-    allEv = DictVal(allD, rwS & "|")
-    unsEv = DictVal(armD, "НЕ ПОДПИСАНО|")
+    If hasDW Then
+        Set allD = modAggregate.GroupCount(Array("dateWeek"), FBase())
+        Set armD = modAggregate.GroupCount(Array("arm"), Array("dateWeek=" & rwS))
+        allEv = DictVal(allD, rwS & "|")
+        unsEv = DictVal(armD, "НЕ ПОДПИСАНО|")
+    End If
 
     Dim kpi As String
-    kpi = "{""opened"":" & JInt(opened) & ",""closed"":" & JInt(closedN) & "," & _
+    kpi = "{""opened"":" & IIf(hasDW, JInt(opened), "null") & ",""closed"":" & JInt(closedN) & "," & _
         """median_hours"":" & IIf(hasMed, FmtJson(med), "null") & "," & _
         """tablet_pct"":" & FmtJson(SafePctTwo(tabEv + pcEv, tabEv)) & "," & _
-        """unsigned"":" & JInt(unsEv) & "," & _
-        """unsigned_pct"":" & FmtJson(SafePctTwo(allEv, unsEv)) & "}"
+        """unsigned"":" & IIf(hasDW, JInt(unsEv), "null") & "," & _
+        """unsigned_pct"":" & IIf(hasDW, FmtJson(SafePctTwo(allEv, unsEv)), "null") & "}"
 
     ' Корзины времени - те же границы, что BuildTimeHistogram (1/4/8/24/72 ч), обрезка p99.
     Dim buckets As String
@@ -2463,7 +2547,7 @@ Private Function ArrLen(a As Variant) As Long
     On Error GoTo 0
 End Function
 
-Private Function EmptyNote() As String
+Public Function EmptyNote() As String
     EmptyNote = "<div class='empty-note'>Нет данных</div>"
 End Function
 
@@ -2473,7 +2557,7 @@ Private Function FmtN(v As Double) As String
 End Function
 
 ' 1158 -> «1 158» (неразрывный пробел U+00A0), независимо от локали.
-Private Function FmtInt(v As Double) As String
+Public Function FmtInt(v As Double) As String
     Dim s As String
     s = CStr(CLng(Abs(v)))
     Dim out As String, i As Long, grp As Long
@@ -2484,12 +2568,12 @@ Private Function FmtInt(v As Double) As String
         grp = grp + 1
         If grp Mod 3 = 0 And i > 1 Then out = ChrW$(&HA0) & out
     Next i
-    If v < 0 Then out = "−" & out
+    If v < 0 Then out = ChrW$(&H2212) & out   ' U+2212 MINUS SIGN, вне 1251
     FmtInt = out
 End Function
 
 ' 0.723 -> «72,3» (десятичная запятая независимо от локали; без знака %).
-Private Function FmtPct(v As Double) As String
+Public Function FmtPct(v As Double) As String
     FmtPct = Replace$(Format(v * 100, "0.0"), ".", ",")
 End Function
 
@@ -2668,7 +2752,7 @@ End Function
 ' Блоки слайда 1 (ТЗ v1.2, T5). Единица счёта - заказ-наряд.
 ' =====================================================================================
 ' Подпись «как считается» под блоком (T8.2: .calc-note обязательна под каждым блоком).
-Private Function CalcNote(text As String) As String
+Public Function CalcNote(text As String) As String
     CalcNote = "<p class='calc-note'>" & Esc(text) & "</p>"
 End Function
 
@@ -2699,7 +2783,8 @@ Private Function AvgSimple(valueCol As String, ByRef hasValue As Boolean) As Dou
     AvgSimple = sum / cnt
 End Function
 
-' Текст дельты плитки: «▲ 5 к пр. нед.» / «▼ 1,2 п.п.» / «±0». Пусто, если предыдущей нет.
+' Текст дельты плитки: «(треугольник вверх) 5 к пр. нед.» / «(вниз) 1,2 п.п.» / «±0».
+' Пусто, если предыдущей недели нет.
 Private Function DeltaText(cur As Double, prev As Double, unit As String, hasPrev As Boolean) As String
     DeltaText = ""
     If Not hasPrev Then Exit Function
@@ -2710,7 +2795,9 @@ Private Function DeltaText(cur As Double, prev As Double, unit As String, hasPre
         Exit Function
     End If
     Dim arrow As String
-    arrow = IIf(d > 0, "▲", "▼")
+    ' ChrW: символы вне ANSI-1251 нельзя держать в исходнике - при импорте в VBE
+    ' (UTF-8 -> 1251) они превращаются в "?". См. tools/vba_lint_v1.0.
+    arrow = IIf(d > 0, ChrW$(&H25B2), ChrW$(&H25BC))   ' U+25B2 / U+25BC
     If unit = "pct" Then
         DeltaText = arrow & " " & FmtPct(Abs(d)) & " п.п."
     ElseIf unit = "hhmm" Then
@@ -2951,7 +3038,7 @@ Private Function BuildKpiOverview() As String
     html = html & KpiTile("Не подписано", FmtInt(unsEv(1)), "· " & FmtPct(unsCur) & " %", _
         DeltaText(unsCur, unsPrev, "pct", hasPrev), DeltaKind(unsCur, unsPrev, False, hasPrev), SvgSpark(spUns, "s2"))
 
-    html = html & "<p class='calc-note'>⚠️ Медиана меряет всё время от приёмки до подписания выбытия, включая очередь и ожидание запчастей; для «плана против факта» непригодна.</p>"
+    html = html & "<p class='calc-note'>" & ChrW$(&H26A0) & " Медиана меряет всё время от приёмки до подписания выбытия, включая очередь и ожидание запчастей; для «плана против факта» непригодна.</p>"
     html = html & CalcNote("За отчётную неделю (REPORT/WEEK). Открыто/без поста/не подписано - по дате создания (date), " & _
         "закрыто/% планшета/медиана - по дате статуса (status_date). Наряды - уникальные number; " & _
         "дельта - к предыдущей неделе окна, спарклайн - за WEEKS_WINDOW недель.")
@@ -3037,7 +3124,7 @@ Private Function BuildTimeHistogram() As String
 
     Dim html As String
     html = SvgBarsV(labels, values, "Время в ремзоне по корзинам, часов")
-    html = html & CalcNote("Пары (наряд × дирекция) с заполненным deltaHours; верхний 1 % значений обрезан " & _
+    html = html & CalcNote("Пары (наряд " & ChrW$(&HD7) & " дирекция) с заполненным deltaHours; верхний 1 % значений обрезан " & _
         "(p99 = " & FmtD(p99, "0.0") & " ч) — отброшено " & FmtInt(CDbl(dropped)) & " строк.")
     BuildTimeHistogram = html
 End Function
@@ -3427,7 +3514,7 @@ Private Function BuildPeopleWeekly(dir As String, groupField As String) As Strin
         html = html & CalcNote("Те же метрики по подразделениям (emp_dep); % планшет = ПЛАНШЕТ / (ПК + ПЛАНШЕТ) событий за неделю, «Среднее время» — средняя deltaHours по неделе, «чч:мм».")
     Else
         html = html & CalcNote("Недели ПН-3…ПН, присутствующие в данных; % планшет = ПЛАНШЕТ / (ПК + ПЛАНШЕТ) событий сотрудника за неделю; " & _
-            "всего подписей — уникальные Key; «Готов к приемке»/«Готов к выбытию» сравниваются с нормализацией «ё»→«е»; сортировка по % планшет за ПН, по убыванию.")
+            "всего подписей — уникальные Key; «Готов к приемке»/«Готов к выбытию» сравниваются с нормализацией «ё»" & ChrW$(&H2192) & "«е»; сортировка по % планшет за ПН, по убыванию.")
     End If
     BuildPeopleWeekly = html
 End Function
@@ -3675,7 +3762,7 @@ Private Function BuildUnsignedKpi() As String
         Dim pctFiltered As Double, pctAll As Double
         pctFiltered = tabEv / (tabEv + pcEv)
         pctAll = SafePercentNo(totalRows, tabEv)
-        html = html & "<div class='note'><strong>Что это значит для отчёта.</strong> При фильтре arm ∈ {ПК, ПЛАНШЕТ} отчёт показывает " & _
+        html = html & "<div class='note'><strong>Что это значит для отчёта.</strong> При фильтре arm " & ChrW$(&H2208) & " {ПК, ПЛАНШЕТ} отчёт показывает " & _
             FmtPct(pctFiltered) & " % и выглядит удовлетворительно; с учётом неподписанных доля событий, прошедших через планшет, — " & _
             FmtPct(pctAll) & " %. Оба числа верные, но отвечают на разные вопросы: первое — «чем подписывают», второе — «подписывают ли вообще».</div>"
     End If
@@ -3832,7 +3919,7 @@ Public Function ParseAIResponse(responseText As String, ByRef slide3 As String, 
     Dim missing As String
     missing = ""
     Dim i As Long, v As String
-    For i = 1 To 4
+    For i = 1 To 8
         v = JsonUnescape(ExtractJsonStringValue(payload, "slide" & CStr(i) & "_conclusions"))
         If v <> "" Then
             ins("slide" & CStr(i)) = v
@@ -3850,7 +3937,7 @@ Public Function ParseAIResponse(responseText As String, ByRef slide3 As String, 
 
     If ok Then
         modLog.WriteDebug 1, "Формирование отчёта", "ParseAIResponse", _
-            "Распознаны все 4 ключа slide1..slide4_conclusions"
+            "Распознаны все 8 ключей slide1..slide8_conclusions"
     Else
         modLog.WriteDebug 1, "Формирование отчёта", "ParseAIResponse", _
             "Не распознаны: " & Left$(missing, Len(missing) - 2) & _
@@ -3980,76 +4067,42 @@ Public Function BuildPlaceholders(aiSlide3 As String, aiSlide4 As String, aiSlid
     Dim d As Object
     Set d = CreateObject("Scripting.Dictionary")
 
-    Dim zonesRaw As String
-    zonesRaw = Trim$(modMain.GetVariableDef("REPORT/SLIDE_ZONES", "СТК+ПРК"))
-    Dim zonesNorm As String
-    zonesNorm = NormalizeZones(zonesRaw)
-
-    ' --- Общие: заголовок, период, неделя, факты ---
+    ' --- Шапка и подвал ---
+    Dim rw As Long
+    rw = modContentZone.ZoneReportWeek()
     d("REPORT_TITLE") = "Отчёт МТО"
-    d("REPORT_PERIOD") = ReportPeriodCaption()
-    d("REPORT_WEEK_LABEL") = WeekLabelCaption(ReportWeekValue())
-    d("FACTS") = BuildFacts()
+    d("REPORT_WEEK_LABEL") = modContentZone.WeekCaption(rw)
+    d("REPORT_LEDE") = BuildLede(rw)
+    d("FACTS") = BuildFactsRef()
+    d("REPORT_FOOTER") = BuildFooter(rw)
 
-    ' --- Слайд 1 ---
-    d("KPI_OVERVIEW") = BuildKpiOverview()
-    d("BLOCK_TIME_STATS") = BuildTimeStats()
-    d("BLOCK_TIME_HIST") = BuildTimeHistogram()
-    d("BLOCK_FLOW_ZNTYPE") = BuildFlowByZnType()
-    d("BLOCK_FLOW_DEFEKT") = BuildFlowByDefekt()
-    d("BLOCK_NOPOST_WEEKLY") = BuildNoPostWeekly()
-    modLog.WriteDebug 1, "Формирование отчёта", "BuildPlaceholders", _
-        "Слайд 1 готов: " & Round(Timer - t0, 2) & " c"
+    ' --- Слайды 1 и 5-8: часть «Техника» ---
+    modContentZone.FillZonePlaceholders d
+    ' --- Слайды 2-4: часть «Дисциплина» ---
+    modContentDisc.FillDiscPlaceholders d
 
-    ' --- Слайды 2/3: одни функции, параметр - дирекция ---
-    d("BLOCK_WEEKS_DENT") = BuildWeeksTable("ДЭНТ", "")
-    d("BLOCK_WEEKS_DGM") = BuildWeeksTable("ДГМ", "")
-    If zonesRaw = "" Then
-        ' Пустой REPORT/SLIDE_ZONES: второй экземпляр таблицы не выводится (ТЗ T6.1).
-        d("BLOCK_WEEKS_ZONES_DENT") = "<p class='empty-note'>Набор ремзон не задан (Variable/REPORT/SLIDE_ZONES).</p>"
-        d("BLOCK_WEEKS_ZONES_DGM") = "<p class='empty-note'>Набор ремзон не задан (Variable/REPORT/SLIDE_ZONES).</p>"
-    Else
-        d("BLOCK_WEEKS_ZONES_DENT") = BuildWeeksTable("ДЭНТ", zonesNorm)
-        d("BLOCK_WEEKS_ZONES_DGM") = BuildWeeksTable("ДГМ", zonesNorm)
-    End If
-    d("BLOCK_POSTS_DENT") = BuildPostsChart("ДЭНТ")
-    d("BLOCK_POSTS_DGM") = BuildPostsChart("ДГМ")
-    d("BLOCK_PEOPLE_DENT") = BuildPeopleWeekly("ДЭНТ", "employee")
-    d("BLOCK_PEOPLE_DGM") = BuildPeopleWeekly("ДГМ", "employee")
-    d("BLOCK_DEPS_DENT") = "<details><summary>По подразделениям</summary>" & BuildPeopleWeekly("ДЭНТ", "emp_dep") & "</details>"
-    d("BLOCK_DEPS_DGM") = "<details><summary>По подразделениям</summary>" & BuildPeopleWeekly("ДГМ", "emp_dep") & "</details>"
-    d("BLOCK_SIGNSTAT_DENT") = BuildSignStat("ДЭНТ")
-    d("BLOCK_SIGNSTAT_DGM") = BuildSignStat("ДГМ")
-    d("BLOCK_UNSIGNED_AGE_DENT") = BuildUnsignedAgeByDir("ДЭНТ")
-    d("BLOCK_UNSIGNED_AGE_DGM") = BuildUnsignedAgeByDir("ДГМ")
-    modLog.WriteDebug 1, "Формирование отчёта", "BuildPlaceholders", _
-        "Слайды 2/3 готовы: " & Round(Timer - t0, 2) & " c"
-
-    ' --- Слайд 4 ---
-    d("KPI_UNSIGNED") = BuildUnsignedKpi()
-    d("BLOCK_UNSIGNED_AGE") = BuildUnsignedAging()
-    d("BLOCK_UNSIGNED_SOURCE") = BuildUnsignedSource()
-    d("BLOCK_UNSIGNED_ZNTYPE") = BuildUnsignedByZnType()
-    modLog.WriteDebug 1, "Формирование отчёта", "BuildPlaceholders", _
-        "Слайд 4 готов: " & Round(Timer - t0, 2) & " c"
-
-    ' --- Выводы ИИ: кэш при mInsightsReady, иначе fallback (контракт: aiSlide3/4/5 = слайды 2/3/4) ---
+    ' --- Выводы ИИ: кэш при mInsightsReady, иначе fallback.
+    ' Контракт Core не менялся: aiSlide3/4/5 - выводы слайдов 2/3/4.
     Dim ai As Object
     Set ai = CreateObject("Scripting.Dictionary")
     Dim i As Long
+    For i = 1 To 8
+        ai("slide" & CStr(i)) = AI_FALLBACK
+    Next i
     If mInsightsReady Then
-        For i = 1 To 4
-            ai("slide" & CStr(i)) = CStr(mInsights("slide" & CStr(i)))
+        For i = 1 To 8
+            If mInsights.Exists("slide" & CStr(i)) Then
+                ai("slide" & CStr(i)) = CStr(mInsights("slide" & CStr(i)))
+            End If
         Next i
     Else
-        ai("slide1") = AI_FALLBACK
         ai("slide2") = aiSlide3
         ai("slide3") = aiSlide4
         ai("slide4") = aiSlide5
     End If
-    For i = 1 To 4
-        ' Обратная замена псевдонимов «Сотрудник N» -> ФИО, затем HtmlEscape.
-        d("AI_INSIGHT_SLIDE_" & CStr(i)) = Esc(DeAlias(CStr(ai("slide" & CStr(i)))))
+    For i = 1 To 8
+        ' Обратная замена псевдонимов «Сотрудник N» -> ФИО, затем экранирование.
+        d("AI_INSIGHT_SLIDE_" & CStr(i)) = AiList(DeAlias(CStr(ai("slide" & CStr(i)))))
     Next i
 
     modLog.WriteDebug 1, "Формирование отчёта", "BuildPlaceholders", _
@@ -4068,6 +4121,96 @@ Public Function BuildPlaceholders(aiSlide3 As String, aiSlide4 As String, aiSlid
     End If
 
     Set BuildPlaceholders = d
+End Function
+
+' Подзаголовок шапки: из чего собран отчёт и какая неделя отчётная.
+Private Function BuildLede(ByVal rw As Long) As String
+    Dim a As Double, b As Double
+    a = modContentZone.SnapFrom()
+    b = modContentZone.SnapTo()
+    Dim per As String
+    If a > 0 And b > 0 Then
+        per = Format$(CDate(a), "dd.mm.yyyy") & " " & ChrW$(&H2013) & " " & _
+            Format$(CDate(b), "dd.mm.yyyy")
+    Else
+        per = "период не определён"
+    End If
+    BuildLede = "Восемь слайдов в двух частях: дисциплина подписания на планшете " & _
+        "(слайды 1" & ChrW$(&H2013) & "4) и операционка ремзоны (слайды 5" & _
+        ChrW$(&H2013) & "8). Числа посчитаны на выгрузке 1С за " & per & _
+        "; отчётная неделя " & ChrW$(&H2014) & " " & modContentZone.WLab(rw) & _
+        " (" & modContentZone.WeekRange(rw) & "), последняя полная неделя снимка."
+End Function
+
+' Четыре числа шапки. Считает modContentZone - чтобы шапка не разошлась со слайдами.
+Private Function BuildFactsRef() As String
+    Dim h As String
+    h = "<div><dt>Событий</dt><dd class=""num"">" & _
+        FmtInt(modContentZone.EventsCount()) & "</dd></div>"
+    h = h & "<div><dt>Нарядов</dt><dd class=""num"">" & _
+        FmtInt(modContentZone.OrdersCount()) & "</dd></div>"
+    h = h & "<div><dt>Машин в парке</dt><dd class=""num"">" & _
+        FmtInt(modContentZone.FleetCount()) & "</dd></div>"
+    h = h & "<div><dt>Без поста</dt><dd class=""num"">" & _
+        modContentZone.Pc(modContentZone.NoPostPct(), 1) & "</dd></div>"
+    BuildFactsRef = h
+End Function
+
+Private Function BuildFooter(ByVal rw As Long) As String
+    BuildFooter = "Отчёт МТО " & ChrW$(&HB7) & " " & modContentZone.WeekCaption(rw) & _
+        " " & ChrW$(&HB7) & " автономный HTML: шрифты и графика встроены, внешних " & _
+        "запросов нет. Часть 1 " & ChrW$(&H2014) & " трек А (событие подписания), " & _
+        "часть 2 " & ChrW$(&H2014) & " трек Б (наряд, заезд, машина). Единицы счёта " & _
+        "разных треков не складываются."
+End Function
+
+' Вывод ИИ -> список. Модель отдаёт текст; в шаблоне на этом месте <ul>.
+Private Function AiList(ByVal t As String) As String
+    Dim body As String
+    body = Replace$(Replace$(CStr(t), vbCrLf, vbLf), vbCr, vbLf)
+    Dim parts As Variant, i As Long, out As String
+    parts = Split(body, vbLf)
+    out = ""
+    For i = LBound(parts) To UBound(parts)
+        Dim ln As String
+        ln = Trim$(CStr(parts(i)))
+        ' Модель иногда ставит маркер списка сама - убираем, разметку даёт шаблон.
+        Do While Len(ln) > 0
+            Dim c1 As String
+            c1 = Left$(ln, 1)
+            If c1 = "-" Or c1 = "*" Or c1 = ChrW$(&H2022) Then
+                ln = Trim$(Mid$(ln, 2))
+            Else
+                Exit Do
+            End If
+        Loop
+        If Len(ln) > 0 Then out = out & "<li>" & Esc(ln) & "</li>"
+    Next i
+    If out = "" Then out = "<li>" & Esc(AI_FALLBACK) & "</li>"
+    AiList = "<ul>" & out & "</ul>"
+End Function
+
+' Цвет рамки процента: 0 -> красный, 50 -> оранжевый, 75 -> оливковый, 100 -> зелёный.
+' Шкала из docs/plans/MTO_контракт_шаблона_v1.0.md; Core (modColor) не менялся.
+Public Function PctBorderColor(ByVal p As Double) As String
+    Dim stopsP As Variant, stopsC As Variant
+    stopsP = Array(0#, 50#, 75#, 100#)
+    stopsC = Array("#e2483a", "#e9822a", "#9aa93a", "#1faf6a")
+    Dim v As Double
+    v = p
+    If v < 0# Then v = 0#
+    If v > 100# Then v = 100#
+    Dim i As Long
+    For i = 0 To 2
+        If v <= CDbl(stopsP(i + 1)) Then
+            Dim t As Double
+            t = (v - CDbl(stopsP(i))) / (CDbl(stopsP(i + 1)) - CDbl(stopsP(i)))
+            PctBorderColor = LCase$(modColor.InterpolateHex(CStr(stopsC(i)), _
+                CStr(stopsC(i + 1)), t))
+            Exit Function
+        End If
+    Next i
+    PctBorderColor = "#1faf6a"
 End Function
 
 ' Подпись периода выгрузки для шапки ({{REPORT_PERIOD}}).
