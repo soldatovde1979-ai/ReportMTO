@@ -219,9 +219,8 @@ Public Function ValidateRequiredColumns() As Boolean
     If missing <> "" Then
         missing = Left$(missing, Len(missing) - 2)
         modLog.WriteLogEntry Now, "Ошибка", "Формирование отчёта", "ValidateRequiredColumns", _
-            "В tbDATA отсутствуют обязательные столбцы: " & missing
-        MsgBox "В таблице tbDATA отсутствуют обязательные столбцы:" & vbCrLf & missing & vbCrLf & _
-               "Обновите M-код (install.ps1) и перезагрузите данные.", vbCritical
+            "В tbDATA отсутствуют обязательные столбцы: " & missing & _
+            ". Обновите M-код (install.ps1) и перезагрузите данные."
         ValidateRequiredColumns = False
         Exit Function
     End If

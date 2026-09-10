@@ -53,7 +53,8 @@ Public Sub LoadSourceFile()
     modLog.WriteLogEntry Now, "Инфо", "Сводки", "modContentMTO.BuildPivots", _
         "Сводки построены; строк в tbDATA: " & SafeRowCount()
 
-    MsgBox "Загрузка завершена. Строк в tbDATA: " & rowsAfter, vbInformation
+    modLog.WriteLogEntry Now, "Инфо", "Загрузка данных", "LoadSourceFile", _
+        "Загрузка завершена. Строк в tbDATA: " & rowsAfter
     Exit Sub
 
 ErrHandler:
@@ -61,10 +62,10 @@ ErrHandler:
     ' v5 (M-2): прежний текст утверждал, что виноват файл. Большинство отказов на этом пути
     ' к файлу отношения не имеют (подключение не найдено, Formula Firewall, обрыв на типизации),
     ' и формулировка уводила от причины.
-    MsgBox "Загрузка не выполнена." & vbCrLf & vbCrLf & Err.Description & vbCrLf & vbCrLf & _
-           "Если в тексте выше упоминается Formula.Firewall - разово выключите уровни " & _
-           "конфиденциальности: Данные -> Получить данные -> Параметры запроса -> Конфиденциальность." & vbCrLf & _
-           "Подробности записаны на лист Logs.", vbCritical
+    modLog.WriteLogEntry Now, "Ошибка", "Загрузка данных", "LoadSourceFile", _
+        "Загрузка не выполнена: " & Err.Description & _
+        ". Если упоминается Formula.Firewall - разово выключите уровни конфиденциальности " & _
+        "(Данные -> Получить данные -> Параметры запроса -> Конфиденциальность)."
 End Sub
 
 ' Обновляет значение Power Query-параметра prmSourcePath (Architecture Core §5.1).
@@ -105,7 +106,8 @@ Public Sub GenerateReport()
         "Старт. Строк в tbDATA: " & SafeRowCount() & "; DEBUG=" & modLog.GetDebugLevel()
 
     If SafeRowCount() = 0 Then
-        MsgBox "Таблица tbDATA пуста - сначала нажмите «Загрузить» и выберите файл выгрузки.", vbExclamation
+        modLog.WriteLogEntry Now, "Ошибка", "Формирование отчёта", "GenerateReport", _
+            "Таблица tbDATA пуста - сначала загрузите файл выгрузки."
         GoTo CleanExit
     End If
 
@@ -192,9 +194,9 @@ Public Sub GenerateReport()
 
     If savedPath <> "" Then
         modLog.WriteLogEntry Now, "Инфо", "Формирование отчёта", resultFolder, "Сохранён: " & savedPath
-        MsgBox "Отчёт сохранён: " & savedPath, vbInformation
     Else
-        MsgBox "Не удалось сохранить отчёт - проверьте права доступа к папке результата.", vbCritical
+        modLog.WriteLogEntry Now, "Ошибка", "Формирование отчёта", "SaveHTMLFile", _
+            "Не удалось сохранить отчёт - проверьте права доступа к папке результата."
     End If
 
 CleanExit:
@@ -210,8 +212,8 @@ ErrHandler:
         " (" & Err.Description & ")"
     modAggregate.EndSnapshot
     Application.StatusBar = False
-    MsgBox "Не удалось сформировать отчёт." & vbCrLf & Err.Description & vbCrLf & vbCrLf & _
-           "Подробности записаны на лист Logs.", vbCritical
+    modLog.WriteLogEntry Now, "Ошибка", "Формирование отчёта", "GenerateReport", _
+        "Не удалось сформировать отчёт: " & Err.Description
 End Sub
 
 ' Отладочный прогон без обращения к внешнему ИИ (A-7): собирает отчёт с гарантированными
@@ -221,7 +223,8 @@ Public Sub DebugGenerateOffline()
     On Error GoTo ErrHandler
 
     If SafeRowCount() = 0 Then
-        MsgBox "Таблица tbDATA пуста.", vbExclamation
+        modLog.WriteLogEntry Now, "Ошибка", "Отладочный отчёт", "DebugGenerateOffline", _
+            "Таблица tbDATA пуста."
         Exit Sub
     End If
 
@@ -243,13 +246,11 @@ Public Sub DebugGenerateOffline()
     modAggregate.EndSnapshot
 
     modLog.WriteLogEntry Now, "Инфо", "Отладочный отчёт", folder, "Сохранён: " & path
-    MsgBox "Отладочный отчёт (без ИИ) сохранён: " & path, vbInformation
     Exit Sub
 
 ErrHandler:
     modAggregate.EndSnapshot
     modLog.WriteLogEntry Now, "Ошибка", "Отладочный отчёт", "DebugGenerateOffline", Err.Description
-    MsgBox "Ошибка отладочного прогона: " & Err.Description, vbCritical
 End Sub
 
 Private Function SafeRowCount() As Long
