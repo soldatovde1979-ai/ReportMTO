@@ -1,6 +1,10 @@
 Attribute VB_Name = "modContentZone"
 ' modContentZone - CONTENT-слой части «Техника» (слайды 5-8) отчёта МТО.
 '
+' Версия 2.2 от 10.09.2026 Две ошибки компиляции. Объявления уровня модуля
+'   (блоки «возвраты» и «фазы наряда») лежали в середине файла, после процедур -
+'   перенесены в секцию Declarations. В BuildAgeCurve и BuildChronics цикл
+'   For Each k закрывался Next i.
 ' Версия 2.1 от 10.09.2026 Возвращена потерянная WeeksFromDate: при переносе файла
 '   на диск последняя правка не доехала, и modContentMTO.WeeksList вызывал
 '   несуществующую функцию - «Sub or Function not defined» при компиляции.
@@ -88,6 +92,26 @@ Private mWeeks As Variant        ' 8 недель окна
 Private mSignTot As Object       ' ISO-неделя даты статуса -> подписей с известным АРМ
 Private mSignTab As Object       ' то же, только с планшета
 Private mRepWeek As Long
+
+' Счётчики блока «Возвраты техники» (слайд 6), уровни строгости.
+Private mRetReady As Boolean
+Private mRetNumM As Object, mRetNumW As Object      ' по группе
+Private mRetDenM As Object, mRetDenW As Object
+Private mFailNumM As Object, mFailNumW As Object    ' по подкатегории, только отказы
+Private mFailDenM As Object, mFailDenW As Object
+Private mRetTot As Long, mStrictTot As Long, mFailTot As Long
+Private mDenAll As Long, mDenFail As Long
+Private mGapMed As Double, mGapHas As Boolean
+Private mNodeNum As Object, mNodeDen As Object      ' «группа|узел» -> счётчик
+
+' Счётчики блока «Фазы наряда, возврат, хвост незакрытого» (слайд 7).
+Private mFlowReady As Boolean
+Private mCloseH As Collection      ' часы «выбытие -> zn_closed»
+Private mStuck As Collection       ' приёмка есть, выбытия нет
+Private mHang As Collection        ' выбытие есть, наряд не закрыт
+Private mTail As Collection        ' нет zn_closed вообще
+Private mPairBoth As Long, mPairEq As Long, mMaxAccLev As Double
+Private mLong720 As Long
 
 ' =====================================================================================
 ' Сброс и построение уровней
@@ -1380,7 +1404,7 @@ Public Function BuildAgeCurve() As String
     i = 0
     For Each k In cars.Keys
         yrs(i) = CDbl(k): tmp(i) = CStr(k): i = i + 1
-    Next i
+    Next k
     QSortPair yrs, tmp, 0, n - 1
 
     Dim labs() As Variant, bars() As Variant, ln() As Variant, m As Long
@@ -1644,15 +1668,8 @@ End Function
 '   4. Только внеплановые: у планового наряда дефекта нет.
 ' Уровни строгости: по группе, по подкатегории, по подкатегории и только отказы.
 ' =====================================================================================
-Private mRetReady As Boolean
-Private mRetNumM As Object, mRetNumW As Object      ' по группе
-Private mRetDenM As Object, mRetDenW As Object
-Private mFailNumM As Object, mFailNumW As Object    ' по подкатегории, только отказы
-Private mFailDenM As Object, mFailDenW As Object
-Private mRetTot As Long, mStrictTot As Long, mFailTot As Long
-Private mDenAll As Long, mDenFail As Long
-Private mGapMed As Double, mGapHas As Boolean
-Private mNodeNum As Object, mNodeDen As Object      ' «группа|узел» -> счётчик
+' Переменные блока объявлены в секции Declarations в шапке модуля:
+' объявления уровня модуля после первой процедуры VBA не принимает.
 
 ' mode: 0 - ключ = группа; 1 - группа+узел; 2 - группа+узел и только отказы.
 Private Function RetKey(ByVal z As Variant, ByVal mode As Long) As String
@@ -1928,7 +1945,7 @@ Public Function BuildChronics() As String
     i = 0
     For Each k In mVeh.Keys
         If CDbl(mVeh(k)(V_VISITS)) > 0# Then names(i) = CStr(k): i = i + 1
-    Next i
+    Next k
 
     Dim rVis As Object, rHrs As Object, rPrt As Object
     Set rVis = RankBy(names, V_VISITS)
@@ -2273,13 +2290,8 @@ End Function
 ' =====================================================================================
 ' СЛАЙД 7. Фазы наряда, возврат техники, хвост незакрытого
 ' =====================================================================================
-Private mFlowReady As Boolean
-Private mCloseH As Collection      ' часы «выбытие -> zn_closed»
-Private mStuck As Collection       ' приёмка есть, выбытия нет
-Private mHang As Collection        ' выбытие есть, наряд не закрыт
-Private mTail As Collection        ' нет zn_closed вообще
-Private mPairBoth As Long, mPairEq As Long, mMaxAccLev As Double
-Private mLong720 As Long
+' Переменные блока объявлены в секции Declarations в шапке модуля:
+' объявления уровня модуля после первой процедуры VBA не принимает.
 
 Private Sub EnsureFlow()
     If mFlowReady Then Exit Sub
