@@ -1,6 +1,9 @@
 Attribute VB_Name = "modContentDisc"
 ' modContentDisc - CONTENT-слой части «Дисциплина» (слайды 2-4) отчёта МТО.
 '
+' Версия 1.1 от 10.09.2026 Модульная переменная mE переименована в mOrd:
+'   VBA не различает регистр, и `mE` - это зарезервированное слово `Me`,
+'   объявление не компилировалось. Линтер дополнен до v1.1, чтобы ловить это.
 ' Версия 1.0 от 10.09.2026:
 '   - первый выпуск: недельная матрица по ремзонам, площадки за отчётную неделю,
 '     таблица по сотрудникам, разбор подписей наряда, слайд 4 «не подписано»;
@@ -21,7 +24,7 @@ Attribute VB_Name = "modContentDisc"
 ' Файл хранится в UTF-8 + CRLF. Символы вне ANSI-1251 запрещены.
 Option Explicit
 
-' Поля записи наряда (mE: number -> Variant-массив)
+' Поля записи наряда (mOrd: number -> Variant-массив)
 Private Const E_DATE As Long = 0
 Private Const E_POST As Long = 1        ' post - родитель поста, «площадка» трека Б
 Private Const E_ZONE As Long = 2        ' postN - нормализованная ремзона трека А
@@ -40,7 +43,7 @@ Private Const E_FIELDS As Long = 13
 Private Const NOPOST As String = "(пост не указан)"
 
 Private mReady As Boolean
-Private mE As Object             ' number -> Variant(E_FIELDS)
+Private mOrd As Object             ' number -> Variant(E_FIELDS)
 Private mZoneTot As Object       ' «дирекция|зона|неделя» -> событий с известным АРМ
 Private mZoneTab As Object       ' то же, только планшет
 Private mWeekTot As Object       ' «дирекция|неделя» -> событий
@@ -56,7 +59,7 @@ Private mRw As Long
 
 Public Sub ResetDisc()
     mReady = False
-    Set mE = Nothing
+    Set mOrd = Nothing
     Set mZoneTot = Nothing
     Set mZoneTab = Nothing
     Set mWeekTot = Nothing
@@ -76,7 +79,7 @@ Private Sub EnsureDisc()
         Err.Raise vbObjectError + 42, , "modContentDisc: снимок tbDATA не создан"
     End If
 
-    Set mE = CreateObject("Scripting.Dictionary")
+    Set mOrd = CreateObject("Scripting.Dictionary")
     Set mZoneTot = CreateObject("Scripting.Dictionary")
     Set mZoneTab = CreateObject("Scripting.Dictionary")
     Set mWeekTot = CreateObject("Scripting.Dictionary")
@@ -105,8 +108,8 @@ Private Sub EnsureDisc()
         num = modAggregate.CellText(r, "number")
         If Len(num) > 0 Then
             Dim e As Variant
-            If mE.Exists(num) Then
-                e = mE(num)
+            If mOrd.Exists(num) Then
+                e = mOrd(num)
             Else
                 ReDim e(0 To E_FIELDS - 1)
                 e(E_DATE) = modContentZone.ToSerial(modAggregate.CellRaw(r, "date"))
@@ -148,7 +151,7 @@ Private Sub EnsureDisc()
             End If
             e(fa) = arm
             e(ft) = sd
-            mE(num) = e
+            mOrd(num) = e
 
             If signed And sd > 0# Then
                 Dim wS As String, dk As String, zn As String
@@ -187,7 +190,7 @@ Private Sub EnsureDisc()
 
     mReady = True
     modLog.WriteDebug 2, "Дисциплина", "modContentDisc.EnsureDisc", _
-        "Событий " & CStr(n) & " -> нарядов " & CStr(mE.Count) & _
+        "Событий " & CStr(n) & " -> нарядов " & CStr(mOrd.Count) & _
         ", отчётная неделя " & CStr(mRw)
 End Sub
 
@@ -306,8 +309,8 @@ Public Function BuildPostsTable(ByVal dir As String) As String
     Set zt = CreateObject("Scripting.Dictionary")
 
     Dim k As Variant, e As Variant
-    For Each k In mE.Keys
-        e = mE(k)
+    For Each k In mOrd.Keys
+        e = mOrd(k)
         Dim cntS As Long, cntT As Long, p As Long
         cntS = 0: cntT = 0
         For p = 0 To 1
@@ -454,8 +457,8 @@ Private Function AvgSpan(ByVal pk As String) As String
     For i = 1 To col.Count
         Dim pr As Variant, e As Variant, a As Double, l As Double
         pr = Split(CStr(col(i)), Chr$(1))
-        If mE.Exists(CStr(pr(0))) Then
-            e = mE(CStr(pr(0)))
+        If mOrd.Exists(CStr(pr(0))) Then
+            e = mOrd(CStr(pr(0)))
             If CStr(pr(1)) = "G" Then
                 a = CDbl(e(E_TAG)): l = CDbl(e(E_TLG))
             Else
@@ -479,8 +482,8 @@ Public Function BuildSignStat(ByVal dir As String) As String
     Dim aUn(0 To 3) As Double, lUn(0 To 3) As Double
 
     Dim k As Variant, e As Variant
-    For Each k In mE.Keys
-        e = mE(k)
+    For Each k In mOrd.Keys
+        e = mOrd(k)
         tot = tot + 1#
         Dim aa As String, ll As String, accS As Boolean, levS As Boolean
         aa = CStr(e(ArmField(dir, True)))
@@ -613,8 +616,8 @@ Public Function BuildKpiUnsigned() As String
     Dim k As Variant, e As Variant, tot As Double, none As Double, part As Double
     Dim oldest As Double
     tot = 0#: none = 0#: part = 0#: oldest = 0#
-    For Each k In mE.Keys
-        e = mE(k)
+    For Each k In mOrd.Keys
+        e = mOrd(k)
         tot = tot + 1#
         Dim c As Long
         c = SignedCount(e)
@@ -653,8 +656,8 @@ Private Function UnsignedBy(ByVal fld As Long, ByVal emptyLab As String) As Obje
     Dim d As Object
     Set d = CreateObject("Scripting.Dictionary")
     Dim k As Variant, e As Variant
-    For Each k In mE.Keys
-        e = mE(k)
+    For Each k In mOrd.Keys
+        e = mOrd(k)
         If SignedCount(e) = 0 Then
             Dim v As String
             v = Trim$(CStr(e(fld)))
@@ -672,8 +675,8 @@ Public Function BuildUnsignedAge() As String
         "7" & ChrW$(&H2013) & "14 сут", "14" & ChrW$(&H2013) & "30 сут", "30 сут +")
     Dim vals(0 To 4) As Double
     Dim k As Variant, e As Variant
-    For Each k In mE.Keys
-        e = mE(k)
+    For Each k In mOrd.Keys
+        e = mOrd(k)
         If SignedCount(e) = 0 And CDbl(e(E_DATE)) > 0# Then
             Dim a As Double
             a = modContentZone.SnapshotEnd() - CDbl(e(E_DATE))

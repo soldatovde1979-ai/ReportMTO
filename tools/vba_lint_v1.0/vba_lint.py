@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Структурный линтер VBA — v1.0 от 10.09.2026.
+Структурный линтер VBA — v1.1 от 10.09.2026.
+
+Версия 1.1: проверка зарезервированных слов распространена на модульные
+  Private/Public и на параметры процедур. Раньше ловились только Dim/Const,
+  и `Private mE As Object` (то есть `Me`) прошёл в модуль незамеченным.
+Версия 1.0: первый выпуск.
 
 Ловит то, что в этом проекте уже ломало сборку и что видно без Excel:
   * незакрытые блоки Sub/Function/If/For/Do/With/Select;
@@ -185,7 +190,22 @@ def analyse_stmt(code, lineno, stack, procs, issues, path, state):
                           code, re.I):
         for part in split_args(mm.group(1)):
             nm = re.match(r'\s*(?:withevents\s+)?([A-Za-z_]\w*)', part, re.I)
-            if nm: state['module_vars'].add(nm.group(1).lower())
+            if not nm: continue
+            # Модульные Private/Public проверяются на зарезервированные слова так же,
+            # как Dim: `Private mE As Object` - это объявление переменной `Me`.
+            if nm.group(1).lower() in RESERVED:
+                issues.append(Issue(path, lineno, 'RESERVED',
+                    f'«{nm.group(1)}» — зарезервированное слово VBA, именем переменной быть не может'))
+            state['module_vars'].add(nm.group(1).lower())
+    # Параметры процедур - тем же правилом.
+    dm = DECL_RE.match(code)
+    if dm and dm.group(4):
+        for part in split_args(dm.group(4).strip('()')):
+            nm = re.match(r'\s*(?:optional\s+|byval\s+|byref\s+|paramarray\s+)*([A-Za-z_]\w*)',
+                          part, re.I)
+            if nm and nm.group(1).lower() in RESERVED:
+                issues.append(Issue(path, lineno, 'RESERVED',
+                    f'«{nm.group(1)}» — зарезервированное слово VBA, именем параметра быть не может'))
 
 def split_statements(code):
     """Логическая строка -> отдельные операторы (VBA разделяет их двоеточием).

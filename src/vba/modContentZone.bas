@@ -1,6 +1,9 @@
 Attribute VB_Name = "modContentZone"
 ' modContentZone - CONTENT-слой части «Техника» (слайды 5-8) отчёта МТО.
 '
+' Версия 2.1 от 10.09.2026 Возвращена потерянная WeeksFromDate: при переносе файла
+'   на диск последняя правка не доехала, и modContentMTO.WeeksList вызывал
+'   несуществующую функцию - «Sub or Function not defined» при компиляции.
 ' Версия 2.0 от 10.09.2026:
 '   - написаны все блоки слайдов 5-8; разметка снята с эталона
 '     temp/MTO_макет_отчета_v4.0.html, включая пояснения под блоками;
@@ -3612,4 +3615,33 @@ End Function
 
 Public Function SnapTo() As Double
     SnapTo = SnapshotEnd()
+End Function
+
+' Все ISO-недели, присутствующие в данных по дате создания наряда, по возрастанию.
+' Нужна как запасной путь для слайдов 1-4, если колонка yearWeek в книге мертва
+' (старый Power Query писал в неё ноль на всех строках).
+Public Function WeeksFromDate() As Variant
+    EnsureZn
+    Dim d As Object
+    Set d = CreateObject("Scripting.Dictionary")
+    Dim k As Variant
+    For Each k In mZn.Keys
+        If CLng(mZn(k)(Z_WEEK)) > 0 Then d(CStr(mZn(k)(Z_WEEK))) = True
+    Next k
+    If d.Count = 0 Then WeeksFromDate = Array(): Exit Function
+
+    Dim a() As Double, v() As String, i As Long
+    ReDim a(0 To d.Count - 1)
+    ReDim v(0 To d.Count - 1)
+    i = 0
+    For Each k In d.Keys
+        a(i) = CDbl(k): v(i) = CStr(k): i = i + 1
+    Next k
+    QSortPair a, v, 0, d.Count - 1
+    Dim r() As Variant
+    ReDim r(0 To d.Count - 1)
+    For i = 0 To d.Count - 1
+        r(i) = v(i) & "|"
+    Next i
+    WeeksFromDate = r
 End Function
