@@ -1,3 +1,5 @@
+# ЗАМЕНЁН 11.09.2026 на install\release.ps1 (установка + компиляция + версия + миграции).
+# Оставлен в архиве как история раскатки v8.0. В работе не использовать.
 # apply_v8.0.ps1
 # Version 1.0 / 2026-09-10
 # One-shot rollout of report v8.0 (template v4.0, 8 slides) into a workbook:

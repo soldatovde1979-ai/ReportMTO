@@ -1,5 +1,8 @@
 # Задачи
 
+> Версия 1.8 от 11.09.2026. apply_v8.0.ps1 и add_keep_weeks_key.ps1 перенесены в
+> tools\archive\ - их заменили release.ps1 и миграция; в rules.md записано правило
+> «не плодить дубликаты, заменённое - в архив».
 > Версия 1.7 от 11.09.2026. release.ps1 v1.1: защита от отката (книга новее
 > исходников), флаг -Force, предупреждение BOOK_MD5_MISMATCH.
 > Версия 1.6 от 11.09.2026. Внедрено версионирование сборки: install\release.ps1,
@@ -24,7 +27,7 @@
       `BUILD/DATE`, `BUILD/SRC_MD5`, прогоняет недостающие миграции из `install\migrations\`
       и добавляет запись в `CHANGELOG.md`. Версия исходников — первая строка `install\VERSION`
       (8.1.0), состояние прошлого релиза — `install\release.state`. Первая миграция
-      `8.1.0__variable_keys.ps1` заводит `DATA/KEEP_WEEKS = 52`; `tools\add_keep_weeks_key.ps1`
+      `8.1.0__variable_keys.ps1` заводит `DATA/KEEP_WEEKS = 52`; `tools\archive\add_keep_weeks_key.ps1`
       помечен устаревшим. Версия сборки выводится в подвал отчёта (`modContentMTO` v8.2).
       Порядок работы — `docs\version-guide.md`. **Скрипты не прогонялись**: PowerShell из
       сессии недоступен, первый запуск делать с `-DryRun`.
@@ -51,7 +54,7 @@
       Плюс `modMain.ResolveAiApiKey` (v8.1): ключ чистится от BOM/кавычек/пробелов, в журнал
       при DEBUG>=1 пишется источник ключа, его длина и признак префикса `sk-` (сам ключ — нет).
       Линтер `tools/vba_lint_v1.0` — чисто, символов вне 1251 нет. **В книгу не установлено:**
-      нужен прогон `tools\apply_v8.0.ps1` (PowerShell на машине пользователя).
+      нужен прогон `install\release.ps1` (PowerShell на машине пользователя).
 - [x] 11.09.2026: приведена навигация. `README.md` и `docs/index.md` ссылались на
       `docs/spec.md`, `docs/data.md`, `docs/specs/content-spec.md` — эти файлы удалены
       коммитом 7146c03 и на диске отсутствуют (спецификация ведётся в проекте Claude).
@@ -68,7 +71,7 @@
       `modContentMTO.ReportWeekValue` в авто-режиме возвращает её же, явный `REPORT/WEEK`
       по-прежнему перекрывает. `modContentZone` v2.4, `modContentMTO` v8.1.
       (3) **`DATA/KEEP_WEEKS = 52`** — добавить на лист Variable рабочей книги
-      (`tools\add_keep_weeks_key.ps1`); отсечка применится при следующей загрузке JSON.
+      (`tools\archive\add_keep_weeks_key.ps1`); отсечка применится при следующей загрузке JSON.
 - [ ] Отложено владельцем (ревизия 11.09.2026):
       (1) ключ `REPORT/MIN_RECORDS` на листе Variable не заводим — порог включения
       сотрудника в таблицу остаётся умолчанием 10 в `modContentDisc` и 5 в `modContentMTO`,
