@@ -1,4 +1,6 @@
 ﻿# runner.ps1
+# Version 1.7 / 11.09.2026: load проверяет занятость книги по файлу блокировки
+#   ~$ReportMTO.xlsm и по признаку ReadOnly, а не по наличию процесса EXCEL.
 # Version 1.6 / 11.09.2026: задача load - загрузка data\*.json ПО ОДНОМУ файлу с
 #   живым логом out\load-live.log (пишется после каждого шага, видно где встало).
 #   Книга открывается самой задачей; если Excel уже запущен - отказ с подсказкой.
@@ -211,8 +213,13 @@ function Task-Load([string]$argLine) {
     }
 
     if (-not (Test-Path $book)) { Write-Output ("JOB_FAIL нет книги " + $book); return }
-    if ($null -ne (Get-Process EXCEL -ErrorAction SilentlyContinue)) {
-        Write-Output "JOB_FAIL Excel уже запущен - книга занята. Сначала задача closeexcel"
+
+    # Занятость проверяем по файлу блокировки Excel, а не по наличию процесса:
+    # чужой открытый Excel с другими книгами нашей работе не мешает, а сразу после
+    # сборки отчёта процесс ещё несколько секунд догорает (отказ 11.09.2026 18:03).
+    $busyMark = Join-Path $root ('~$' + 'ReportMTO.xlsm')
+    if (Test-Path -LiteralPath $busyMark) {
+        Write-Output "JOB_FAIL книга открыта в Excel - сначала задача closeexcel"
         return
     }
 
@@ -230,6 +237,7 @@ function Task-Load([string]$argLine) {
         LiveSay "открываю книгу (52 МБ, это около минуты)"
         $wb = $excel.Workbooks.Open($book, 0, $false)
         try {
+            if ($wb.ReadOnly) { throw "книга открылась только для чтения - её кто-то держит" }
             $ws = $wb.Sheets.Item("tbDATA")
             $lo = $ws.ListObjects.Item("tbDATA")
             LiveSay ("строк в tbDATA на старте: " + [int]$lo.ListRows.Count)
