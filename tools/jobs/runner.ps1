@@ -1,4 +1,6 @@
 ﻿# runner.ps1
+# Version 1.5 / 11.09.2026: задача screenshot - снимок рабочего стола средствами
+#   Windows: отличает "машина не отдаёт картинку" от "RustDesk не отдаёт картинку".
 # Version 1.4 / 11.09.2026: задача wakescreen - разбудить дисплей сдвигом курсора.
 # Version 1.3 / 11.09.2026: diag session - состояние сеансов Windows (qwinsta),
 #   процессы и служба RustDesk, экран блокировки, мониторы. Нужно, когда удалённый
@@ -168,6 +170,28 @@ function Task-WakeScreen([string]$argLine) {
     }
 }
 
+function Task-Screenshot([string]$argLine) {
+    # Снимок рабочего стола средствами Windows - проверка, отдаёт ли машина картинку
+    # вообще. Чёрный кадр здесь = проблема на стороне захвата (драйвер/видеокарта),
+    # нормальный кадр = проблема в самом RustDesk или в кодеке.
+    # Файл остаётся на этой машине, в tools\jobs\out.
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+        Add-Type -AssemblyName System.Drawing
+        $vs = [System.Windows.Forms.SystemInformation]::VirtualScreen
+        $bmp = New-Object System.Drawing.Bitmap($vs.Width, $vs.Height)
+        $g = [System.Drawing.Graphics]::FromImage($bmp)
+        $g.CopyFromScreen($vs.X, $vs.Y, 0, 0, $bmp.Size)
+        $path = Join-Path $PSScriptRoot "out\screen.png"
+        $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+        $g.Dispose(); $bmp.Dispose()
+        $size = (Get-Item $path).Length
+        Write-Output ("JOB_OK снимок " + $vs.Width + "x" + $vs.Height + ", " + $size + " байт: " + $path)
+    } catch {
+        Write-Output ("JOB_FAIL " + $_.Exception.Message)
+    }
+}
+
 function Task-Diag([string]$argLine) {
     $what = $argLine.Trim()
     if ($what -eq "") { $what = "all" }
@@ -250,6 +274,7 @@ $allowed = @{
     "report"  = "^$"
     "closeexcel" = "^$"
     "wakescreen" = "^$"
+    "screenshot" = "^$"
     "diag"    = "^\s*(rdp|env|git|session|all)?\s*$"
 }
 
@@ -294,6 +319,7 @@ try {
                     "report"  { $body = (Task-Report  $argLine | Out-String) }
                     "closeexcel" { $body = (Task-CloseExcel $argLine | Out-String) }
                     "wakescreen" { $body = (Task-WakeScreen $argLine | Out-String) }
+                    "screenshot" { $body = (Task-Screenshot $argLine | Out-String) }
                     "diag"    { $body = (Task-Diag    $argLine | Out-String) }
                 }
             } catch {
