@@ -1,4 +1,7 @@
 ﻿# runner.ps1
+# Version 1.3 / 11.09.2026: diag session - состояние сеансов Windows (qwinsta),
+#   процессы и служба RustDesk, экран блокировки, мониторы. Нужно, когда удалённый
+#   доступ подключается, но картинки нет.
 # Version 1.2 / 11.09.2026: задача closeexcel - аккуратно закрыть книги и Excel
 #   через COM (без сохранения, без убийства процесса): открытая книга блокирует
 #   установку модулей.
@@ -186,6 +189,23 @@ function Task-Diag([string]$argLine) {
             Select-Object TimeCreated, ProviderName, Id | Format-Table | Out-String | Write-Output
     }
 
+    if ($what -eq "session" -or $what -eq "all") {
+        Write-Output "=== Сеанс и удалённый доступ ==="
+        Write-Output "--- сеансы Windows (Active = есть что захватывать, Disc = сеанс отключён)"
+        (qwinsta 2>&1) | Out-String | Write-Output
+        Write-Output "--- процессы RustDesk"
+        Get-Process rustdesk -ErrorAction SilentlyContinue |
+            Select-Object Id, ProcessName, StartTime | Format-Table -AutoSize | Out-String | Write-Output
+        Write-Output "--- служба RustDesk (без неё нет картинки на заблокированном экране)"
+        Get-Service -Name "RustDesk*" -ErrorAction SilentlyContinue |
+            Select-Object Name, Status, StartType | Format-Table -AutoSize | Out-String | Write-Output
+        Write-Output "--- рабочий стол заблокирован?"
+        Write-Output ("LogonUI запущен (экран блокировки): " + ((Get-Process LogonUI -ErrorAction SilentlyContinue) -ne $null))
+        Write-Output "--- мониторы"
+        Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
+            Select-Object Name, VideoModeDescription, Status | Format-Table -AutoSize | Out-String | Write-Output
+    }
+
     if ($what -eq "env" -or $what -eq "all") {
         Write-Output "=== Окружение ==="
         Write-Output ("PowerShell: " + $PSVersionTable.PSVersion)
@@ -211,7 +231,7 @@ $allowed = @{
     "compile" = "^$"
     "report"  = "^$"
     "closeexcel" = "^$"
-    "diag"    = "^\s*(rdp|env|git|all)?\s*$"
+    "diag"    = "^\s*(rdp|env|git|session|all)?\s*$"
 }
 
 # ---------------------------------------------------------------- обработка очереди
