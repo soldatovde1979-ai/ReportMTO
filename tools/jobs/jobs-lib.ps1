@@ -268,6 +268,131 @@ function Task-Load([string]$argLine) {
     }
 }
 
+function Task-Rebuild([string]$argLine) {
+    # Полная пересборка tbDATA: копия книги -> очистка таблицы -> ОДИН проход
+    # Power Query по всей папке data\ -> сохранение.
+    #
+    # Почему так, а не загрузкой по файлам: upsert перечитывает весь tbDATA с
+    # листа на каждом файле. Замер 11.09.2026 - один файл 5 ч 12 мин при 255 тыс.
+    # строк, и строк после него ровно столько же. Пять файлов такой схемой - сутки.
+    # Режим папки добавлен в Query-ImportJSON (R-2), upsert для ежедневной
+    # подгрузки одного файла не тронут.
+    #
+    # ВНИМАНИЕ: задача ОЧИЩАЕТ данные. Копия книги делается ДО очистки, в bak\.
+    $book = Join-Path $root "ReportMTO.xlsm"
+    $dataDir = Join-Path $root "data"
+    $live = Join-Path $jobsRoot "out\rebuild-live.log"
+    $maxMin = 90
+
+    function LiveSay2([string]$s) {
+        $line = (Get-Date -Format "yyyy-MM-dd HH:mm:ss") + "  " + $s
+        Add-Content -LiteralPath $live -Value $line -Encoding UTF8
+        Write-Output $line
+    }
+
+    if (-not (Test-Path $book)) { Write-Output ("JOB_FAIL нет книги " + $book); return }
+    $busyMark = Join-Path $root ('~$' + 'ReportMTO.xlsm')
+    if (Test-Path -LiteralPath $busyMark) { Write-Output "JOB_FAIL книга открыта - сначала closeexcel"; return }
+
+    $files = @(Get-ChildItem -Path (Join-Path $dataDir "*.json") -File -ErrorAction SilentlyContinue)
+    if ($files.Count -eq 0) { Write-Output "JOB_FAIL в data\ нет json"; return }
+
+    Set-Content -LiteralPath $live -Value ((Get-Date -Format "yyyy-MM-dd HH:mm:ss") + "  REBUILD_START файлов: " + $files.Count) -Encoding UTF8
+
+    # 1. Копия книги ДО любых изменений.
+    $bak = Join-Path $root "bak"
+    if (-not (Test-Path $bak)) { New-Item -ItemType Directory -Path $bak -Force | Out-Null }
+    $bakFile = Join-Path $bak ("ReportMTO.xlsm.before_rebuild_" + (Get-Date -Format "yyyyMMdd_HHmmss"))
+    LiveSay2 "копирую книгу в bak (52 МБ)"
+    Copy-Item -LiteralPath $book -Destination $bakFile -Force
+    LiveSay2 ("копия готова: " + $bakFile)
+
+    $excel = New-Object -ComObject Excel.Application
+    $excel.Visible = $false
+    $excel.DisplayAlerts = $false
+    $excel.AutomationSecurity = 1
+    $excel.AskToUpdateLinks = $false
+    try {
+        LiveSay2 "открываю книгу"
+        $wb = $excel.Workbooks.Open($book, 0, $false)
+        try {
+            if ($wb.ReadOnly) { throw "книга открылась только для чтения" }
+            $ws = $wb.Sheets.Item("tbDATA")
+            $lo = $ws.ListObjects.Item("tbDATA")
+            $before = [int]$lo.ListRows.Count
+            LiveSay2 ("строк до пересборки: " + $before)
+
+            $excel.ScreenUpdating = $false
+            $excel.EnableEvents = $false
+            $excel.Calculation = -4135
+
+            # 2. Очистка таблицы: строки данных удаляются, шапка и подключение целы.
+            LiveSay2 "очищаю tbDATA"
+            if ($null -ne $lo.DataBodyRange) { $lo.DataBodyRange.Delete() | Out-Null }
+            LiveSay2 ("после очистки строк: " + [int]$lo.ListRows.Count)
+
+            # 3. Один проход по папке.
+            $safe = $dataDir -replace '"', '""'
+            $wb.Queries.Item("prmSourcePath").Formula =
+                '"' + $safe + '" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]'
+            LiveSay2 ("источник = папка " + $dataDir + "; запускаю обновление")
+
+            $t0 = Get-Date
+            $qt = $lo.QueryTable
+            $qt.BackgroundQuery = $true
+            $null = $qt.Refresh($true)
+
+            $lastNote = 0
+            $timedOut = $false
+            while ($qt.Refreshing) {
+                Start-Sleep -Seconds 20
+                $min = [int]((Get-Date) - $t0).TotalMinutes
+                if ($min -gt $lastNote) { $lastNote = $min; LiveSay2 ("    идёт " + $min + " мин") }
+                if ($min -ge $maxMin) {
+                    LiveSay2 ("    ПРЕДЕЛ " + $maxMin + " мин - отменяю")
+                    try { $qt.CancelRefresh() } catch { }
+                    $timedOut = $true
+                    break
+                }
+            }
+
+            if ($timedOut) {
+                LiveSay2 "REBUILD_FAIL по пределу времени; книга НЕ сохранена, данные можно вернуть из bak"
+                Write-Output "JOB_FAIL пересборка не уложилась в предел"
+                return
+            }
+
+            $after = [int]$lo.ListRows.Count
+            $sec = [int]((Get-Date) - $t0).TotalSeconds
+            LiveSay2 ("обновление завершено за " + $sec + " с; строк " + $before + " -> " + $after)
+
+            if ($after -lt 1000) {
+                LiveSay2 "СЛИШКОМ МАЛО СТРОК - книгу не сохраняю, верните её из bak"
+                Write-Output ("JOB_FAIL после пересборки только " + $after + " строк - похоже на сбой")
+                return
+            }
+
+            LiveSay2 "сохраняю книгу"
+            $wb.Save()
+            LiveSay2 "REBUILD_DONE"
+            Write-Output ("JOB_OK пересборка завершена: " + $before + " -> " + $after + " строк за " + $sec + " с")
+        } finally {
+            try {
+                $excel.Calculation = -4105
+                $excel.EnableEvents = $true
+                $excel.ScreenUpdating = $true
+            } catch { }
+            $wb.Close($false)
+        }
+    } catch {
+        LiveSay2 ("REBUILD_FAIL " + $_.Exception.Message)
+        Write-Output ("JOB_FAIL " + $_.Exception.Message)
+    } finally {
+        $excel.Quit()
+        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
+    }
+}
+
 function Task-Diag([string]$argLine) {
     $what = $argLine.Trim()
     if ($what -eq "") { $what = "all" }
@@ -457,6 +582,7 @@ function Invoke-JobQueue($jobs, [string]$queue, [string]$outDir, [string]$proces
                     "stop"        { $body = (Task-Stop        $argLine | Out-String) }
                     "kill"        { $body = (Task-Kill        $argLine | Out-String) }
                     "installfast" { $body = (Task-InstallFast $argLine | Out-String) }
+                    "rebuild"     { $body = (Task-Rebuild     $argLine | Out-String) }
                     "diag"    { $body = (Task-Diag    $argLine | Out-String) }
                 }
             } catch {

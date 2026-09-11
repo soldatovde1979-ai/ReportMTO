@@ -6,6 +6,10 @@
 // prmSourcePath — именованный параметр (текстовый), задаётся из VBA перед Refresh (modMain.bas).
 // "tbDATA" — имя целевой таблицы листа, фиксировано контрактом Core (Architecture Core §5.1).
 //
+// v7.4 (11.09.2026):
+//   R-2 - prmSourcePath принимает ПАПКУ: полная пересборка за один проход,
+//         без перечитывания tbDATA (замер: один файл через upsert - 5 ч 12 мин).
+//
 // v7.3 (09.09.2026), одна правка:
 //   R-1 — добавлен финальный шаг ретеншна (инструкция проекта §4): строки старше
 //         DATA/KEEP_WEEKS недель удаляются из результата. Глубина читается новым
@@ -45,7 +49,29 @@
 //   P1-7b    — первый запуск не опирается на fnUpsert(X, X).
 let
     // 65001 — кодовая страница источника, а не «кодировка вывода». UTF-8 с BOM тоже понимается.
-    Source = Json.Document(File.Contents(prmSourcePath), 65001),
+    // R-2 (11.09.2026): prmSourcePath может указывать на ФАЙЛ или на ПАПКУ.
+    // Папка - режим полной пересборки: читаются все *.json сразу, одним проходом.
+    // Зачем: upsert перечитывает весь tbDATA с листа при каждом файле, и на
+    // 255 тыс. строк один файл занимал 5 ч 12 мин (замер 11.09.2026). Пять файлов
+    // по такой схеме - сутки. Одним проходом перечитывание не нужно вовсе.
+    // Режим одного файла (кнопка «Загрузить») не менялся.
+    IsFolder = not Text.EndsWith(Text.Lower(Text.Trim(prmSourcePath)), ".json"),
+
+    FolderFiles =
+        if not IsFolder then #table({}, {})
+        else Table.SelectRows(
+                Folder.Files(prmSourcePath),
+                each Text.EndsWith(Text.Lower([Name]), ".json")
+             ),
+
+    Source =
+        if not IsFolder then Json.Document(File.Contents(prmSourcePath), 65001)
+        else List.Combine(
+                List.Transform(
+                    Table.ToRecords(Table.Sort(FolderFiles, {{"Name", Order.Ascending}})),
+                    each Json.Document([Content], 65001)
+                )
+             ),
 
     // Набор колонок выводится по объединению полей выборки записей, а не по первой записи:
     // 1С может опустить null-поле (defekt_type/defect_desc) в отдельных записях.

@@ -53,6 +53,7 @@ $allowed = @{
     "aikey"      = "^$"
     "diag"       = "^\s*(rdp|env|git|session|all)?\s*$"
     "installfast" = "^$"
+    "rebuild"     = "^$"
 }
 
 try {
