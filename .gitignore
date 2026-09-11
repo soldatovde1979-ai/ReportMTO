@@ -61,3 +61,7 @@ tools/jobs/out/*
 !tools/jobs/out/.gitkeep
 tools/jobs/state/*
 !tools/jobs/state/.gitkeep
+tools/jobs/fast-queue/*
+!tools/jobs/fast-queue/.gitkeep
+tools/jobs/fast-out/*
+!tools/jobs/fast-out/.gitkeep
