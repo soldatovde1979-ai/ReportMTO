@@ -10,6 +10,14 @@
 
 ## Срочно
 
+- [x] 10.09.2026: убраны модальные MsgBox из modMain.bas и modContentMTO.bas (замена на
+      modLog.WriteLogEntry) — GenerateReport/LoadSourceFile/DebugGenerateOffline и
+      ValidateRequiredColumns больше не блокируют COM-вызов ($excel.Run) диалогом, который
+      PowerShell не может закрыть через DisplayAlerts. Добавлены tools для запуска без
+      диалогов: generate_report_open.ps1, run_load_and_report.ps1, run_v8.0_full.ps1,
+      reimport_open_book.ps1, go_v8.cmd. Исходники переустановлены в build-книгу
+      (install.ps1, VERIFY_OK) и compile_check: COMPILE_OK; прод-книга ReportMTO.xlsm уже
+      без MsgBox. Коммит 9cc8ec5, пуш в main.
 - [x] 09.09.2026: ТЗ v1.2 — переход отчёта на 4 слайда, код внесён. T1 fnNormalizeFields.pq v7
       (dateWeek/dateMonth/isSigned); T2 modAggregate.bas v3.2 (GroupPercentile/Percentile,
       собственный QuickSort); T3-T7, T9 modContentMTO.bas v7.3 (FBase пуст — in_bounds не
