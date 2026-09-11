@@ -53,3 +53,11 @@ tools/_import_ansi/
 
 # Ключи внешних провайдеров ИИ — в git не попадают ни при каких условиях
 *.key
+
+# Очередь и логи помощника (tools/jobs) - рабочие файлы, не версионируются
+tools/jobs/queue/*
+!tools/jobs/queue/.gitkeep
+tools/jobs/out/*
+!tools/jobs/out/.gitkeep
+tools/jobs/state/*
+!tools/jobs/state/.gitkeep
