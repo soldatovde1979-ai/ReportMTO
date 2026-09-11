@@ -1,5 +1,10 @@
 ﻿# release.ps1
 #
+# Version 1.1 / 11.09.2026: защита от отката. До установки читается BUILD/VERSION
+#   из книги; если книга новее исходников - релиз останавливается (старый код
+#   поверх нового записывался молча). Осознанный откат - флаг -Force, он же
+#   попадает в CHANGELOG. Равные версии с разным BUILD/SRC_MD5 дают
+#   предупреждение BOOK_MD5_MISMATCH (релиз с другой машины).
 # Version 1.0 / 11.09.2026: единая точка раскатки с версионированием.
 #
 # Что делает по шагам:
@@ -30,7 +35,8 @@ param(
     [ValidateSet("patch", "minor", "major")]
     [string]$Bump = "patch",
     [switch]$DryRun,
-    [switch]$SkipCompile
+    [switch]$SkipCompile,
+    [switch]$Force
 )
 
 $ErrorActionPreference = "Stop"
@@ -163,6 +169,39 @@ function Get-VariableKey($listObject, [string]$key) {
     return ""
 }
 
+# Читает BUILD/VERSION и BUILD/SRC_MD5 из книги ДО установки: только так можно
+# поймать откат (на этой машине исходники старее, чем то, что уже стоит в книге).
+# Книга открывается только на чтение. Сообщения не печатаются внутри функции -
+# иначе они попали бы в возвращаемое значение вместе с хеш-таблицей.
+function Read-BookBuildInfo([string]$path) {
+    $info = @{ Version = "0.0.0"; Md5 = ""; Warn = "" }
+    $xl = New-Object -ComObject Excel.Application
+    $xl.Visible = $false
+    $xl.DisplayAlerts = $false
+    try {
+        $wb = $xl.Workbooks.Open($path, 0, $true)
+        try {
+            $ws = $null
+            foreach ($sh in $wb.Worksheets) { if ($sh.Name -eq "Variable") { $ws = $sh } }
+            if ($null -eq $ws) { throw "нет листа Variable" }
+            $lo = $null
+            foreach ($l in $ws.ListObjects) { if ($l.Name -eq "tblVariable") { $lo = $l } }
+            if ($null -eq $lo) { throw "нет таблицы tblVariable" }
+            $v = (Get-VariableKey $lo "BUILD/VERSION").Trim()
+            if ($v -match "^\d+\.\d+\.\d+$") { $info.Version = $v }
+            $info.Md5 = (Get-VariableKey $lo "BUILD/SRC_MD5").Trim()
+        } finally {
+            $wb.Close($false)
+        }
+    } catch {
+        $info.Warn = $_.Exception.Message
+    } finally {
+        $xl.Quit()
+        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($xl) | Out-Null
+    }
+    return $info
+}
+
 # ================================================================== старт
 $full = $Target
 if (-not [System.IO.Path]::IsPathRooted($full)) { $full = Join-Path $root $full }
@@ -195,6 +234,27 @@ if ($state.Digest -eq "") {
     Write-Output ("RELEASE_VERSION_NEXT " + $newVersion + " - поднимаем (" + $Bump + ")")
 } else {
     Write-Output "RELEASE_SOURCES_SAME - исходники не менялись, версия остаётся прежней"
+}
+
+# --- защита от отката: что уже стоит в книге против того, что лежит в исходниках
+$forced = $false
+$book = Read-BookBuildInfo $full
+if ($book.Warn -ne "") {
+    Write-Output ("BOOK_READ_WARN " + $book.Warn + " - версию книги прочитать не удалось, проверка пропущена")
+} else {
+    Write-Output ("BOOK_VERSION_BEFORE " + $book.Version + " - версия, которая уже стоит в книге")
+    $cmp = Compare-Version $book.Version $curVersion
+    if ($cmp -gt 0) {
+        if (-not $Force) {
+            $msg = "книга НОВЕЕ исходников: в книге " + $book.Version + ", в install\VERSION " + $curVersion
+            $msg = $msg + " - сделайте git pull. Осознанный откат: тот же запуск с флагом -Force"
+            Fail $msg
+        }
+        $forced = $true
+        Write-Output ("FORCE_DOWNGRADE " + $book.Version + " -> " + $curVersion + " - откат по флагу -Force, записываем в журнал")
+    } elseif ($cmp -eq 0 -and $book.Md5 -ne "" -and $book.Md5 -ne $digest) {
+        Write-Output ("BOOK_MD5_MISMATCH " + $book.Md5 + " - в книге та же версия " + $book.Version + ", но другое содержимое: похоже, релиз делали с другой машины. Сверьте git перед установкой")
+    }
 }
 
 if ($DryRun) {
@@ -297,6 +357,7 @@ $entry += ""
 if ($changedFiles.Count -gt 0) { $entry += ("- Изменены исходники: " + ($changedFiles -join ", ")) }
 else { $entry += "- Исходники не менялись, переустановка в книгу" }
 if ($applied.Count -gt 0) { $entry += ("- Миграции: " + ($applied -join ", ")) }
+if ($forced) { $entry += ("- ВНИМАНИЕ: установлено с -Force поверх более новой книги " + $book.Version) }
 $entry += ("- Книга: " + $full)
 $entry += ("- Хеш исходников: " + $digest)
 $entry += ""
