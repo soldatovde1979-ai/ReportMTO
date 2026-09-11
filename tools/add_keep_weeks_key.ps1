@@ -1,4 +1,8 @@
 # add_keep_weeks_key.ps1
+#
+# УСТАРЕЛ 11.09.2026: тот же ключ заводит миграция
+# install\migrations\8.1.0__variable_keys.ps1, которую прогоняет install\release.ps1.
+# Скрипт оставлен как ручной обходной путь для build-книг; в штатной раскатке не нужен.
 # Idempotent: adds the DATA/KEEP_WEEKS = 52 row to the tblVariable table
 # (sheet Variable) of the given workbooks. Does nothing when the key exists.
 # ASCII-only by project rule (PowerShell 5.1 ANSI parsing).

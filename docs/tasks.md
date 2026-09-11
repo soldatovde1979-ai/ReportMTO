@@ -1,5 +1,10 @@
 # Задачи
 
+> Версия 1.6 от 11.09.2026. Внедрено версионирование сборки: install\release.ps1,
+> install\VERSION, install\migrations\, CHANGELOG.md, docs\version-guide.md.
+> Версия 1.5 от 11.09.2026. Ревизия «документация — исходники — прогон» по состоянию на
+> 11.09.2026: закрыты три дефекта кода и битая навигация в README/docs/index.md, открыты
+> четыре вопроса к владельцу (см. ниже).
 > Версия 1.4 от 08.09.2026. Закрыты остатки tz_Reports2.md: плейсхолдеры BLOCK_6_*_DEPT,
 > пояснение при пустом REPORT/SLIDE_ZONES, «Создали ЗН» дашборда без FBase (см. ниже).
 > Версия 1.3 от 08.09.2026. Закрыта задача расширенного логирования (DEBUG 0/1/2 + внешний
@@ -10,6 +15,69 @@
 
 ## Срочно
 
+- [x] 11.09.2026: версионирование сборки. `install\release.ps1` — единая точка раскатки:
+      считает хеши исходников, ставит книгу через `install_prod.ps1`, гоняет `compile_check`,
+      и **только при нулевом коде возврата обоих шагов** поднимает версию (патч автоматом,
+      `-Bump minor|major` руками при смене контракта), пишет в книгу `BUILD/VERSION`,
+      `BUILD/DATE`, `BUILD/SRC_MD5`, прогоняет недостающие миграции из `install\migrations\`
+      и добавляет запись в `CHANGELOG.md`. Версия исходников — первая строка `install\VERSION`
+      (8.1.0), состояние прошлого релиза — `install\release.state`. Первая миграция
+      `8.1.0__variable_keys.ps1` заводит `DATA/KEEP_WEEKS = 52`; `tools\add_keep_weeks_key.ps1`
+      помечен устаревшим. Версия сборки выводится в подвал отчёта (`modContentMTO` v8.2).
+      Порядок работы — `docs\version-guide.md`. **Скрипты не прогонялись**: PowerShell из
+      сессии недоступен, первый запуск делать с `-DryRun`.
+
+- [x] 11.09.2026: ревизия соответствия. Исправлено в исходниках (три точечные правки):
+      (1) `modContentZone.Grade` читала пороги по ключам `REPORT/NormaForPlanshet` /
+      `REPORT/ProvalForPlanshet`, которых на листе Variable нет (там `NormaForPlanshet` /
+      `ProvalForPlanshet`, как их и читает `modContentMTO`) — оценка «норма/провал» на слайдах
+      5–8 молча шла по умолчанию 90/50; modContentZone v2.3.
+      (2) `modHTMLEngine.ReadUtf8` не снимал BOM: ADODB.Stream в текстовом режиме отдаёт его
+      первым символом, и ключ ИИ уходил в заголовок `Authorization` с невидимым U+FEFF —
+      DeepSeek отвечал 401 «auth header format should be Bearer sk-...» (журнал 10.09, три
+      прогона подряд, все выводы ИИ — заглушки); modHTMLEngine v3.2.
+      (3) `modHTMLEngine.SaveHTMLFile` терял готовый отчёт, если папка из
+      `OUTPUT/RESULT_FOLDER` недоступна (прогон 10.09 22:35, путь `C:\Projects\...` с другой
+      машины) — добавлен резерв «папка result рядом с книгой» с предупреждением в журнал.
+      Плюс `modMain.ResolveAiApiKey` (v8.1): ключ чистится от BOM/кавычек/пробелов, в журнал
+      при DEBUG>=1 пишется источник ключа, его длина и признак префикса `sk-` (сам ключ — нет).
+      Линтер `tools/vba_lint_v1.0` — чисто, символов вне 1251 нет. **В книгу не установлено:**
+      нужен прогон `tools\apply_v8.0.ps1` (PowerShell на машине пользователя).
+- [x] 11.09.2026: приведена навигация. `README.md` и `docs/index.md` ссылались на
+      `docs/spec.md`, `docs/data.md`, `docs/specs/content-spec.md` — эти файлы удалены
+      коммитом 7146c03 и на диске отсутствуют (спецификация ведётся в проекте Claude).
+      Ссылки заменены на реальные файлы, в карту файлов добавлены `modContentZone` и
+      `modContentDisc`, отмечено, что `docs/plans/next-steps.md` — история от 24.08.2026.
+- [x] 11.09.2026: решения владельца по ревизии приняты и внесены в код.
+      (1) **Медиана в ремзоне** — показываем обе метрики: плитка слайда 1 считается как
+      эталон (создание наряда -> закрытие наряда по нарядам, закрытым на неделе,
+      `k_medzone`), пара «приёмка -> выбытие» остаётся гистограммой `BLOCK_TIME_HIST`
+      и чипами под ней. `modContentZone` v2.4, `Slide1Series`.
+      (2) **Отчётная неделя** — одна на весь отчёт. `ZoneReportWeek` теперь берёт последнюю
+      неделю, ЗАВЕРШИВШУЮСЯ к концу снимка (текущая всегда неполная хотя бы на часы),
+      правило «меньше половины объёма предыдущей» осталось второй проверкой;
+      `modContentMTO.ReportWeekValue` в авто-режиме возвращает её же, явный `REPORT/WEEK`
+      по-прежнему перекрывает. `modContentZone` v2.4, `modContentMTO` v8.1.
+      (3) **`DATA/KEEP_WEEKS = 52`** — добавить на лист Variable рабочей книги
+      (`tools\add_keep_weeks_key.ps1`); отсечка применится при следующей загрузке JSON.
+- [ ] Отложено владельцем (ревизия 11.09.2026):
+      (1) ключ `REPORT/MIN_RECORDS` на листе Variable не заводим — порог включения
+      сотрудника в таблицу остаётся умолчанием 10 в `modContentDisc` и 5 в `modContentMTO`,
+      настройка с листа невозможна;
+      (2) `DEBUG` остаётся 2 — в `ReportMTO_log.txt` пишется весь промпт и начало ответа.
+- [ ] Эталон нельзя пересобрать: `tools/mockup_v1.0/prep.py` читает `data/pri.json` по
+      захардкоженному пути `$HOME/mnt/ReportMTO/data/pri.json` (путь Linux-сессии), а самого
+      файла в `data/` больше нет — там пять выгрузок `sppr_tablet_*.json`. Пока это так,
+      правило «вёрстку менять только в mockup_v1.0 и пересобирать оба файла» неисполнимо.
+
+- [x] 10.09.2026: убраны модальные MsgBox из modMain.bas и modContentMTO.bas (замена на
+      modLog.WriteLogEntry) — GenerateReport/LoadSourceFile/DebugGenerateOffline и
+      ValidateRequiredColumns больше не блокируют COM-вызов ($excel.Run) диалогом, который
+      PowerShell не может закрыть через DisplayAlerts. Добавлены tools для запуска без
+      диалогов: generate_report_open.ps1, run_load_and_report.ps1, run_v8.0_full.ps1,
+      reimport_open_book.ps1, go_v8.cmd. Исходники переустановлены в build-книгу
+      (install.ps1, VERIFY_OK) и compile_check: COMPILE_OK; прод-книга ReportMTO.xlsm уже
+      без MsgBox. Коммит 9cc8ec5, пуш в main.
 - [x] 09.09.2026: ТЗ v1.2 — переход отчёта на 4 слайда, код внесён. T1 fnNormalizeFields.pq v7
       (dateWeek/dateMonth/isSigned); T2 modAggregate.bas v3.2 (GroupPercentile/Percentile,
       собственный QuickSort); T3-T7, T9 modContentMTO.bas v7.3 (FBase пуст — in_bounds не
