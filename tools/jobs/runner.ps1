@@ -1,4 +1,5 @@
 ﻿# runner.ps1
+# Version 1.4 / 11.09.2026: задача wakescreen - разбудить дисплей сдвигом курсора.
 # Version 1.3 / 11.09.2026: diag session - состояние сеансов Windows (qwinsta),
 #   процессы и служба RustDesk, экран блокировки, мониторы. Нужно, когда удалённый
 #   доступ подключается, но картинки нет.
@@ -150,6 +151,23 @@ function Task-CloseExcel([string]$argLine) {
     }
 }
 
+function Task-WakeScreen([string]$argLine) {
+    # Будит дисплей сдвигом курсора на пиксель и возвращает его назад.
+    # Нужно, когда удалённый доступ подключается, а кадров нет: уснувший экран
+    # не отдаёт захват. Ничего не нажимает, окон не трогает.
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+        Add-Type -AssemblyName System.Drawing
+        $p = [System.Windows.Forms.Cursor]::Position
+        [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(($p.X + 1), $p.Y)
+        Start-Sleep -Milliseconds 300
+        [System.Windows.Forms.Cursor]::Position = $p
+        Write-Output ("JOB_OK курсор сдвинут и возвращён, позиция " + $p.X + "," + $p.Y)
+    } catch {
+        Write-Output ("JOB_FAIL " + $_.Exception.Message)
+    }
+}
+
 function Task-Diag([string]$argLine) {
     $what = $argLine.Trim()
     if ($what -eq "") { $what = "all" }
@@ -231,6 +249,7 @@ $allowed = @{
     "compile" = "^$"
     "report"  = "^$"
     "closeexcel" = "^$"
+    "wakescreen" = "^$"
     "diag"    = "^\s*(rdp|env|git|session|all)?\s*$"
 }
 
@@ -274,6 +293,7 @@ try {
                     "compile" { $body = (Task-Compile $argLine | Out-String) }
                     "report"  { $body = (Task-Report  $argLine | Out-String) }
                     "closeexcel" { $body = (Task-CloseExcel $argLine | Out-String) }
+                    "wakescreen" { $body = (Task-WakeScreen $argLine | Out-String) }
                     "diag"    { $body = (Task-Diag    $argLine | Out-String) }
                 }
             } catch {
