@@ -1,4 +1,7 @@
 ﻿# runner.ps1
+# Version 1.2 / 11.09.2026: задача closeexcel - аккуратно закрыть книги и Excel
+#   через COM (без сохранения, без убийства процесса): открытая книга блокирует
+#   установку модулей.
 # Version 1.1 / 11.09.2026: diag rdp - правила брандмауэра ищутся по порту 3389
 #   (поиск по названию правила вернул пусто), добавлены профили брандмауэра и
 #   список сторонних средств защиты.
@@ -120,6 +123,30 @@ function Task-Report([string]$argLine) {
     }
 }
 
+function Task-CloseExcel([string]$argLine) {
+    # Аккуратно: цепляемся к запущенному Excel, закрываем книги БЕЗ сохранения и выходим.
+    # Процесс не убиваем - kill оставил бы временные файлы и мог потерять чужую работу.
+    $proc = Get-Process EXCEL -ErrorAction SilentlyContinue
+    if ($null -eq $proc) { Write-Output "JOB_OK Excel не запущен, делать нечего"; return }
+    try {
+        $xl = [Runtime.InteropServices.Marshal]::GetActiveObject("Excel.Application")
+    } catch {
+        Write-Output ("JOB_FAIL не удалось подключиться к запущенному Excel: " + $_.Exception.Message)
+        return
+    }
+    try {
+        $xl.DisplayAlerts = $false
+        foreach ($wb in @($xl.Workbooks)) {
+            Write-Output ("--- закрываю без сохранения: " + $wb.Name)
+            $wb.Close($false)
+        }
+        $xl.Quit()
+        Write-Output "JOB_OK Excel закрыт"
+    } catch {
+        Write-Output ("JOB_FAIL " + $_.Exception.Message)
+    }
+}
+
 function Task-Diag([string]$argLine) {
     $what = $argLine.Trim()
     if ($what -eq "") { $what = "all" }
@@ -183,6 +210,7 @@ $allowed = @{
     "release" = "^(\s*(-DryRun|-Force|-SkipCompile|-Bump\s+(patch|minor|major)))*\s*$"
     "compile" = "^$"
     "report"  = "^$"
+    "closeexcel" = "^$"
     "diag"    = "^\s*(rdp|env|git|all)?\s*$"
 }
 
@@ -225,6 +253,7 @@ try {
                     "release" { $body = (Task-Release $argLine | Out-String) }
                     "compile" { $body = (Task-Compile $argLine | Out-String) }
                     "report"  { $body = (Task-Report  $argLine | Out-String) }
+                    "closeexcel" { $body = (Task-CloseExcel $argLine | Out-String) }
                     "diag"    { $body = (Task-Diag    $argLine | Out-String) }
                 }
             } catch {
