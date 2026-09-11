@@ -1,4 +1,7 @@
 ﻿# runner.ps1
+# Version 1.8 / 11.09.2026: задача aikey - копирует ключ ИИ из корня проекта в
+#   %APPDATA%\ReportMTO\deepseek.key (UTF-8 без BOM, мусор отбрасывается).
+#   Сам ключ в лог не попадает: только длина и признак префикса sk-.
 # Version 1.7 / 11.09.2026: load проверяет занятость книги по файлу блокировки
 #   ~$ReportMTO.xlsm и по признаку ReadOnly, а не по наличию процесса EXCEL.
 # Version 1.6 / 11.09.2026: задача load - загрузка data\*.json ПО ОДНОМУ файлу с
@@ -280,6 +283,32 @@ function Task-Load([string]$argLine) {
     }
 }
 
+function Task-AiKey([string]$argLine) {
+    # Переносит ключ ИИ из корня проекта в %APPDATA%\ReportMTO\deepseek.key -
+    # именно оттуда его читает modMain.ResolveAiApiKey, и это место вне
+    # синхронизации с Google Диском. Сам ключ никуда не печатается: в лог идут
+    # только длина и признак префикса.
+    $src = Join-Path $root "deepseek.key"
+    if (-not (Test-Path -LiteralPath $src)) { Write-Output ("JOB_FAIL нет файла " + $src); return }
+
+    $raw = [IO.File]::ReadAllText($src)
+    $key = ""
+    foreach ($ch in $raw.ToCharArray()) {
+        $code = [int][char]$ch
+        if ($code -gt 32 -and $code -ne 34 -and $code -ne 39 -and $code -ne 65279) { $key = $key + $ch }
+    }
+    if ($key.Length -eq 0) { Write-Output "JOB_FAIL файл ключа пуст после очистки"; return }
+
+    $dir = Join-Path $env:APPDATA "ReportMTO"
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    $dst = Join-Path $dir "deepseek.key"
+    [IO.File]::WriteAllText($dst, $key, (New-Object System.Text.UTF8Encoding($false)))
+
+    $pref = "нет"
+    if ($key.StartsWith("sk-")) { $pref = "да" }
+    Write-Output ("JOB_OK записан " + $dst + "; длина " + $key.Length + " символов; начинается с sk-: " + $pref + "; BOM нет")
+}
+
 function Task-Diag([string]$argLine) {
     $what = $argLine.Trim()
     if ($what -eq "") { $what = "all" }
@@ -364,6 +393,7 @@ $allowed = @{
     "wakescreen" = "^$"
     "screenshot" = "^$"
     "load"       = "^$"
+    "aikey"      = "^$"
     "diag"    = "^\s*(rdp|env|git|session|all)?\s*$"
 }
 
@@ -410,6 +440,7 @@ try {
                     "wakescreen" { $body = (Task-WakeScreen $argLine | Out-String) }
                     "screenshot" { $body = (Task-Screenshot $argLine | Out-String) }
                     "load"       { $body = (Task-Load       $argLine | Out-String) }
+                    "aikey"      { $body = (Task-AiKey      $argLine | Out-String) }
                     "diag"    { $body = (Task-Diag    $argLine | Out-String) }
                 }
             } catch {

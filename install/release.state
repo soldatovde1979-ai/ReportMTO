@@ -1,12 +1,12 @@
 # Служебный файл install\release.ps1 - состояние последнего успешного релиза.
 # Руками не править: отсюда берётся ответ на вопрос «менялись ли исходники».
-version 8.1.0
-digest 761fa5041f2ca44b7cc2e5758312081c
+version 8.1.1
+digest ea8f339fa25234f6c61e23608cebbe62
 file modAggregate.bas 6E701973B32F50F176EB23F9F075AA3F
 file modAIGateway.bas 326ACCDCC53035229FE4922FDDB88F58
 file modColor.bas 35CB06FF36A3AE0ED0F0B286ABB7828F
 file modContentDisc.bas 7C38BBC55925F0A4CE48A8045851379F
-file modContentMTO.bas 439CA1DEB46124D46027AAB01DF81FC2
+file modContentMTO.bas 92CE3060FE40132122C7FEEBDE1D999A
 file modContentZone.bas 2278B4B677996ACEA4F0B6F24790FDEF
 file modHTMLEngine.bas 387D70C07D694AC23EFF229B0FF20DC2
 file modLog.bas 698BC513AFAB9845D4710DF0AE1F55A5

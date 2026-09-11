@@ -6,6 +6,12 @@
 Файл ведёт `install\release.ps1` автоматически при успешной установке — руками
 дописывать не нужно. Порядок работы: [`docs/version-guide.md`](docs/version-guide.md).
 
+## 8.1.1 — 11.09.2026
+
+- Изменены исходники: modContentMTO.bas
+- Книга: D:\GOOGLEDISK\PROJECTs\ReportMTO\ReportMTO.xlsm
+- Хеш исходников: ea8f339fa25234f6c61e23608cebbe62
+
 ## 8.1.0 — 11.09.2026
 
 - Изменены исходники: modAggregate.bas, modAIGateway.bas, modColor.bas, modContentDisc.bas, modContentMTO.bas, modContentZone.bas, modHTMLEngine.bas, modLog.bas, modMain.bas, modPivotBuilder.bas, modPQSync.bas, fnComputeGroupMetrics.pq, fnComputeKey.pq, fnDedupByKey.pq, fnNormalizeFields.pq, fnUpsert.pq, qDiagImport.pq, qExistingData.pq, qKeepWeeks.pq, Query-ImportJSON.pq, tmp_index.html
