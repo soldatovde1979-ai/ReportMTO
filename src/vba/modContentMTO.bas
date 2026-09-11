@@ -2,6 +2,10 @@ Attribute VB_Name = "modContentMTO"
 ' modContentMTO - CONTENT SPEC (МТО). Реализует 4 функции по контракту modMain.bas (Core):
 '   BuildPivots, BuildPrompt, ParseAIResponse, BuildPlaceholders(s3, s4, s5).
 '
+' Версия 8.4 от 11.09.2026: метки 1a-1g внутри OverviewToJson: Err 13 падает
+'   внутри этого блока, место не видно. Блок впервые идёт по ветке hasDW = True -
+'   колонка dateWeek появилась только после загрузки данных M v7.
+'
 ' Версия 8.3 от 11.09.2026: в BuildPrompt добавлены пошаговые метки в журнал.
 '   Прогон 11.09 18:00 дал «Запрос к ИИ пропущен: Err=13 (Type mismatch),
 '   длина тела=0» без указания места - блоки собираются один за другим, и по
@@ -2027,18 +2031,22 @@ Private Function OverviewToJson() As String
             "opened/unsigned уходят в промпт как null, остальные метрики считаются."
     End If
 
+    modLog.WriteDebug 1, "Формирование отчёта", "OverviewToJson", "1a: старт, отчётная неделя определена"
     Dim opened As Double, closedN As Double
     If hasDW Then
         opened = DictVal(modAggregate.GroupCountDistinct(Array("dateWeek"), "number", FBase()), rwS & "|")
     End If
+    modLog.WriteDebug 1, "Формирование отчёта", "OverviewToJson", "1b: closedN"
     closedN = DictVal(modAggregate.GroupCountDistinct(Array("yearWeek"), "number", _
         Array("ready_for=Готов к выбытию")), rwS & "|")
 
     Dim hasMed As Boolean
     Dim med As Double
+    modLog.WriteDebug 1, "Формирование отчёта", "OverviewToJson", "1c: медиана deltaHours"
     med = modAggregate.Percentile("deltaHours", 0.5, Array("yearWeek=" & rwS, "ready_for=Готов к выбытию"), hasMed)
 
     Dim armW As Object
+    modLog.WriteDebug 1, "Формирование отчёта", "OverviewToJson", "1d: arm по неделе"
     Set armW = modAggregate.GroupCount(Array("arm"), Array("yearWeek=" & rwS))
     Dim tabEv As Double, pcEv As Double
     tabEv = DictVal(armW, "ПЛАНШЕТ|")
@@ -2046,6 +2054,7 @@ Private Function OverviewToJson() As String
 
     Dim allD As Object, armD As Object
     Dim allEv As Double, unsEv As Double
+    modLog.WriteDebug 1, "Формирование отчёта", "OverviewToJson", "1e: блоки по dateWeek"
     If hasDW Then
         Set allD = modAggregate.GroupCount(Array("dateWeek"), FBase())
         Set armD = modAggregate.GroupCount(Array("arm"), Array("dateWeek=" & rwS))
@@ -2062,9 +2071,11 @@ Private Function OverviewToJson() As String
 
     ' Корзины времени - те же границы, что BuildTimeHistogram (1/4/8/24/72 ч), обрезка p99.
     Dim buckets As String
+    modLog.WriteDebug 1, "Формирование отчёта", "OverviewToJson", "1f: корзины времени"
     buckets = TimeBucketsToJson()
 
     Dim zn As Object, defk As Object
+    modLog.WriteDebug 1, "Формирование отчёта", "OverviewToJson", "1g: zn_type и defekt_type"
     Set zn = modAggregate.GroupCountDistinct(Array("zn_type"), "number", FBase())
     Set defk = modAggregate.GroupCountDistinct(Array("defekt_type"), "number", FBase())
     Dim sZn As String, sDef As String, first As Boolean, k As Variant
