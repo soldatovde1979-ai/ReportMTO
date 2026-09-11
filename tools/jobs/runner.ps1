@@ -1,4 +1,7 @@
 ﻿# runner.ps1
+# Version 1.6 / 11.09.2026: задача load - загрузка data\*.json ПО ОДНОМУ файлу с
+#   живым логом out\load-live.log (пишется после каждого шага, видно где встало).
+#   Книга открывается самой задачей; если Excel уже запущен - отказ с подсказкой.
 # Version 1.5 / 11.09.2026: задача screenshot - снимок рабочего стола средствами
 #   Windows: отличает "машина не отдаёт картинку" от "RustDesk не отдаёт картинку".
 # Version 1.4 / 11.09.2026: задача wakescreen - разбудить дисплей сдвигом курсора.
@@ -192,6 +195,83 @@ function Task-Screenshot([string]$argLine) {
     }
 }
 
+function Task-Load([string]$argLine) {
+    # Загрузка выгрузок data\*.json в книгу ПО ОДНОЙ, с живым логом.
+    # Живой лог - tools\jobs\out\load-live.log: пишется после каждого файла, поэтому
+    # по нему видно, на каком файле и сколько времени процесс стоит. Обычный лог
+    # задания появляется только после её завершения и для долгой загрузки бесполезен.
+    $dataDir = Join-Path $root "data"
+    $book = Join-Path $root "ReportMTO.xlsm"
+    $live = Join-Path $PSScriptRoot "out\load-live.log"
+
+    function LiveSay([string]$s) {
+        $line = (Get-Date -Format "yyyy-MM-dd HH:mm:ss") + "  " + $s
+        Add-Content -LiteralPath $live -Value $line -Encoding UTF8
+        Write-Output $line
+    }
+
+    if (-not (Test-Path $book)) { Write-Output ("JOB_FAIL нет книги " + $book); return }
+    if ($null -ne (Get-Process EXCEL -ErrorAction SilentlyContinue)) {
+        Write-Output "JOB_FAIL Excel уже запущен - книга занята. Сначала задача closeexcel"
+        return
+    }
+
+    $files = @(Get-ChildItem -Path (Join-Path $dataDir "*.json") -File -ErrorAction SilentlyContinue | Sort-Object Name)
+    if ($files.Count -eq 0) { Write-Output "JOB_FAIL в data\ нет json-файлов"; return }
+
+    Set-Content -LiteralPath $live -Value ((Get-Date -Format "yyyy-MM-dd HH:mm:ss") + "  LOAD_START файлов: " + $files.Count) -Encoding UTF8
+
+    $excel = New-Object -ComObject Excel.Application
+    $excel.Visible = $false
+    $excel.DisplayAlerts = $false
+    $excel.AutomationSecurity = 1
+    $excel.AskToUpdateLinks = $false
+    try {
+        LiveSay "открываю книгу (52 МБ, это около минуты)"
+        $wb = $excel.Workbooks.Open($book, 0, $false)
+        try {
+            $ws = $wb.Sheets.Item("tbDATA")
+            $lo = $ws.ListObjects.Item("tbDATA")
+            LiveSay ("строк в tbDATA на старте: " + [int]$lo.ListRows.Count)
+
+            foreach ($f in $files) {
+                $mb = [math]::Round($f.Length / 1MB, 1)
+                LiveSay ("--> " + $f.Name + " (" + $mb + " МБ) - начинаю")
+                $t0 = Get-Date
+                $rowsBefore = [int]$lo.ListRows.Count
+
+                $safe = $f.FullName -replace '"', '""'
+                $wb.Queries.Item("prmSourcePath").Formula =
+                    '"' + $safe + '" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]'
+                LiveSay ("    путь подставлен, запускаю обновление Power Query")
+
+                $qt = $lo.QueryTable
+                $qt.BackgroundQuery = $false
+                $null = $qt.Refresh($false)
+
+                $rowsAfter = [int]$lo.ListRows.Count
+                $sec = [int]((Get-Date) - $t0).TotalSeconds
+                LiveSay ("    обновление завершено за " + $sec + " с; строк " + $rowsBefore + " -> " + $rowsAfter)
+
+                LiveSay "    сохраняю книгу"
+                $wb.Save()
+                LiveSay ("<-- " + $f.Name + " готов")
+            }
+
+            LiveSay ("LOAD_DONE строк в tbDATA: " + [int]$lo.ListRows.Count)
+            Write-Output "JOB_OK загрузка завершена"
+        } finally {
+            $wb.Close($true)
+        }
+    } catch {
+        LiveSay ("LOAD_FAIL " + $_.Exception.Message)
+        Write-Output ("JOB_FAIL " + $_.Exception.Message)
+    } finally {
+        $excel.Quit()
+        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
+    }
+}
+
 function Task-Diag([string]$argLine) {
     $what = $argLine.Trim()
     if ($what -eq "") { $what = "all" }
@@ -275,6 +355,7 @@ $allowed = @{
     "closeexcel" = "^$"
     "wakescreen" = "^$"
     "screenshot" = "^$"
+    "load"       = "^$"
     "diag"    = "^\s*(rdp|env|git|session|all)?\s*$"
 }
 
@@ -320,6 +401,7 @@ try {
                     "closeexcel" { $body = (Task-CloseExcel $argLine | Out-String) }
                     "wakescreen" { $body = (Task-WakeScreen $argLine | Out-String) }
                     "screenshot" { $body = (Task-Screenshot $argLine | Out-String) }
+                    "load"       { $body = (Task-Load       $argLine | Out-String) }
                     "diag"    { $body = (Task-Diag    $argLine | Out-String) }
                 }
             } catch {
