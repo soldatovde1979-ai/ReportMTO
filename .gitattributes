@@ -1,0 +1,26 @@
+# Переносы строк фиксируются здесь, а не настройкой конкретной машины.
+# Причина: 11.09.2026 коммит из Linux-оболочки записал CRLF в 48 файлов,
+# потому что core.autocrlf там не задан (см. docs/plans/git-sync-v1.0.md, раздел 0).
+
+* text=auto
+
+*.ps1  text eol=crlf
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+*.bas  text eol=crlf
+*.pq   text eol=crlf
+*.bsl  text eol=crlf
+
+*.md   text
+*.html text
+*.json text
+
+*.xlsm  binary
+*.xlsx  binary
+*.xltx  binary
+*.docx  binary
+*.png   binary
+*.jpg   binary
+*.pdf   binary
+*.woff2 binary
+*.ttf   binary
