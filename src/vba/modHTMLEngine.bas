@@ -3,6 +3,12 @@ Attribute VB_Name = "modHTMLEngine"
 ' Не знает конкретных имён плейсхолдеров - их список и значения строит Content Spec
 ' (см. modContentMTO.bas: BuildPlaceholders), контракт - Scripting.Dictionary "{{ИМЯ}}" -> значение.
 '
+' v3.2 от 11.09.2026:
+'   - ReadUtf8 снимает BOM (см. комментарий у функции): из-за него ключ ИИ уходил
+'     в заголовок Authorization с невидимым символом, провайдер отвечал 401.
+'   - SaveHTMLFile: резервная папка result рядом с книгой, если OUTPUT/RESULT_FOLDER
+'     недоступна; готовый отчёт больше не теряется из-за неверного пути на листе.
+'
 ' v3.1 (правки по ревью 24.08.2026):
 '   P0-3  - чтение и запись строго в UTF-8 через ADODB.Stream. Было: OpenTextFile(..., -1)
 '           = UTF-16LE на UTF-8-шаблоне (кириллица разрушалась) и CreateTextFile(..., True)
@@ -30,24 +36,29 @@ Public Function SaveHTMLFile(html As String, resultFolder As String) As String
     On Error GoTo ErrHandler
 
     Dim folder As String
-    folder = ResolveOutputFolder(resultFolder)
+    folder = EnsureFolder(ResolveOutputFolder(resultFolder))
+
+    ' v3.2: папка из OUTPUT/RESULT_FOLDER может не существовать (путь с другой машины,
+    ' опечатка, отключённый диск). Раньше отчёт в этом случае просто терялся, хотя
+    ' прогон занимает минуты. Резерв - папка result рядом с книгой; подмена не молчит,
+    ' а пишется в журнал предупреждением.
+    If folder = "" Then
+        Dim fallback As String
+        fallback = EnsureFolder(ThisWorkbook.Path & "\result")
+        If fallback = "" Then
+            modLog.WriteLogEntry Now, "Ошибка", "Сохранение отчёта", resultFolder, _
+                "Папка недоступна и резервная папка рядом с книгой не создаётся"
+            SaveHTMLFile = ""
+            Exit Function
+        End If
+        modLog.WriteLogEntry Now, "Предупреждение", "Сохранение отчёта", fallback, _
+            "Папка OUTPUT/RESULT_FOLDER недоступна (" & resultFolder & _
+            ") - отчёт сохранён рядом с книгой"
+        folder = fallback
+    End If
 
     Dim fso As Object
     Set fso = CreateObject("Scripting.FileSystemObject")
-
-    If Not fso.FolderExists(folder) Then
-        ' Пытаемся создать один уровень - типичный случай "папки result\ ещё нет".
-        On Error Resume Next
-        fso.CreateFolder folder
-        On Error GoTo ErrHandler
-    End If
-
-    If Not fso.FolderExists(folder) Then
-        modLog.WriteLogEntry Now, "Ошибка", "Сохранение отчёта", folder, _
-            "Папка недоступна (исходное значение OUTPUT/RESULT_FOLDER: " & resultFolder & ")"
-        SaveHTMLFile = ""
-        Exit Function
-    End If
 
     Dim fileName As String
     fileName = "Report_" & Format(Now, "yyyymmdd_hhnnss") & ".html"
@@ -65,6 +76,23 @@ ErrHandler:
     SaveHTMLFile = ""
 End Function
 
+' Возвращает путь, если папка есть или её удалось создать (один уровень),
+' иначе "" - вызывающий код решает, чем заменить. Ошибки создания гасятся:
+' недоступный путь - штатная ситуация, а не сбой отчёта.
+Private Function EnsureFolder(ByVal path As String) As String
+    EnsureFolder = ""
+    If Trim$(path) = "" Then Exit Function
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FolderExists(path) Then
+        On Error Resume Next
+        fso.CreateFolder path
+        Err.Clear
+        On Error GoTo 0
+    End If
+    If fso.FolderExists(path) Then EnsureFolder = path
+End Function
+
 ' =====================================================================================
 ' UTF-8 ввод/вывод (P0-3)
 ' =====================================================================================
@@ -75,8 +103,20 @@ Public Function ReadUtf8(path As String) As String
     st.Charset = "utf-8"
     st.Open
     st.LoadFromFile path
-    ReadUtf8 = st.ReadText(-1)  ' adReadAll
+    Dim s As String
+    s = st.ReadText(-1)         ' adReadAll
     st.Close
+
+    ' v3.2: ADODB.Stream в текстовом режиме возвращает BOM файла первым символом
+    ' (U+FEFF), а не съедает его. Для шаблона это невидимый мусор перед <!DOCTYPE>,
+    ' для файла с ключом ИИ - порча заголовка Authorization: провайдер отвечает
+    ' 401 "auth header format should be Bearer sk-...". Снимаем в Core: BOM
+    ' не нужен ни одному читателю этой функции.
+    Do While Len(s) > 0
+        If Left$(s, 1) <> ChrW$(65279) Then Exit Do
+        s = Mid$(s, 2)
+    Loop
+    ReadUtf8 = s
 End Function
 
 ' Пишет UTF-8 БЕЗ BOM: ADODB.Stream в текстовом режиме всегда добавляет BOM,

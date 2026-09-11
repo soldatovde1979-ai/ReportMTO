@@ -1,6 +1,19 @@
 Attribute VB_Name = "modContentZone"
 ' modContentZone - CONTENT-слой части «Техника» (слайды 5-8) отчёта МТО.
 '
+' Версия 2.4 от 11.09.2026 Два решения владельца.
+'   1) ZoneReportWeek: отчётная неделя - последняя ЗАВЕРШЁННАЯ к концу снимка;
+'      текущая неделя всегда неполная и в сравнение идти не должна.
+'   2) Slide1Series: плитка «Медиана в ремзоне» считается как создание наряда ->
+'      закрытие наряда (определение эталона). Было «приёмка -> выбытие» - то же
+'      самое, что гистограмма BLOCK_TIME_HIST, отчего плитка показывала десятки
+'      минут и дублировала соседний блок.
+'
+' Версия 2.3 от 11.09.2026 Grade читала пороги по ключам REPORT/NormaForPlanshet
+'   и REPORT/ProvalForPlanshet - таких ключей на листе Variable нет (там
+'   NormaForPlanshet / ProvalForPlanshet, как их и читает modContentMTO).
+'   Оценка молча шла по умолчанию 90/50, настройка пользователя не действовала.
+'
 ' Версия 2.2 от 10.09.2026 Две ошибки компиляции. Объявления уровня модуля
 '   (блоки «возвраты» и «фазы наряда») лежали в середине файла, после процедур -
 '   перенесены в секцию Declarations. В BuildAgeCurve и BuildChronics цикл
@@ -564,8 +577,9 @@ Public Sub TopKeys(ByVal d As Object, ByVal limit As Long, _
     vals = rv
 End Sub
 
-' Отчётная неделя части «Техника»: последняя неделя снимка, а если в ней меньше
-' половины объёма предыдущей - предыдущая. Неполная неделя ломает сравнение.
+' Отчётная неделя отчёта: последняя неделя, ЗАВЕРШИВШАЯСЯ к концу снимка, а если
+' в ней меньше половины объёма предыдущей - предыдущая. Неполная неделя ломает
+' сравнение. Эту же неделю берут слайды 2-4 и блоки промпта ИИ - источник один.
 Public Function ZoneReportWeek() As Long
     If mRepWeek > 0 Then ZoneReportWeek = mRepWeek: Exit Function
     EnsureZn
@@ -582,6 +596,18 @@ Public Function ZoneReportWeek() As Long
     For Each k In byW.Keys
         If CLng(k) > mx Then mx = CLng(k)
     Next k
+    ' Текущая неделя на момент выгрузки всегда неполная - пусть на несколько часов,
+    ' но неполная, и сравнивать её с полными неделями некорректно. Отчётной берём
+    ' последнюю неделю, которая к концу снимка уже закончилась (решение владельца
+    ' от 11.09.2026). Если такой недели в данных нет - остаётся максимальная.
+    If WeekEnd(mx) > SnapshotEnd() Then
+        Dim unfin As Long
+        unfin = PrevWeek(mx)
+        If byW.Exists(CStr(unfin)) Then mx = unfin
+    End If
+
+    ' Остаточная защита: даже завершённая неделя бывает почти пустой, если выгрузка
+    ' оборвалась. Меньше половины объёма предыдущей - берём предыдущую.
     Dim prev As Long
     prev = PrevWeek(mx)
     If byW.Exists(CStr(prev)) Then
@@ -3195,9 +3221,9 @@ Public Function Grade(ByVal p As Double, ByVal nrec As Double, ByVal hasValue As
     Dim minRec As Double, norma As Double, proval As Double
     minRec = ToNum(modMain.GetVariableDef("REPORT/MIN_POST_RECORDS", "10"))
     If minRec <= 0# Then minRec = 10#
-    norma = ToNum(modMain.GetVariableDef("REPORT/NormaForPlanshet", "90"))
+    norma = ToNum(modMain.GetVariableDef("NormaForPlanshet", "90"))
     If norma <= 0# Then norma = 90#
-    proval = ToNum(modMain.GetVariableDef("REPORT/ProvalForPlanshet", "50"))
+    proval = ToNum(modMain.GetVariableDef("ProvalForPlanshet", "50"))
     If proval <= 0# Then proval = 50#
 
     If nrec < minRec Then
@@ -3320,8 +3346,12 @@ Private Sub Slide1Series(ByRef wk As Variant, ByRef opened() As Double, _
             If cl > 0# Then
                 If IsoYearWeek(cl) = CLng(wk(i)) Then closedA(i) = closedA(i) + 1#
             End If
-            If lv > 0# And ac > 0# And lv >= ac Then
-                If IsoYearWeek(lv) = CLng(wk(i)) Then medCol(i).Add (lv - ac) * 24#
+            ' «Медиана в ремзоне» - полный срок наряда: создание -> закрытие, по
+            ' нарядам, закрытым на этой неделе (определение эталона, k_medzone в
+            ' tools/mockup_v1.0/compute.py). Пара «приёмка -> выбытие» осталась
+            ' отдельной метрикой - гистограмма BLOCK_TIME_HIST и чипы под ней.
+            If cl > 0# And dt > 0# And cl >= dt Then
+                If IsoYearWeek(cl) = CLng(wk(i)) Then medCol(i).Add (cl - dt) * 24#
             End If
         Next i
     Next k

@@ -16,6 +16,11 @@ Attribute VB_Name = "modMain"
 '   P1-11 - путь result\ резолвится в modHTMLEngine.ResolveOutputFolder.
 '   + GetVariableDef - чтение ключа Variable со значением по умолчанию (для необязательных ключей).
 '
+' v8.1 (11.09.2026) - ResolveAiApiKey: ключ чистится от BOM/кавычек/пробелов перед
+'   заголовком Authorization (провайдер отвечал 401 "auth header format should be
+'   Bearer sk-..."), источник ключа и его длина пишутся в журнал при DEBUG>=1.
+'   Сам ключ в журнал не попадает.
+'
 ' v7.1 (08.09.2026) - ключ ИИ вынесен за пределы книги:
 '   ResolveAiApiKey: AI_API_KEY (переменная окружения) -> %APPDATA%\ReportMTO\deepseek.key
 '   (UTF-8) -> лист Variable (legacy, с предупреждением в лог). Ключ в лог и HTML не пишется.
@@ -263,37 +268,78 @@ End Function
 ' файл %APPDATA%\ReportMTO\deepseek.key (UTF-8), затем лист Variable (legacy, с предупреждением).
 ' Ключ никогда не пишется в лог и в HTML-отчёт.
 Public Function ResolveAiApiKey() As String
-    ' 1) Переменная окружения пользователя (setx AI_API_KEY ...).
-    Dim envKey As String
-    envKey = Trim$(Environ$("AI_API_KEY"))
-    If Len(envKey) > 0 Then ResolveAiApiKey = envKey: Exit Function
+    Dim key As String, src As String
 
-    ' 2) Файл с правами только для владельца (UTF-8; чтение существующим modHTMLEngine.ReadUtf8).
-    Dim appData As String
-    appData = Environ$("APPDATA")
-    If Len(appData) > 0 Then
-        Dim fso As Object
-        Set fso = CreateObject("Scripting.FileSystemObject")
-        Dim keyPath As String
-        keyPath = fso.BuildPath(appData, "ReportMTO\deepseek.key")
-        If fso.FileExists(keyPath) Then
-            On Error Resume Next
-            ResolveAiApiKey = Trim$(modHTMLEngine.ReadUtf8(keyPath))
-            Err.Clear
-            On Error GoTo 0
-            If Len(ResolveAiApiKey) > 0 Then Exit Function
+    ' 1) Переменная окружения пользователя (setx AI_API_KEY ...).
+    key = CleanApiKey(Environ$("AI_API_KEY"))
+    If Len(key) > 0 Then src = "переменная окружения AI_API_KEY"
+
+    ' 2) Файл с правами только для владельца (UTF-8; чтение modHTMLEngine.ReadUtf8).
+    If Len(key) = 0 Then
+        Dim appData As String
+        appData = Environ$("APPDATA")
+        If Len(appData) > 0 Then
+            key = CleanApiKey(ReadKeyFile(appData & "\ReportMTO\deepseek.key"))
+            If Len(key) > 0 Then src = "%APPDATA%\ReportMTO\deepseek.key"
         End If
     End If
 
     ' 3) Лист Variable - небезопасно, но совместимо с прежними книгами.
-    On Error Resume Next
-    ResolveAiApiKey = GetVariable("AI/API_KEY")
-    If Err.Number <> 0 Then Err.Clear: ResolveAiApiKey = ""
-    On Error GoTo 0
-    If Len(Trim$(ResolveAiApiKey)) > 0 Then
-        modLog.WriteLogEntry Now, "Предупреждение", "Формирование отчёта", "DeepSeek", _
-            "Ключ ИИ прочитан с листа Variable - защита листа не шифрует; перенесите ключ в AI_API_KEY или %APPDATA%\ReportMTO\deepseek.key"
+    If Len(key) = 0 Then
+        On Error Resume Next
+        key = CleanApiKey(GetVariable("AI/API_KEY"))
+        If Err.Number <> 0 Then Err.Clear: key = ""
+        On Error GoTo 0
+        If Len(key) > 0 Then
+            src = "лист Variable"
+            modLog.WriteLogEntry Now, "Предупреждение", "Формирование отчёта", "DeepSeek", _
+                "Ключ ИИ прочитан с листа Variable - защита листа не шифрует; перенесите ключ в AI_API_KEY или %APPDATA%\ReportMTO\deepseek.key"
+        End If
     End If
+
+    ' Диагностика без раскрытия секрета: из какого источника взят ключ, его длина и
+    ' признак ожидаемого префикса. Без этой строки 401 от провайдера неотличим -
+    ' пустой ключ, ключ с мусором и отозванный ключ выглядели в журнале одинаково.
+    If Len(key) = 0 Then
+        modLog.WriteLogEntry Now, "Предупреждение", "Формирование отчёта", "DeepSeek", _
+            "Ключ ИИ не найден: ни AI_API_KEY, ни %APPDATA%\ReportMTO\deepseek.key, ни лист Variable"
+    Else
+        Dim pref As String
+        If Left$(key, 3) = "sk-" Then pref = "да" Else pref = "нет"
+        modLog.WriteDebug 1, "Формирование отчёта", "ResolveAiApiKey", _
+            "Источник ключа: " & src & "; длина " & CStr(Len(key)) & _
+            " символов; начинается с sk-: " & pref
+    End If
+
+    ResolveAiApiKey = key
+End Function
+
+' Чистка ключа перед подстановкой в заголовок Authorization: BOM, управляющие
+' символы, пробелы и кавычки. Любой из них ломает формат "Bearer sk-..." и даёт
+' 401 с текстом про формат заголовка, а не про сам ключ - диагностируется тяжело.
+Private Function CleanApiKey(ByVal raw As String) As String
+    Dim s As String, i As Long, ch As String, code As Long
+    s = ""
+    For i = 1 To Len(raw)
+        ch = Mid$(raw, i, 1)
+        code = AscW(ch)
+        If code < 0 Then code = code + 65536
+        If code > 32 And code <> 34 And code <> 39 And code <> 65279 Then s = s & ch
+    Next i
+    CleanApiKey = s
+End Function
+
+' Чтение файла с ключом: отсутствие файла и любая ошибка чтения - пустая строка,
+' резолвер идёт к следующему источнику.
+Private Function ReadKeyFile(ByVal path As String) As String
+    ReadKeyFile = ""
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FileExists(path) Then Exit Function
+    On Error Resume Next
+    ReadKeyFile = modHTMLEngine.ReadUtf8(path)
+    If Err.Number <> 0 Then Err.Clear: ReadKeyFile = ""
+    On Error GoTo 0
 End Function
 
 ' Чтение значения из листа Variable по ключу (например "AI/ENDPOINT").

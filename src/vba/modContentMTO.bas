@@ -2,6 +2,10 @@ Attribute VB_Name = "modContentMTO"
 ' modContentMTO - CONTENT SPEC (МТО). Реализует 4 функции по контракту modMain.bas (Core):
 '   BuildPivots, BuildPrompt, ParseAIResponse, BuildPlaceholders(s3, s4, s5).
 '
+' Версия 8.1 от 11.09.2026: ReportWeekValue в авто-режиме возвращает
+'   modContentZone.ZoneReportWeek - одна отчётная неделя на слайды и на промпт ИИ.
+'   Явный REPORT/WEEK = N по-прежнему перекрывает авто-режим.
+'
 ' Версия 8.0 от 10.09.2026: переход на шаблон v4.0 (8 слайдов, 59 плейсхолдеров).
 '   - модуль стал оркестратором: шапка, подвал, выводы ИИ и сборка словаря;
 '     содержимое слайдов 1 и 5-8 отдаёт modContentZone, слайдов 2-4 - modContentDisc;
@@ -425,7 +429,7 @@ Private Function WeeksUsable(ByVal weeks As Variant) As Boolean
 End Function
 
 ' Отчётная неделя (ключ REPORT/WEEK, task-for-coder §1):
-'   авто (пусто/0): второй с конца yearWeek, присутствующий в данных;
+'   авто (пусто/0): modContentZone.ZoneReportWeek - последняя завершившаяся неделя;
 '   явное N (1..50): последний год, в котором неделя N встречается в данных.
 ' Возвращает 0, если данных нет.
 Private Function ReportWeekValue() As Long
@@ -444,11 +448,18 @@ Private Function ReportWeekValue() As Long
     Dim raw As String
     raw = Trim$(modMain.GetVariableDef("REPORT/WEEK", "0"))
     If raw = "" Or raw = "0" Then
-        ' Авто: второй с конца присутствующий; при единственной неделе - она сама.
-        If UBound(weeks) - 1 >= LBound(weeks) Then
-            wk = CLng(KeyPart(weeks(UBound(weeks) - 1), 0))
-        Else
-            wk = CLng(KeyPart(weeks(UBound(weeks)), 0))
+        ' Авто: та же неделя, что на слайдах - последняя завершившаяся к концу снимка
+        ' (modContentZone.ZoneReportWeek). Раньше здесь была своя формула «вторая с
+        ' конца»: на данных, где последняя неделя обрывается посередине, она давала
+        ' ту же неделю, а на полных - другую, и ИИ комментировал не ту неделю, что
+        ' показывают слайды. Источник недели в отчёте должен быть один.
+        wk = modContentZone.ZoneReportWeek()
+        If wk = 0 Then
+            If UBound(weeks) - 1 >= LBound(weeks) Then
+                wk = CLng(KeyPart(weeks(UBound(weeks) - 1), 0))
+            Else
+                wk = CLng(KeyPart(weeks(UBound(weeks)), 0))
+            End If
         End If
     Else
         Dim n As Long

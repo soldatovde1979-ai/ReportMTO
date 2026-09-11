@@ -8,13 +8,19 @@
 
 1. Этот README — карта проекта, сборка, допущения.
 2. `docs\index.md` — карта документации «что где искать».
-3. `docs\spec.md` — вся система: архитектура, конфигурация, схема данных, контракты, потоки, бэклог, известные проблемы.
-4. `docs\specs\content-spec.md` — специфика МТО: поля выгрузки, 9 блоков, промпт DeepSeek, слайды, палитра.
-5. `docs\specs\brief-data-mto.md` — предметная область для внешнего аналитика.
-6. `docs\data.md` — описание данных: источники, форматы, поля.
-7. `docs\plans\next-steps.md` — что сделано/не сделано, чем заняться дальше.
+3. `docs\specs\data.md` — описание данных: источники, форматы, поля (сверено с выгрузкой 10.09.2026).
+4. `docs\plans\MTO_контракт_шаблона_v1.0.md` — контракт 59 плейсхолдеров шаблона v4.0.
+5. `docs\plans\MTO_отчёт_v8.0_раскатка_v1.0.md` — текущее состояние работ по отчёту v8.0.
+6. `docs\specs\brief-data-mto.md` — предметная область для внешнего аналитика.
+7. `docs\tasks.md` — задачи: «Срочно» и «Бэклог».
 8. `install\` — инструкции установки/обновления книги.
 9. `docs\archive\` — только история: выполненные планы, старые инструкции установки.
+
+> `docs\spec.md` и `docs\specs\content-spec.md` в репозитории **отсутствуют** — удалены
+> коммитом 7146c03 («docs cleanup»); спецификация системы ведётся в проекте Claude
+> (`claude/spec.md`, `claude/data.md`). Последняя версия из git: `git show 7146c03^:docs/spec.md`.
+> `docs\plans\next-steps.md` — ревизия от 24.08.2026, ссылается на документы, которых уже нет;
+> актуальный трекинг задач — `docs\tasks.md`.
 
 ## Что где лежит
 
@@ -28,7 +34,9 @@
 | `src\vba\modAggregate.bas` | Distinct Count / среднее / сортировка / фильтры по массиву | Core |
 | `src\vba\modColor.bas` | `PercentToColor` / `InterpolateHex` | Core |
 | `src\vba\modLog.bas` | `WriteLogEntry` | Core |
-| `src\vba\modContentMTO.bas` | Все 9 блоков, промпт DeepSeek, разбор ответа, плейсхолдеры — специфика МТО | **Content Spec** |
+| `src\vba\modContentMTO.bas` | Оркестратор отчёта v8.0: шапка, подвал, промпт DeepSeek, разбор ответа, сборка словаря плейсхолдеров | **Content Spec** |
+| `src\vba\modContentZone.bas` | Слайд 1 и слайды 5–8 («Техника»): 38 плейсхолдеров, примитивы разметки и графики | **Content Spec** |
+| `src\vba\modContentDisc.bas` | Слайды 2–4 («Дисциплина»): 13 плейсхолдеров | **Content Spec** |
 | `src\powerquery\Query-ImportJSON.pq` | Generic ETL-пайплайн | Core |
 | `src\powerquery\fnUpsert.pq` | Generic upsert по столбцу `Key` | Core |
 | `src\powerquery\fnDedupByKey.pq` | Дедупликация строк по `Key` | Core |
@@ -39,12 +47,12 @@
 | `src\powerquery\qDiagImport.pq` | Диагностика источника JSON, в сборку не входит | — |
 | `tmp_index.html` | Рабочий HTML-шаблон с плейсхолдерами и навигацией по 6 слайдам | **Content Spec** |
 | `examples\reference-example.html` | Визуальный референс для сверки стиля (НЕ рабочий шаблон) | — |
-| `docs\spec.md` | Полная спецификация системы: архитектура Core, конфигурация, схемы, контракты, потоки | — |
-| `docs\specs\content-spec.md` | Специфика направления МТО: поля, 9 блоков, промпт, слайды, палитра | — |
+| `docs\specs\data.md` | Данные: поля выгрузки, нормализация, контракт tbDATA | — |
+| `docs\plans\MTO_контракт_шаблона_v1.0.md` | Контракт шаблона v4.0: 59 плейсхолдеров, разметка каждого блока | **Content Spec** |
 | `docs\specs\brief-data-mto.md` | Данные МТО для внешнего аналитика (процесс загрузки намеренно опущен) | — |
 | `docs\plans\next-steps.md` | Живой трекинг задач, найденных багов и того, что проверено в Excel | — |
 | `install\*` | Инструкции установки/обновления книги и скрипты-обработки `install.ps1` / `install_prod.ps1` | — |
-| `docs\index.md`, `docs\data.md`, `docs\logs.md`, `docs\rules.md` | Карта документации, описание данных, журнал работ, память правил | — |
+| `docs\index.md`, `docs\logs.md`, `docs\rules.md`, `docs\tasks.md` | Карта документации, журнал работ, память правил, задачи | — |
 | `docs\archive\*` | Исторические документы: выполненные планы, старые инструкции установки (для истории) | — |
 | `build\` | Заготовка `ReportMTO_starter.xlsx` и собранная книга (передаются в git-обмен) | — |
 | `data\` | Входящие JSON-выгрузки из 1С (вне git) | — |
