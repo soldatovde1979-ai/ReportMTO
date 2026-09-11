@@ -1,4 +1,8 @@
 ﻿# runner.ps1
+# Version 2.0 / 11.09.2026: load переписан после зависания на 46 минут -
+#   асинхронное обновление с опросом и отметками «идёт N мин», предел 25 минут на
+#   файл с отменой, выключение пересчёта/событий/отрисовки, флаг остановки
+#   state\STOP и маска имени файла в аргументе задания.
 # Version 1.8 / 11.09.2026: задача aikey - копирует ключ ИИ из корня проекта в
 #   %APPDATA%\ReportMTO\deepseek.key (UTF-8 без BOM, мусор отбрасывается).
 #   Сам ключ в лог не попадает: только длина и признак префикса sk-.
@@ -201,13 +205,23 @@ function Task-Screenshot([string]$argLine) {
 }
 
 function Task-Load([string]$argLine) {
-    # Загрузка выгрузок data\*.json в книгу ПО ОДНОЙ, с живым логом.
-    # Живой лог - tools\jobs\out\load-live.log: пишется после каждого файла, поэтому
-    # по нему видно, на каком файле и сколько времени процесс стоит. Обычный лог
-    # задания появляется только после её завершения и для долгой загрузки бесполезен.
+    # Загрузка выгрузок data\*.json в книгу ПО ОДНОЙ.
+    #
+    # v2 (11.09.2026, после зависания на 46 минут):
+    #   - обновление запускается АСИНХРОННО и опрашивается раз в 20 секунд: в живой
+    #     лог идёт «идёт N мин», поэтому работа отличается от зависания сразу;
+    #   - предел на файл LOAD_MAX_MIN, по истечении - отмена обновления и выход,
+    #     чтобы очередь не стояла часами (планировщик не запускает вторую копию
+    #     задачи, пока работает первая - на время загрузки помощник глухой);
+    #   - на время загрузки выключены пересчёт, события и отрисовка;
+    #   - между файлами проверяется файл-флаг state\STOP - мягкая остановка;
+    #   - аргумент задания = подстрока имени файла: «load 20260910» грузит только
+    #     подходящие выгрузки.
     $dataDir = Join-Path $root "data"
     $book = Join-Path $root "ReportMTO.xlsm"
     $live = Join-Path $PSScriptRoot "out\load-live.log"
+    $stopFlag = Join-Path $PSScriptRoot "state\STOP"
+    $maxMin = 25
 
     function LiveSay([string]$s) {
         $line = (Get-Date -Format "yyyy-MM-dd HH:mm:ss") + "  " + $s
@@ -216,20 +230,19 @@ function Task-Load([string]$argLine) {
     }
 
     if (-not (Test-Path $book)) { Write-Output ("JOB_FAIL нет книги " + $book); return }
-
-    # Занятость проверяем по файлу блокировки Excel, а не по наличию процесса:
-    # чужой открытый Excel с другими книгами нашей работе не мешает, а сразу после
-    # сборки отчёта процесс ещё несколько секунд догорает (отказ 11.09.2026 18:03).
     $busyMark = Join-Path $root ('~$' + 'ReportMTO.xlsm')
     if (Test-Path -LiteralPath $busyMark) {
         Write-Output "JOB_FAIL книга открыта в Excel - сначала задача closeexcel"
         return
     }
+    if (Test-Path -LiteralPath $stopFlag) { Remove-Item -LiteralPath $stopFlag -Force }
 
     $files = @(Get-ChildItem -Path (Join-Path $dataDir "*.json") -File -ErrorAction SilentlyContinue | Sort-Object Name)
-    if ($files.Count -eq 0) { Write-Output "JOB_FAIL в data\ нет json-файлов"; return }
+    $mask = $argLine.Trim()
+    if ($mask -ne "") { $files = @($files | Where-Object { $_.Name -like ("*" + $mask + "*") }) }
+    if ($files.Count -eq 0) { Write-Output "JOB_FAIL подходящих json-файлов нет"; return }
 
-    Set-Content -LiteralPath $live -Value ((Get-Date -Format "yyyy-MM-dd HH:mm:ss") + "  LOAD_START файлов: " + $files.Count) -Encoding UTF8
+    Set-Content -LiteralPath $live -Value ((Get-Date -Format "yyyy-MM-dd HH:mm:ss") + "  LOAD_START файлов: " + $files.Count + "; предел на файл: " + $maxMin + " мин") -Encoding UTF8
 
     $excel = New-Object -ComObject Excel.Application
     $excel.Visible = $false
@@ -245,7 +258,18 @@ function Task-Load([string]$argLine) {
             $lo = $ws.ListObjects.Item("tbDATA")
             LiveSay ("строк в tbDATA на старте: " + [int]$lo.ListRows.Count)
 
+            # Пересчёт, события и отрисовка на время записи четверти миллиона строк.
+            $excel.ScreenUpdating = $false
+            $excel.EnableEvents = $false
+            $excel.Calculation = -4135        # xlCalculationManual
+            LiveSay "пересчёт и отрисовка выключены"
+
             foreach ($f in $files) {
+                if (Test-Path -LiteralPath $stopFlag) {
+                    LiveSay "STOP - найден флаг остановки, дальше не гружу"
+                    break
+                }
+
                 $mb = [math]::Round($f.Length / 1MB, 1)
                 LiveSay ("--> " + $f.Name + " (" + $mb + " МБ) - начинаю")
                 $t0 = Get-Date
@@ -254,24 +278,51 @@ function Task-Load([string]$argLine) {
                 $safe = $f.FullName -replace '"', '""'
                 $wb.Queries.Item("prmSourcePath").Formula =
                     '"' + $safe + '" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]'
-                LiveSay ("    путь подставлен, запускаю обновление Power Query")
 
                 $qt = $lo.QueryTable
-                $qt.BackgroundQuery = $false
-                $null = $qt.Refresh($false)
+                $qt.BackgroundQuery = $true
+                $null = $qt.Refresh($true)
+                LiveSay "    обновление запущено, жду"
+
+                $lastNote = 0
+                $timedOut = $false
+                while ($qt.Refreshing) {
+                    Start-Sleep -Seconds 20
+                    $min = [int]((Get-Date) - $t0).TotalMinutes
+                    if ($min -gt $lastNote) {
+                        $lastNote = $min
+                        LiveSay ("    идёт " + $min + " мин")
+                    }
+                    if ($min -ge $maxMin) {
+                        LiveSay ("    ПРЕДЕЛ " + $maxMin + " мин - отменяю обновление")
+                        try { $qt.CancelRefresh() } catch { LiveSay ("    отмена не удалась: " + $_.Exception.Message) }
+                        $timedOut = $true
+                        break
+                    }
+                }
+
+                if ($timedOut) {
+                    LiveSay ("<-- " + $f.Name + " ПРЕРВАН по пределу времени")
+                    Write-Output ("JOB_FAIL " + $f.Name + " не уложился в " + $maxMin + " мин")
+                    break
+                }
 
                 $rowsAfter = [int]$lo.ListRows.Count
                 $sec = [int]((Get-Date) - $t0).TotalSeconds
-                LiveSay ("    обновление завершено за " + $sec + " с; строк " + $rowsBefore + " -> " + $rowsAfter)
-
+                LiveSay ("    готово за " + $sec + " с; строк " + $rowsBefore + " -> " + $rowsAfter)
                 LiveSay "    сохраняю книгу"
                 $wb.Save()
-                LiveSay ("<-- " + $f.Name + " готов")
+                LiveSay ("<-- " + $f.Name + " записан")
             }
 
             LiveSay ("LOAD_DONE строк в tbDATA: " + [int]$lo.ListRows.Count)
             Write-Output "JOB_OK загрузка завершена"
         } finally {
+            try {
+                $excel.Calculation = -4105    # xlCalculationAutomatic
+                $excel.EnableEvents = $true
+                $excel.ScreenUpdating = $true
+            } catch { }
             $wb.Close($true)
         }
     } catch {
@@ -281,32 +332,6 @@ function Task-Load([string]$argLine) {
         $excel.Quit()
         [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
     }
-}
-
-function Task-AiKey([string]$argLine) {
-    # Переносит ключ ИИ из корня проекта в %APPDATA%\ReportMTO\deepseek.key -
-    # именно оттуда его читает modMain.ResolveAiApiKey, и это место вне
-    # синхронизации с Google Диском. Сам ключ никуда не печатается: в лог идут
-    # только длина и признак префикса.
-    $src = Join-Path $root "deepseek.key"
-    if (-not (Test-Path -LiteralPath $src)) { Write-Output ("JOB_FAIL нет файла " + $src); return }
-
-    $raw = [IO.File]::ReadAllText($src)
-    $key = ""
-    foreach ($ch in $raw.ToCharArray()) {
-        $code = [int][char]$ch
-        if ($code -gt 32 -and $code -ne 34 -and $code -ne 39 -and $code -ne 65279) { $key = $key + $ch }
-    }
-    if ($key.Length -eq 0) { Write-Output "JOB_FAIL файл ключа пуст после очистки"; return }
-
-    $dir = Join-Path $env:APPDATA "ReportMTO"
-    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-    $dst = Join-Path $dir "deepseek.key"
-    [IO.File]::WriteAllText($dst, $key, (New-Object System.Text.UTF8Encoding($false)))
-
-    $pref = "нет"
-    if ($key.StartsWith("sk-")) { $pref = "да" }
-    Write-Output ("JOB_OK записан " + $dst + "; длина " + $key.Length + " символов; начинается с sk-: " + $pref + "; BOM нет")
 }
 
 function Task-Diag([string]$argLine) {
