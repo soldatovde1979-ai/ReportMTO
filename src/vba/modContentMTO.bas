@@ -2,6 +2,11 @@ Attribute VB_Name = "modContentMTO"
 ' modContentMTO - CONTENT SPEC (МТО). Реализует 4 функции по контракту modMain.bas (Core):
 '   BuildPivots, BuildPrompt, ParseAIResponse, BuildPlaceholders(s3, s4, s5).
 '
+' Версия 8.3 от 11.09.2026: в BuildPrompt добавлены пошаговые метки в журнал.
+'   Прогон 11.09 18:00 дал «Запрос к ИИ пропущен: Err=13 (Type mismatch),
+'   длина тела=0» без указания места - блоки собираются один за другим, и по
+'   последней метке будет видно, какой именно упал.
+'
 ' Версия 8.2 от 11.09.2026: в подвал отчёта добавлена версия сборки из ключа
 '   BUILD/VERSION (лист Variable, пишет install\release.ps1) - по готовому HTML
 '   видно, каким кодом он собран. Ключа нет - подвал прежний, без версии.
@@ -1953,15 +1958,23 @@ Public Function BuildPrompt() As String
         "с ключами slide1_conclusions ... slide8_conclusions, без markdown-разметки вокруг JSON."
 
     ' Блоки собираются отдельно - при DEBUG=2 их длины идут в лог.
+    ' Пошаговые метки: при Err 13 в сборке промпта по журналу видно, какой блок
+    ' упал (11.09.2026 запрос уходил пустым, место ошибки определить было нельзя).
     Dim slide1 As String, slide2 As String, slide3 As String, slide4 As String
+    modLog.WriteDebug 1, "Формирование отчёта", "BuildPrompt", "шаг 1: OverviewToJson"
     slide1 = OverviewToJson()
+    modLog.WriteDebug 1, "Формирование отчёта", "BuildPrompt", "шаг 2: DirToJson ДЭНТ"
     slide2 = DirToJson("ДЭНТ")
+    modLog.WriteDebug 1, "Формирование отчёта", "BuildPrompt", "шаг 3: DirToJson ДГМ"
     slide3 = DirToJson("ДГМ")
+    modLog.WriteDebug 1, "Формирование отчёта", "BuildPrompt", "шаг 4: UnsignedToJson"
     slide4 = UnsignedToJson()
 
     Dim userMessage As String
     Dim zoneFacts As String
+    modLog.WriteDebug 1, "Формирование отчёта", "BuildPrompt", "шаг 5: ZoneFactsJson"
     zoneFacts = modContentZone.ZoneFactsJson()
+    modLog.WriteDebug 1, "Формирование отчёта", "BuildPrompt", "шаг 6: блоки собраны"
     userMessage = "{""slide1_overview"":" & slide1 & _
                   ",""slide2_dent"":" & slide2 & _
                   ",""slide3_dgm"":" & slide3 & _
