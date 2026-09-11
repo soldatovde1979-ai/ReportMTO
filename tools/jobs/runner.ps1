@@ -1,4 +1,7 @@
 ﻿# runner.ps1
+# Version 1.1 / 11.09.2026: diag rdp - правила брандмауэра ищутся по порту 3389
+#   (поиск по названию правила вернул пусто), добавлены профили брандмауэра и
+#   список сторонних средств защиты.
 # Version 1.0 / 11.09.2026
 #
 # Исполнитель заданий без участия человека. Запускается задачей планировщика
@@ -133,10 +136,17 @@ function Task-Diag([string]$argLine) {
         Write-Output "--- слушается ли 3389"
         Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction SilentlyContinue |
             Select-Object LocalAddress, LocalPort, State | Format-Table | Out-String | Write-Output
-        Write-Output "--- правила брандмауэра RDP"
-        Get-NetFirewallRule -ErrorAction SilentlyContinue |
-            Where-Object { $_.DisplayName -like "*Remote Desktop*" -or $_.DisplayName -like "*дален*рабоч*стол*" } |
-            Select-Object DisplayName, Enabled, Profile, Direction | Format-Table | Out-String | Write-Output
+        Write-Output "--- правила брандмауэра, реально открывающие порт 3389"
+        Get-NetFirewallPortFilter -ErrorAction SilentlyContinue |
+            Where-Object { $_.LocalPort -eq 3389 } |
+            ForEach-Object { $_ | Get-NetFirewallRule -ErrorAction SilentlyContinue } |
+            Select-Object DisplayName, Enabled, Direction, Action, Profile | Format-Table -AutoSize | Out-String | Write-Output
+        Write-Output "--- состояние профилей брандмауэра"
+        Get-NetFirewallProfile -ErrorAction SilentlyContinue |
+            Select-Object Name, Enabled, DefaultInboundAction | Format-Table -AutoSize | Out-String | Write-Output
+        Write-Output "--- сторонние средства защиты (могут блокировать сами)"
+        Get-CimInstance -Namespace root\SecurityCenter2 -ClassName FirewallProduct -ErrorAction SilentlyContinue |
+            Select-Object displayName, productState | Format-Table -AutoSize | Out-String | Write-Output
         Write-Output "--- профиль сети (RDP-правила действуют только для своего профиля)"
         Get-NetConnectionProfile -ErrorAction SilentlyContinue |
             Select-Object Name, InterfaceAlias, NetworkCategory | Format-Table | Out-String | Write-Output
