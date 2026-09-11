@@ -1,5 +1,7 @@
 # Версионирование сборки — как это работает
 
+> Версия 1.3 от 11.09.2026. Добавлен раздел «Разбор команды и ключи»:
+> что значит каждая часть строки запуска и все параметры скриптов.
 > Версия 1.2 от 11.09.2026. Добавлен раздел «Работа с двух компьютеров»:
 > защита от отката, флаг -Force, порядок pull/push.
 > Версия 1.1 от 11.09.2026. Добавлены раздел «Первый запуск» и правило
@@ -41,6 +43,50 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1
 ```
 powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1 -DryRun
 ```
+
+## Разбор команды и ключи
+
+### Из чего состоит строка запуска
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1
+```
+
+| Часть | Что значит | Можно опустить |
+|---|---|---|
+| `powershell` | запуск Windows PowerShell 5.1 | нет |
+| `-NoProfile` | не подгружать профиль PowerShell: он может переопределять функции и кодировку консоли, и скрипт поведёт себя иначе | можно, но не нужно |
+| `-ExecutionPolicy Bypass` | разрешить выполнение этого скрипта. Действует только на текущий запуск, системную политику не меняет | нет: иначе Windows откажется запускать `.ps1` |
+| `-File install\release.ps1` | что запускаем; путь считается от текущей папки — отсюда «из корня проекта» | нет |
+
+Всё, что идёт после имени скрипта, — ключи самого скрипта.
+
+### Ключи `install\release.ps1`
+
+| Ключ | Зачем | По умолчанию |
+|---|---|---|
+| `-DryRun` | показать план, ничего не меняя: ни книгу, ни версию, ни журнал | выключен |
+| `-Bump patch\|minor\|major` | какой разряд версии поднять | `patch` |
+| `-Target "<путь к книге>"` | поставить в другую книгу, например `build\ReportMTO v7.0.xlsm` | `.\ReportMTO.xlsm` |
+| `-Force` | поставить поверх более новой книги (осознанный откат), факт пишется в `CHANGELOG.md` | выключен |
+| `-SkipCompile` | пропустить `compile_check.ps1` | выключен, пропускать не рекомендуется |
+
+Ключи комбинируются:
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1 -Bump minor -DryRun
+powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1 -Target ".\build\ReportMTO v7.0.xlsm"
+```
+
+### Ключи скриптов, которые вызываются внутри
+
+Отдельно они нужны редко — `release.ps1` вызывает их сам.
+
+| Скрипт | Ключи |
+|---|---|
+| `install\install_prod.ps1` | `-Target` — книга, по умолчанию `.\ReportMTO.xlsm` |
+| `install\install.ps1` | `-Target` — книга **или папка** (тогда патчатся все `*.xlsm` внутри), по умолчанию `build`; `-ProjectRoot` — корень проекта, если запускают из другого места |
+| `tools\compile_check.ps1` | `-Book` — книга, компиляция идёт на временной копии |
 
 ## Первый запуск
 
