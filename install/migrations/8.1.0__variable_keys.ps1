@@ -1,6 +1,9 @@
 ﻿# 8.1.0__variable_keys.ps1
 # requires-from: 0.0.0
 #
+# Версия 2.1 от 11.09.2026: запись через .Value2 на DataBodyRange падала с
+#   "Unable to cast System.Double to System.String". Пишем через координаты листа
+#   и свойство .Formula - оно принимает строку, приведения типов нет.
 # Версия 2.0 от 11.09.2026: первый боевой прогон упал с
 #   "Unable to cast object of type 'System.Int32' to type 'System.String'".
 #   Точное место было не видно - вся миграция шла одним куском. Переписано:
@@ -43,13 +46,13 @@ for ($r = 1; $r -le $rowCount; $r++) {
 Write-Output ("MIG STEP 3 - ключей в таблице: " + $rowCount)
 
 # Ключи этой версии: имя (строка) и значение (число).
+# Text - то, что реально записывается в ячейку (Formula принимает строку).
 $wanted = @(
-    @{ Name = "DATA/KEEP_WEEKS"; Value = 52.0 }
+    @{ Name = "DATA/KEEP_WEEKS"; Text = "52" }
 )
 
 foreach ($item in $wanted) {
     $name = [string]$item.Name
-    $value = [double]$item.Value
 
     if ($existing -contains $name) {
         Write-Output ("MIG SKIP " + $name + " - ключ уже есть, значение не трогаем")
@@ -66,24 +69,26 @@ foreach ($item in $wanted) {
         Write-Output ("MIG STEP 4 - ListRows.Add отказал (" + $_.Exception.Message + "), пишу прямо под таблицу")
     }
 
+    # Пишем ВСЕГДА через координаты листа и свойство Formula: оно принимает строку,
+    # и никакого приведения типов в COM не происходит. Присвоение .Value2 на
+    # DataBodyRange падало с "Unable to cast System.Double to System.String" -
+    # два прогона 11.09.2026, шаг MIG STEP 5.
+    $firstRow = [int]$lo.Range.Row
+    $rowsTotal = [int]$lo.Range.Rows.Count
+    $col = [int]$lo.Range.Column
     if ($added) {
-        $n = [int]$lo.ListRows.Count
-        Write-Output ("MIG STEP 5 - пишу в строку таблицы номер " + $n)
-        $lo.ListColumns.Item("Key").DataBodyRange.Cells.Item($n, 1).Value2 = $name
-        $lo.ListColumns.Item("Value").DataBodyRange.Cells.Item($n, 1).Value2 = $value
+        $target = $firstRow + $rowsTotal - 1      # последняя строка таблицы, её только что добавили
     } else {
-        # Запасной путь: запись в первую строку под таблицей. Таблица Excel
-        # расширяется сама, если включено авторазвёртывание.
-        $firstRow = [int]$lo.Range.Row
-        $rowsTotal = [int]$lo.Range.Rows.Count
-        $col = [int]$lo.Range.Column
-        $target = $firstRow + $rowsTotal
-        Write-Output ("MIG STEP 5 - пишу прямо в лист, строка " + $target)
-        $ws.Cells.Item($target, $col).Value2 = $name
-        $ws.Cells.Item($target, ($col + 1)).Value2 = $value
+        $target = $firstRow + $rowsTotal          # строка под таблицей, Excel расширит сам
     }
 
-    Write-Output ("MIG ADD " + $name + " = " + $value)
+    Write-Output ("MIG STEP 5a - строка " + $target + ", колонка ключа " + $col)
+    $ws.Cells.Item($target, $col).Formula = $name
+    Write-Output "MIG STEP 5b - имя ключа записано"
+    $ws.Cells.Item($target, ($col + 1)).Formula = [string]$item.Text
+    Write-Output "MIG STEP 5c - значение записано"
+
+    Write-Output ("MIG ADD " + $name + " = " + [string]$item.Text)
 }
 
 Write-Output "MIG STEP 6 - готово"
