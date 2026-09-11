@@ -2,6 +2,10 @@ Attribute VB_Name = "modContentMTO"
 ' modContentMTO - CONTENT SPEC (МТО). Реализует 4 функции по контракту modMain.bas (Core):
 '   BuildPivots, BuildPrompt, ParseAIResponse, BuildPlaceholders(s3, s4, s5).
 '
+' Версия 8.2 от 11.09.2026: в подвал отчёта добавлена версия сборки из ключа
+'   BUILD/VERSION (лист Variable, пишет install\release.ps1) - по готовому HTML
+'   видно, каким кодом он собран. Ключа нет - подвал прежний, без версии.
+'
 ' Версия 8.1 от 11.09.2026: ReportWeekValue в авто-режиме возвращает
 '   modContentZone.ZoneReportWeek - одна отчётная неделя на слайды и на промпт ИИ.
 '   Явный REPORT/WEEK = N по-прежнему перекрывает авто-режим.
@@ -4167,7 +4171,15 @@ Private Function BuildFactsRef() As String
 End Function
 
 Private Function BuildFooter(ByVal rw As Long) As String
+    ' Версия сборки в подвале: по готовому HTML видно, каким кодом он собран.
+    ' Ключ BUILD/VERSION пишет install\release.ps1 при успешной установке; если
+    ' книгу ставили старым путём, ключа нет - подвал просто без версии.
+    Dim build As String
+    build = Trim$(modMain.GetVariableDef("BUILD/VERSION", ""))
+    If Len(build) > 0 Then build = " " & ChrW$(&HB7) & " сборка " & build
+
     BuildFooter = "Отчёт МТО " & ChrW$(&HB7) & " " & modContentZone.WeekCaption(rw) & _
+        build & _
         " " & ChrW$(&HB7) & " автономный HTML: шрифты и графика встроены, внешних " & _
         "запросов нет. Часть 1 " & ChrW$(&H2014) & " трек А (событие подписания), " & _
         "часть 2 " & ChrW$(&H2014) & " трек Б (наряд, заезд, машина). Единицы счёта " & _
