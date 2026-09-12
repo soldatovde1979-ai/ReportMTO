@@ -571,7 +571,21 @@ function Invoke-JobQueue($jobs, [string]$queue, [string]$outDir, [string]$proces
         }
 
         # Задание уносится из очереди ДО выполнения: повторный запуск невозможен.
+        # Вторая защита - лог: 12.09.2026 обнаружено, что файл задания иногда
+        # остаётся в очереди (папка синхронизируется облаком, перенос откатывался),
+        # и задание выполнялось по кругу каждые две минуты. Для разрушающих задач
+        # вроде rebuild это недопустимо, поэтому при существующем логе - пропуск.
+        if (Test-Path -LiteralPath $logPath) {
+            Say ("ПОВТОР " + $id + " - лог уже есть, задание пропущено")
+            try { Move-Item -LiteralPath $j.FullName -Destination (Join-Path $processed $j.Name) -Force } catch { }
+            if (Test-Path -LiteralPath $j.FullName) { try { Remove-Item -LiteralPath $j.FullName -Force } catch { } }
+            continue
+        }
         Move-Item -LiteralPath $j.FullName -Destination (Join-Path $processed $j.Name) -Force
+        if (Test-Path -LiteralPath $j.FullName) {
+            Say ("ВНИМАНИЕ " + $id + " - перенос не сработал, удаляю файл задания из очереди")
+            try { Remove-Item -LiteralPath $j.FullName -Force } catch { }
+        }
 
         $parts = $line -split "\s+", 2
         $task = ""
