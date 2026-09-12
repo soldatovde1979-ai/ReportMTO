@@ -1,0 +1,12 @@
+ЗАДАНИЕ 0020_installfast
+СТРОКА  installfast
+НАЧАЛО  2026-09-12 13:37:00
+
+SUCCESS: The scheduled task "ReportMTO-Runner-Fast" has successfully been created.
+
+SUCCESS: Attempted to run the scheduled task "ReportMTO-Runner-Fast".
+
+JOB_OK быстрая очередь установлена
+
+
+КОНЕЦ   2026-09-12 13:37:01
