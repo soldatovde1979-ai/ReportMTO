@@ -34,6 +34,7 @@
 | [`archive/`](archive/reorganize-project.md) | История: выполненные планы, старые версии документов и инструкций, handoff-записки |
 | [`../install/`](../install/install-v7.1.md) | Инструкции установки/обновления и скрипты-обработки `install.ps1` (v1.1) / `install_prod.ps1` |
 | [`../tests/`](../tests/testing-e2e-v1.md) | Тесты: код, данные, эталоны, инструкция запуска |
+| [`../tools/`](../tools/load_package.ps1) | Скрипты обслуживания: `load_package.ps1` (загрузка пакета JSON по папке из Variable), `add_source_folder_key.ps1` (ключ `DATA/SOURCE_FOLDER`), `build-report-mto.ps1` (сборка), `compile_check.ps1` (компиляция VBA), `run-e2e-tests-v1.ps1` (тесты) |
 
 ## Задачи
 

@@ -27,7 +27,7 @@
 
 | Папка/файл | Что внутри | Владелец |
 |---|---|---|
-| `src\vba\modMain.bas` | Точка входа, кнопки «Загрузить»/«Сформировать» | Core |
+| `src\vba\modMain.bas` | Точка входа, кнопки «Загрузить»/«Сформировать»/«Загрузить пакет» (`LoadPackage`) | Core |
 | `src\vba\modPQSync.bas` | Синхронный Refresh Power Query | Core |
 | `src\vba\modAIGateway.bas` | HTTP-транспорт к внешнему ИИ (без текста промпта) | Core |
 | `src\vba\modHTMLEngine.bas` | Движок плейсхолдеров `{{...}}`, сохранение файла | Core |
@@ -63,10 +63,28 @@
 | `data\` | Входящие JSON-выгрузки из 1С (вне git) | — |
 | `result\` | Готовые отчёты (не версионируется) | — |
 
-> `tools\` содержит скрипты сборки/тестов/обслуживания: `build-report-mto.ps1` (сборка книги
-> из `src\` через COM), `run-e2e-tests-v1.ps1` (сквозные тесты), `md_to_docx.py`, `sim-pipeline.py`.
-> Скрипты установки `install.ps1`/`install_prod.ps1` лежат в `install\` вместе с инструкциями.
-> Источник истины для кода — только `src\vba\` и `src\powerquery\`.
+> `tools\` содержит скрипты сборки/тестов/обслуживания. Источник истины для кода — только
+> `src\vba\` и `src\powerquery\`. Скрипты установки `install.ps1`/`install_prod.ps1` лежат
+> в `install\` вместе с инструкциями.
+
+| Скрипт `tools\` | Назначение |
+|---|---|
+| `add_source_folder_key.ps1` | Добавляет ключ `DATA/SOURCE_FOLDER` в `tblVariable` (идемпотентно) |
+| `build-report-mto.ps1` | Сборка книги из `src\` через COM |
+| `compile_check.ps1` | Принудительная компиляция VBA книги |
+| `run-e2e-tests-v1.ps1` | Сквозные тесты |
+| `run_v8.0_full.ps1` | Полная раскатка: установка → компиляция → прод → загрузка → отчёт |
+| `run_load_and_report.ps1` | Загрузка `data\*.json` по одному + отчёт (цепляется к открытой книге) |
+| `generate_report_open.ps1` | Формирование отчёта в открытой книге |
+| `reimport_open_book.ps1` | Переустановка исходников в открытую книгу |
+| `go_v8.cmd` | Ярлык запуска раскатки v8.0 |
+| `add_debug_key.ps1` | Добавляет ключ `DEBUG` в `Variable` |
+| `add_retention_key.ps1` | Добавляет ключ `REPORT/RETENTION_WEEKS` (резерв) |
+| `check_retention.ps1` | Проверка ретеншна на копии книги |
+| `test_deepseek_key.ps1` | Проверка ключа ИИ |
+| `md_to_docx.py` | Конвертация Markdown → DOCX |
+| `make_fonts_woff2.py` | Сборка woff2-шрифтов |
+| `sim-pipeline.py` | Симуляция пайплайна (mockup) |
 
 ## Сборка (импорт исходников в Excel)
 

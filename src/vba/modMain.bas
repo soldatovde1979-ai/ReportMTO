@@ -73,6 +73,133 @@ ErrHandler:
         "(Данные -> Получить данные -> Параметры запроса -> Конфиденциальность)."
 End Sub
 
+' «Загрузить пакет»: загружает все *.json из папки, указанной на листе Variable
+' (ключ DATA/SOURCE_FOLDER), по одному файлу через upsert Power Query.
+'
+' Порядок загрузки - по времени выгрузки (имя файла sppr_tablet_YYYYMMDD_HHMMSS_...).
+' Вложенные папки НЕ читаются (только верхний уровень).
+' После каждого файла делается копия книги в bak\ (ReportMTO.xlsm.bak_<штамп>),
+' чтобы можно было посмотреть результат на любом шаге.
+'
+' v1.0 (12.09.2026): введена по запросу - загрузка нескольких выгрузок подряд
+'   без ручного выбора каждого файла. Папка берётся из Variable, а не из диалога,
+'   чтобы пакет можно было запускать повторно без повторного выбора пути.
+Public Sub LoadPackage()
+    Dim folder As String
+    folder = Trim$(GetVariableDef("DATA/SOURCE_FOLDER", ""))
+    If folder = "" Then
+        modLog.WriteLogEntry Now, "Ошибка", "Загрузка пакета", "LoadPackage", _
+            "Ключ DATA/SOURCE_FOLDER пуст на листе Variable - укажите папку с выгрузками."
+        Exit Sub
+    End If
+
+    Dim files As Variant
+    files = ListJsonFiles(folder)
+    If IsEmpty(files) Then
+        modLog.WriteLogEntry Now, "Ошибка", "Загрузка пакета", "LoadPackage", _
+            "В папке нет *.json файлов: " & folder
+        Exit Sub
+    End If
+
+    Dim total As Long
+    total = UBound(files) - LBound(files) + 1
+    modLog.WriteLogEntry Now, "Инфо", "Загрузка пакета", "LoadPackage", _
+        "Папка: " & folder & "; файлов: " & total
+
+    On Error GoTo ErrHandler
+
+    Dim i As Long
+    For i = LBound(files) To UBound(files)
+        Dim path As String
+        path = CStr(files(i))
+
+        Dim rowsBefore As Long
+        rowsBefore = SafeRowCount()
+
+        SetSourcePathParameter path
+        modLog.WriteLogEntry Now, "Инфо", "Загрузка пакета", "prmSourcePath", _
+            "Файл " & (i - LBound(files) + 1) & "/" & total & ": " & path
+
+        modPQSync.RefreshImportQuery
+
+        Dim rowsAfter As Long
+        rowsAfter = SafeRowCount()
+        modLog.WriteLogEntry Now, "Инфо", "Загрузка пакета", "Query-ImportJSON", _
+            "Строк до: " & rowsBefore & "; строк после: " & rowsAfter
+
+        BackupWorkbook
+    Next i
+
+    modContentMTO.BuildPivots
+    modLog.WriteLogEntry Now, "Инфо", "Загрузка пакета", "LoadPackage", _
+        "Пакет загружен. Строк в tbDATA: " & SafeRowCount()
+    Exit Sub
+
+ErrHandler:
+    modLog.WriteLogEntry Now, "Ошибка", "Загрузка пакета", "LoadPackage", _
+        "Загрузка пакета прервана: " & Err.Description
+End Sub
+
+' Перечисляет *.json только верхнего уровня папки (без рекурсии), сортирует по имени.
+' Возвращает Variant-массив путей (0-based) или Empty, если файлов нет.
+Private Function ListJsonFiles(folder As String) As Variant
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FolderExists(folder) Then
+        ListJsonFiles = Empty
+        Exit Function
+    End If
+
+    ' Собираем пути в массив, затем сортируем пузырьком по имени (время выгрузки
+    ' уже зашито в имя файла sppr_tablet_YYYYMMDD_HHMMSS_...). Без внешних COM-типов.
+    Dim arr() As String
+    Dim cnt As Long
+    cnt = 0
+
+    Dim f As Object
+    For Each f In fso.GetFolder(folder).Files
+        If LCase$(fso.GetExtensionName(f.Name)) = "json" Then
+            ReDim Preserve arr(0 To cnt)
+            arr(cnt) = f.Path
+            cnt = cnt + 1
+        End If
+    Next f
+
+    If cnt = 0 Then
+        ListJsonFiles = Empty
+        Exit Function
+    End If
+
+    ' Пузырьковая сортировка по полному пути (имя файла определяет порядок).
+    Dim i As Long, j As Long, tmp As String
+    For i = 0 To cnt - 2
+        For j = i + 1 To cnt - 1
+            If StrComp(arr(i), arr(j), vbTextCompare) > 0 Then
+                tmp = arr(i): arr(i) = arr(j): arr(j) = tmp
+            End If
+        Next j
+    Next i
+
+    ListJsonFiles = arr
+End Function
+
+' Копия книги в bak\ рядом с книгой: ReportMTO.xlsm.bak_YYYYMMDD_HHMMSS.
+' SaveCopyAs не трогает открытую книгу - можно продолжать загрузку.
+Private Sub BackupWorkbook()
+    Dim bakDir As String
+    bakDir = ThisWorkbook.Path & "\bak"
+    If Dir(bakDir, vbDirectory) = "" Then MkDir bakDir
+
+    Dim stamp As String
+    stamp = Format(Now, "yyyymmdd_hhnnss")
+    Dim bakPath As String
+    bakPath = bakDir & "\ReportMTO.xlsm.bak_" & stamp
+
+    ThisWorkbook.SaveCopyAs bakPath
+    modLog.WriteLogEntry Now, "Инфо", "Загрузка пакета", "BackupWorkbook", _
+        "Копия книги: " & bakPath
+End Sub
+
 ' Обновляет значение Power Query-параметра prmSourcePath (Architecture Core §5.1).
 '
 ' (!) ИСПРАВЛЕНО по итогам первого реального прогона в Excel (см. next-steps.md, п.2):
