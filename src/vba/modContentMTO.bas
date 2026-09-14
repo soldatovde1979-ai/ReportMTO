@@ -2,14 +2,13 @@ Attribute VB_Name = "modContentMTO"
 ' modContentMTO - CONTENT SPEC (МТО). Реализует 4 функции по контракту modMain.bas (Core):
 '   BuildPivots, BuildPrompt, ParseAIResponse, BuildPlaceholders(s3, s4, s5).
 '
-' Версия 8.4 от 11.09.2026: метки 1a-1g внутри OverviewToJson: Err 13 падает
-'   внутри этого блока, место не видно. Блок впервые идёт по ветке hasDW = True -
-'   колонка dateWeek появилась только после загрузки данных M v7.
-'
-' Версия 8.3 от 11.09.2026: в BuildPrompt добавлены пошаговые метки в журнал.
-'   Прогон 11.09 18:00 дал «Запрос к ИИ пропущен: Err=13 (Type mismatch),
-'   длина тела=0» без указания места - блоки собираются один за другим, и по
-'   последней метке будет видно, какой именно упал.
+' Версия 8.3 от 14.09.2026: правки шапки по постановке docs/task-rep.md.
+'   - REPORT_TITLE: «Исполнительская дисциплина инженеров ДЭНТ и ДГМ»;
+'   - BuildLede: «Отчет о состоянии техники за {неделя} — с {дата} до {дата}»,
+'     значения периода выделены белым жирным (<span class="hl">);
+'   - BuildFactsRef: шесть фактов в трёх колонках с ярлыками по постановке,
+'     счётчики берутся из modContentZone (SignedEventsCount, OpenOverMonth,
+'     RetCount7).
 '
 ' Версия 8.2 от 11.09.2026: в подвал отчёта добавлена версия сборки из ключа
 '   BUILD/VERSION (лист Variable, пишет install\release.ps1) - по готовому HTML
@@ -1962,23 +1961,15 @@ Public Function BuildPrompt() As String
         "с ключами slide1_conclusions ... slide8_conclusions, без markdown-разметки вокруг JSON."
 
     ' Блоки собираются отдельно - при DEBUG=2 их длины идут в лог.
-    ' Пошаговые метки: при Err 13 в сборке промпта по журналу видно, какой блок
-    ' упал (11.09.2026 запрос уходил пустым, место ошибки определить было нельзя).
     Dim slide1 As String, slide2 As String, slide3 As String, slide4 As String
-    modLog.WriteDebug 1, "Формирование отчёта", "BuildPrompt", "шаг 1: OverviewToJson"
     slide1 = OverviewToJson()
-    modLog.WriteDebug 1, "Формирование отчёта", "BuildPrompt", "шаг 2: DirToJson ДЭНТ"
     slide2 = DirToJson("ДЭНТ")
-    modLog.WriteDebug 1, "Формирование отчёта", "BuildPrompt", "шаг 3: DirToJson ДГМ"
     slide3 = DirToJson("ДГМ")
-    modLog.WriteDebug 1, "Формирование отчёта", "BuildPrompt", "шаг 4: UnsignedToJson"
     slide4 = UnsignedToJson()
 
     Dim userMessage As String
     Dim zoneFacts As String
-    modLog.WriteDebug 1, "Формирование отчёта", "BuildPrompt", "шаг 5: ZoneFactsJson"
     zoneFacts = modContentZone.ZoneFactsJson()
-    modLog.WriteDebug 1, "Формирование отчёта", "BuildPrompt", "шаг 6: блоки собраны"
     userMessage = "{""slide1_overview"":" & slide1 & _
                   ",""slide2_dent"":" & slide2 & _
                   ",""slide3_dgm"":" & slide3 & _
@@ -2031,22 +2022,18 @@ Private Function OverviewToJson() As String
             "opened/unsigned уходят в промпт как null, остальные метрики считаются."
     End If
 
-    modLog.WriteDebug 1, "Формирование отчёта", "OverviewToJson", "1a: старт, отчётная неделя определена"
     Dim opened As Double, closedN As Double
     If hasDW Then
         opened = DictVal(modAggregate.GroupCountDistinct(Array("dateWeek"), "number", FBase()), rwS & "|")
     End If
-    modLog.WriteDebug 1, "Формирование отчёта", "OverviewToJson", "1b: closedN"
     closedN = DictVal(modAggregate.GroupCountDistinct(Array("yearWeek"), "number", _
         Array("ready_for=Готов к выбытию")), rwS & "|")
 
     Dim hasMed As Boolean
     Dim med As Double
-    modLog.WriteDebug 1, "Формирование отчёта", "OverviewToJson", "1c: медиана deltaHours"
     med = modAggregate.Percentile("deltaHours", 0.5, Array("yearWeek=" & rwS, "ready_for=Готов к выбытию"), hasMed)
 
     Dim armW As Object
-    modLog.WriteDebug 1, "Формирование отчёта", "OverviewToJson", "1d: arm по неделе"
     Set armW = modAggregate.GroupCount(Array("arm"), Array("yearWeek=" & rwS))
     Dim tabEv As Double, pcEv As Double
     tabEv = DictVal(armW, "ПЛАНШЕТ|")
@@ -2054,7 +2041,6 @@ Private Function OverviewToJson() As String
 
     Dim allD As Object, armD As Object
     Dim allEv As Double, unsEv As Double
-    modLog.WriteDebug 1, "Формирование отчёта", "OverviewToJson", "1e: блоки по dateWeek"
     If hasDW Then
         Set allD = modAggregate.GroupCount(Array("dateWeek"), FBase())
         Set armD = modAggregate.GroupCount(Array("arm"), Array("dateWeek=" & rwS))
@@ -2071,11 +2057,9 @@ Private Function OverviewToJson() As String
 
     ' Корзины времени - те же границы, что BuildTimeHistogram (1/4/8/24/72 ч), обрезка p99.
     Dim buckets As String
-    modLog.WriteDebug 1, "Формирование отчёта", "OverviewToJson", "1f: корзины времени"
     buckets = TimeBucketsToJson()
 
     Dim zn As Object, defk As Object
-    modLog.WriteDebug 1, "Формирование отчёта", "OverviewToJson", "1g: zn_type и defekt_type"
     Set zn = modAggregate.GroupCountDistinct(Array("zn_type"), "number", FBase())
     Set defk = modAggregate.GroupCountDistinct(Array("defekt_type"), "number", FBase())
     Dim sZn As String, sDef As String, first As Boolean, k As Variant
@@ -4108,7 +4092,7 @@ Public Function BuildPlaceholders(aiSlide3 As String, aiSlide4 As String, aiSlid
     ' --- Шапка и подвал ---
     Dim rw As Long
     rw = modContentZone.ZoneReportWeek()
-    d("REPORT_TITLE") = "Отчёт МТО"
+    d("REPORT_TITLE") = "Исполнительская дисциплина инженеров ДЭНТ и ДГМ"
     d("REPORT_WEEK_LABEL") = modContentZone.WeekCaption(rw)
     d("REPORT_LEDE") = BuildLede(rw)
     d("FACTS") = BuildFactsRef()
@@ -4161,36 +4145,34 @@ Public Function BuildPlaceholders(aiSlide3 As String, aiSlide4 As String, aiSlid
     Set BuildPlaceholders = d
 End Function
 
-' Подзаголовок шапки: из чего собран отчёт и какая неделя отчётная.
+' Подзаголовок шапки: «Отчет о состоянии техники за {неделя} - с {дата} до {дата}».
+' Значения периода выделяются белым жирным (<span class="hl">) - постановка.
 Private Function BuildLede(ByVal rw As Long) As String
-    Dim a As Double, b As Double
-    a = modContentZone.SnapFrom()
-    b = modContentZone.SnapTo()
-    Dim per As String
-    If a > 0 And b > 0 Then
-        per = Format$(CDate(a), "dd.mm.yyyy") & " " & ChrW$(&H2013) & " " & _
-            Format$(CDate(b), "dd.mm.yyyy")
-    Else
-        per = "период не определён"
-    End If
-    BuildLede = "Восемь слайдов в двух частях: дисциплина подписания на планшете " & _
-        "(слайды 1" & ChrW$(&H2013) & "4) и операционка ремзоны (слайды 5" & _
-        ChrW$(&H2013) & "8). Числа посчитаны на выгрузке 1С за " & per & _
-        "; отчётная неделя " & ChrW$(&H2014) & " " & modContentZone.WLab(rw) & _
-        " (" & modContentZone.WeekRange(rw) & "), последняя полная неделя снимка."
+    Dim a As Date, b As Date
+    a = modContentZone.WeekMonday(rw)
+    b = a + 6
+    BuildLede = "Отчет о состоянии техники за <span class=""hl"">" & _
+        modContentZone.WLab(rw) & "</span> " & ChrW$(&H2014) & _
+        " с <span class=""hl"">" & Format$(a, "dd.mm.yyyy") & "</span> до " & _
+        "<span class=""hl"">" & Format$(b, "dd.mm.yyyy") & "</span>"
 End Function
 
-' Четыре числа шапки. Считает modContentZone - чтобы шапка не разошлась со слайдами.
+' Шесть чисел шапки в ровной сетке 3x2 («С начала года:» ставит шаблон).
+' Считает modContentZone - чтобы шапка не разошлась со слайдами.
 Private Function BuildFactsRef() As String
     Dim h As String
-    h = "<div><dt>Событий</dt><dd class=""num"">" & _
-        FmtInt(modContentZone.EventsCount()) & "</dd></div>"
+    h = "<div><dt>Событий (планшет, ПК)</dt><dd class=""num"">" & _
+        FmtInt(modContentZone.SignedEventsCount()) & "</dd></div>"
     h = h & "<div><dt>Нарядов</dt><dd class=""num"">" & _
         FmtInt(modContentZone.OrdersCount()) & "</dd></div>"
-    h = h & "<div><dt>Машин в парке</dt><dd class=""num"">" & _
+    h = h & "<div><dt>" & Esc("Открыто ЗН > мес.") & "</dt><dd class=""num"">" & _
+        FmtInt(modContentZone.OpenOverMonth()) & "</dd></div>"
+    h = h & "<div><dt>ТС по ЗН</dt><dd class=""num"">" & _
         FmtInt(modContentZone.FleetCount()) & "</dd></div>"
     h = h & "<div><dt>Без поста</dt><dd class=""num"">" & _
         modContentZone.Pc(modContentZone.NoPostPct(), 1) & "</dd></div>"
+    h = h & "<div><dt>Повторные</dt><dd class=""num"">" & _
+        FmtInt(modContentZone.RetCount7()) & "</dd></div>"
     BuildFactsRef = h
 End Function
 
