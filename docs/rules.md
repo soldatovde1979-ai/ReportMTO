@@ -24,6 +24,7 @@
 ## Сборка и Excel
 
 - `[Excel/COM-процессы]` COM-операции сбоят из-за фоновых EXCEL.EXE, относительных путей или невидимых модальных окон/MsgBox. -> Передавай только абсолютные пути (`Resolve-Path`), закрывай `EXCEL.EXE` (не трогая чужие), а диалоги отлавливай через `EnumWindows`.
+- `[Excel/прогон отчёта]` `generate_report_open.ps1` цепляется к первому инстансу Excel (`GetActiveObject`) и падает «workbook not open», если запущено несколько EXCEL.EXE. -> Выполняй BuildPivots+GenerateReport в собственном COM-инстансе (`New-Object -ComObject Excel.Application`), книгу открывай и закрывай там же.
 - `[Excel/сборка и VBE]` Remove+Import без `$wb.Save()` и без учета `Attribute` ломает обновление и сравнение модулей. -> Всегда делай `$wb.Save()` до `Run`, а перед сравнением с `.bas` вырезай `Attribute`-строки (regex) и делай `TrimEnd()`.
 - `[Power Query/диагностика]` Refresh падает с `[Expression.Error]` из-за неверных комментариев (`//` вместо `'`) или битых шагов. -> Проверяй комментарии M, локализуй запрос с `Json.Document(..., 65001)` и перехватывай ошибки VBA-макросом.
 - `[Сборка/версия]` Релиз, версия, миграции, CHANGELOG, install\release.ps1. -> Действуй по docs/version-guide.md: релиз только через install\release.ps1 (книга закрыта), версия фиксируется только при RELEASE_OK, `-Bump minor/major` — осознанное решение, выбор уровня — по «кто заметит разницу».

@@ -2,6 +2,14 @@ Attribute VB_Name = "modContentMTO"
 ' modContentMTO - CONTENT SPEC (МТО). Реализует 4 функции по контракту modMain.bas (Core):
 '   BuildPivots, BuildPrompt, ParseAIResponse, BuildPlaceholders(s3, s4, s5).
 '
+' Версия 8.3 от 14.09.2026: правки шапки по постановке docs/task-rep.md.
+'   - REPORT_TITLE: «Исполнительская дисциплина инженеров ДЭНТ и ДГМ»;
+'   - BuildLede: «Отчет о состоянии техники за {неделя} — с {дата} до {дата}»,
+'     значения периода выделены белым жирным (<span class="hl">);
+'   - BuildFactsRef: шесть фактов в трёх колонках с ярлыками по постановке,
+'     счётчики берутся из modContentZone (SignedEventsCount, OpenOverMonth,
+'     RetCount7).
+'
 ' Версия 8.2 от 11.09.2026: в подвал отчёта добавлена версия сборки из ключа
 '   BUILD/VERSION (лист Variable, пишет install\release.ps1) - по готовому HTML
 '   видно, каким кодом он собран. Ключа нет - подвал прежний, без версии.
@@ -4084,7 +4092,7 @@ Public Function BuildPlaceholders(aiSlide3 As String, aiSlide4 As String, aiSlid
     ' --- Шапка и подвал ---
     Dim rw As Long
     rw = modContentZone.ZoneReportWeek()
-    d("REPORT_TITLE") = "Отчёт МТО"
+    d("REPORT_TITLE") = "Исполнительская дисциплина инженеров ДЭНТ и ДГМ"
     d("REPORT_WEEK_LABEL") = modContentZone.WeekCaption(rw)
     d("REPORT_LEDE") = BuildLede(rw)
     d("FACTS") = BuildFactsRef()
@@ -4137,36 +4145,34 @@ Public Function BuildPlaceholders(aiSlide3 As String, aiSlide4 As String, aiSlid
     Set BuildPlaceholders = d
 End Function
 
-' Подзаголовок шапки: из чего собран отчёт и какая неделя отчётная.
+' Подзаголовок шапки: «Отчет о состоянии техники за {неделя} - с {дата} до {дата}».
+' Значения периода выделяются белым жирным (<span class="hl">) - постановка.
 Private Function BuildLede(ByVal rw As Long) As String
-    Dim a As Double, b As Double
-    a = modContentZone.SnapFrom()
-    b = modContentZone.SnapTo()
-    Dim per As String
-    If a > 0 And b > 0 Then
-        per = Format$(CDate(a), "dd.mm.yyyy") & " " & ChrW$(&H2013) & " " & _
-            Format$(CDate(b), "dd.mm.yyyy")
-    Else
-        per = "период не определён"
-    End If
-    BuildLede = "Восемь слайдов в двух частях: дисциплина подписания на планшете " & _
-        "(слайды 1" & ChrW$(&H2013) & "4) и операционка ремзоны (слайды 5" & _
-        ChrW$(&H2013) & "8). Числа посчитаны на выгрузке 1С за " & per & _
-        "; отчётная неделя " & ChrW$(&H2014) & " " & modContentZone.WLab(rw) & _
-        " (" & modContentZone.WeekRange(rw) & "), последняя полная неделя снимка."
+    Dim a As Date, b As Date
+    a = modContentZone.WeekMonday(rw)
+    b = a + 6
+    BuildLede = "Отчет о состоянии техники за <span class=""hl"">" & _
+        modContentZone.WLab(rw) & "</span> " & ChrW$(&H2014) & _
+        " с <span class=""hl"">" & Format$(a, "dd.mm.yyyy") & "</span> до " & _
+        "<span class=""hl"">" & Format$(b, "dd.mm.yyyy") & "</span>"
 End Function
 
-' Четыре числа шапки. Считает modContentZone - чтобы шапка не разошлась со слайдами.
+' Шесть чисел шапки в ровной сетке 3x2 («С начала года:» ставит шаблон).
+' Считает modContentZone - чтобы шапка не разошлась со слайдами.
 Private Function BuildFactsRef() As String
     Dim h As String
-    h = "<div><dt>Событий</dt><dd class=""num"">" & _
-        FmtInt(modContentZone.EventsCount()) & "</dd></div>"
+    h = "<div><dt>Событий (планшет, ПК)</dt><dd class=""num"">" & _
+        FmtInt(modContentZone.SignedEventsCount()) & "</dd></div>"
     h = h & "<div><dt>Нарядов</dt><dd class=""num"">" & _
         FmtInt(modContentZone.OrdersCount()) & "</dd></div>"
-    h = h & "<div><dt>Машин в парке</dt><dd class=""num"">" & _
+    h = h & "<div><dt>" & Esc("Открыто ЗН > мес.") & "</dt><dd class=""num"">" & _
+        FmtInt(modContentZone.OpenOverMonth()) & "</dd></div>"
+    h = h & "<div><dt>ТС по ЗН</dt><dd class=""num"">" & _
         FmtInt(modContentZone.FleetCount()) & "</dd></div>"
     h = h & "<div><dt>Без поста</dt><dd class=""num"">" & _
         modContentZone.Pc(modContentZone.NoPostPct(), 1) & "</dd></div>"
+    h = h & "<div><dt>Повторные</dt><dd class=""num"">" & _
+        FmtInt(modContentZone.RetCount7()) & "</dd></div>"
     BuildFactsRef = h
 End Function
 
