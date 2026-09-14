@@ -73,8 +73,8 @@
       Код готов: `modLog` v8.2 (DEBUG 0/1/2, лист только «Веха»+«Ошибка», файл
       `ReportMTO.log`), `modMain` v8.2 (вехи, манифест очереди файлов, трассировка
       DEBUG=2), `Query-ImportJSON` v8.2 (List.Buffer чтения папки, очередь по дате из
-      имени файла), `install.ps1` v2.0 (все модули, единая точка входа с -InstallOnly,
-      документация в дайджесте релиза; `release.ps1`/`install_prod.ps1` в tools\archive\).
+      имени файла), `install.ps1` v2.0 (все модули, единая точка установки+релиза с -InstallOnly,
+      документация в дайджесте релиза; `release.ps1` — в tools\archive\ (14.09.2026), а `install_prod.ps1` возвращён в install\ (прод-установка).
       Дальше по порядку: обновить build-книгу (-InstallOnly) + compile_check + e2e,
       релиз корневой книги, пакетная загрузка всех JSON из `data` (перед загрузкой
       поставить DEBUG=2), регламент: загрузка >30 мин -> анализ `ReportMTO.log` ->

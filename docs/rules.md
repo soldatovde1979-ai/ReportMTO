@@ -33,7 +33,7 @@
 ## Тестирование
 
 - `[e2e/порядок]` Изменил src\vba или src\powerquery -> строго по этапам: 1) install\install.ps1 -Target build -InstallOnly, 2) e2e (tools
-run-e2e-tests-v1.ps1) и исправления до зелёного, 3) только потом прод (install\install.ps1 без -InstallOnly). Прод до зелёного e2e запрещён; недогруженный модуль даёт «Method or data member not found».
+run-e2e-tests-v1.ps1) и исправления до зелёного, 3) только потом прод (install\install_prod.ps1). Прод до зелёного e2e запрещён; недогруженный модуль даёт «Method or data member not found».
 - `[e2e/входы-выходы]` Сквозной тест: на входе фиксированные JSON, на выходе сравнение с эталонными значениями (число строк, CHECK-маркеры). -> Меняешь логику — обновляй эталоны той же правкой (tests\expected.md, CHECK-константы tests\modSelfTest.bas).
 - `[e2e/отчёты]` Проверяй не только факт генерации отчёта, но и содержимое: сверяй ключевые цифры (YTD, дельта, медиана, топ-позиции) с эталоном. -> Эталонные цифры — в tests\expected.md, проверку встрой в e2e (STEP4) и modSelfTest.
 
