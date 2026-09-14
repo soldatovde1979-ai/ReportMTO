@@ -1,25 +1,60 @@
-# Служебный файл install\release.ps1 - состояние последнего успешного релиза.
+# Служебный файл install\install.ps1 - состояние последнего успешного релиза.
 # Руками не править: отсюда берётся ответ на вопрос «менялись ли исходники».
-version 8.1.2
-digest 5db39ee5bce54f897b1efc98a3eddfd9
-file modAggregate.bas 6E701973B32F50F176EB23F9F075AA3F
-file modAIGateway.bas 326ACCDCC53035229FE4922FDDB88F58
-file modColor.bas 35CB06FF36A3AE0ED0F0B286ABB7828F
-file modContentDisc.bas 7C38BBC55925F0A4CE48A8045851379F
-file modContentMTO.bas EB75C9FB0AF5D1DB37446CAE61676593
-file modContentZone.bas 2278B4B677996ACEA4F0B6F24790FDEF
-file modHTMLEngine.bas 387D70C07D694AC23EFF229B0FF20DC2
-file modLog.bas 698BC513AFAB9845D4710DF0AE1F55A5
-file modMain.bas 4FAC2B92DF0AC62F7CB0EC56A014481B
-file modPivotBuilder.bas 9C1CB4D17743ECC21CE3666D8E1D669E
-file modPQSync.bas 677AF775648F33A261AE123AB93D4FD9
-file fnComputeGroupMetrics.pq 0E65FA989E12F01338ADE83733318361
-file fnComputeKey.pq 36BA95A2E3AB017533FDB4F9F5C02CD5
-file fnDedupByKey.pq 84EE1FBB3323A188F4440B609A1A902F
-file fnNormalizeFields.pq 19CCF34200E8E6725967FC4E0E32C3AA
-file fnUpsert.pq 8C6E4761179173F1D2813B9751D7D7EB
-file qDiagImport.pq 90EE740B63CA9DE61FC3092ADCA54B12
-file qExistingData.pq 8CA1D642D59389CBB561CF1C996C665D
-file qKeepWeeks.pq 4014B9E1FC429D6B5D15783872270207
-file Query-ImportJSON.pq 15D920AA8B608487DA5A5C17896820A3
+version 8.1.5
+digest bf4b99f912e498774b033c477cdc5fec
+file src/vba/modAggregate.bas 6E701973B32F50F176EB23F9F075AA3F
+file src/vba/modAIGateway.bas 326ACCDCC53035229FE4922FDDB88F58
+file src/vba/modColor.bas 35CB06FF36A3AE0ED0F0B286ABB7828F
+file src/vba/modContentDisc.bas 7C38BBC55925F0A4CE48A8045851379F
+file src/vba/modContentMTO.bas EB75C9FB0AF5D1DB37446CAE61676593
+file src/vba/modContentZone.bas 2278B4B677996ACEA4F0B6F24790FDEF
+file src/vba/modHTMLEngine.bas 387D70C07D694AC23EFF229B0FF20DC2
+file src/vba/modLog.bas D48B98B276747EC709897EF7CE88C7AA
+file src/vba/modMain.bas 2D566827087D89E681734F1E4227BF2D
+file src/vba/modPivotBuilder.bas 9C1CB4D17743ECC21CE3666D8E1D669E
+file src/vba/modPQSync.bas 677AF775648F33A261AE123AB93D4FD9
+file src/powerquery/fnComputeGroupMetrics.pq 450A993D13303A17431DAE39150ADCAF
+file src/powerquery/fnComputeKey.pq 84D8E9941A18127E8A09B5F2E9D75B23
+file src/powerquery/fnDedupByKey.pq 84EE1FBB3323A188F4440B609A1A902F
+file src/powerquery/fnNormalizeFields.pq 19CCF34200E8E6725967FC4E0E32C3AA
+file src/powerquery/fnUpsert.pq 8C6E4761179173F1D2813B9751D7D7EB
+file src/powerquery/qDiagImport.pq 90EE740B63CA9DE61FC3092ADCA54B12
+file src/powerquery/qExistingData.pq 8CA1D642D59389CBB561CF1C996C665D
+file src/powerquery/qKeepWeeks.pq 4014B9E1FC429D6B5D15783872270207
+file src/powerquery/qProf1_Source.pq CD1CB1DA285148BC732E514452B7D0D6
+file src/powerquery/qProf2_Expanded.pq EA70645021A4CE9F4EED680BF0A5B571
+file src/powerquery/qProf3_Normalized.pq E95A440548581D957C03162C17AA121C
+file src/powerquery/qProf4_Key.pq E760F01D916FFFE23FE65C76BD0A7FF1
+file src/powerquery/qProf5_Dedup.pq CA064C89D5E5D7FDB43F6AFE41DF993B
+file src/powerquery/qProf6_Groups.pq 238FE2A049014A7350279A6A7983C703
+file src/powerquery/qProf7_Retention.pq 74826B85C168B04B82924652FE43A88B
+file src/powerquery/Query-ImportJSON.pq B8E5A47500BE4C11E2E6F9EA68BF61BE
 file tmp_index.html 8589A45EDF62AC770C1253041565C5B6
+file README.md E3623137AEE493EC4FD9357F9AAEB575
+file docs/index.md 4C0C1F8AB29E05E1363493E0F6CF575A
+file docs/logs.md 44326F2221849F7D5D3647583E7A31F7
+file docs/plans/analysis_loadpackage_hang_v1.0.md 10989C2233B129E034A9546FC1F5790C
+file docs/plans/ft_Report v1.2.md 723D2916E12460C25ED5723CF183B80B
+file docs/plans/git-sync-v1.0.md 6382651AA200B680D13102BB4A574930
+file docs/plans/MTO_контракт_шаблона_v1.0.md EC74B35BC56A1B7B957A38D6D99094CF
+file docs/plans/MTO_отчёт_v8.0_раскатка_v1.0.md 597F850703EA610C87D655CD7C4A127A
+file docs/plans/MTO_ТЗ_доработка_отчета_v1.6.md 11FCB817FC24FD0DF9A8E48AED9ACD94
+file docs/plans/next-steps.md 4D066A61E240718F4D20B0C8F02AE53E
+file docs/plans/run-report-20260909.md 74D96C36096B5FCF76A21CE6AC2915CA
+file docs/plans/tz_developer_logging_and_release_v1.0.md 70E4BE24DE7325BBC441A44F91943D53
+file docs/plans/tz_pq_optimizations_and_e2e_v1.0.md 295D8AA9EA76EA6F7316F9661B041AEC
+file docs/plans/tz_pq_profile_optimize_v1.0.md 59F2C8B0772652E0BCCC90ABA9A8FA89
+file docs/plans/tz_Report v1.2.md 063C8153D3C7FDEA75B54181F4194E00
+file docs/plans/tz_report_part_2.md D41D8CD98F00B204E9800998ECF8427E
+file docs/plans/tz_Reports2.md 7774DE065C6BAB61214091ADFB674344
+file docs/presentations/MTO_Презентация_и_блоки_данных_v2.5.md 451769C3DC67542EBDE50C4D0167E195
+file docs/presentations/Презентация и блоки данных (Трек Б) v1.0.md 3D33C698C7F4450586F611F100B98CA1
+file docs/rules.md 6AC76B46CD285A2D950E865876CC94F1
+file docs/runner-guide.md 2305B9D59B518E89822B57BF52C6370C
+file docs/specs/brief-data-mto.md 0E7DFD726A8FFB5ACAF553E96BA0CADE
+file docs/specs/data.md 85FA97A23CF168F4CCEC99E026FA9A94
+file docs/specs/manifest.md D36D0478BB0EC17502738E659F815BF1
+file docs/specs/pri-json-findings-v1.md 84FC014C128DC7481E0A6743D26CD065
+file docs/tasks.md BE30890CE40A66F0A08F3144891AEC8A
+file docs/version-guide.md C2D14C10BDBB6E17ABEE7EFDC0E08830
+file install/install-v7.1.md 5029B74F81DC07B69D6DD9895385AA43

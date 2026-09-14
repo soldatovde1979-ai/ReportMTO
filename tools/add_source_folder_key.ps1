@@ -22,7 +22,7 @@ $excel.DisplayAlerts = $false
 $wb = $null
 
 try {
-    $wb = $excel.Workbooks.Open((Resolve-Path $BookPath).Path)
+    $wb = $excel.Workbooks.Open((Resolve-Path $BookPath).Path, 0)
 
     $ws = $null
     foreach ($s in $wb.Worksheets) {

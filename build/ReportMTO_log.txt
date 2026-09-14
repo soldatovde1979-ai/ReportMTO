@@ -1,1 +1,7 @@
-2026-09-09 10:29:34 | Инфо | Формирование отчёта | C:\Projects\ReportMTO\result | Сохранён: C:\Projects\ReportMTO\result\Report_20260909_102934.html
+2026-09-13 13:20:00 [INFO] ЭТАП qProf1_Source: 22528 строк, 34.4 c
+2026-09-13 13:20:00 [INFO] ЭТАП qProf2_Expanded: 22528 строк, 5.9 c
+2026-09-13 13:20:00 [INFO] ЭТАП qProf3_Normalized: 22528 строк, 4.3 c
+2026-09-13 13:20:00 [INFO] ЭТАП qProf4_Key: 22528 строк, 3.0 c
+2026-09-13 13:20:00 [INFO] ЭТАП qProf5_Dedup: 18772 строк, 11.7 c
+2026-09-13 13:20:00 [INFO] ЭТАП qProf6_Groups: 18772 строк, 12.4 c
+2026-09-13 13:20:00 [INFO] ЭТАП qProf7_Retention: 18772 строк, 15.6 c

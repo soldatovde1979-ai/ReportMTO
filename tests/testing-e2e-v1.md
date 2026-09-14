@@ -35,10 +35,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "tools\run-e2e-tests-v1.ps1"
 | Шаг | Действие | Ожидание | Провал означает |
 |---|---|---|---|
 | PREP_BOOK | книга найдена | — | неверный `-BookPath` |
-| STEP1_ROWS | загрузка `test_sppr_tablet_v1.json` в пустую `tbDATA` | 25 строк | потеря строк на разворачивании JSON |
+| STEP1_ROWS | загрузка `test_sppr_tablet_v1.json` из временной папки в пустую `tbDATA` | 25 строк | потеря строк на разворачивании JSON |
 | STEP1_SELFTEST | `modSelfTest.SelfTest`: 40+ CHECK (структура 7 слайдов, промпт, маркеры, STUB, числовые контрольные значения) | все `=1`, есть `DONE` | строка с `=0` или `CHECK:VBA_ERROR` выводится в консоль — искать по тексту CHECK |
-| STEP2_RELOAD | повторная загрузка того же файла | 25 строк | сломан `Key` / отбор несовпавших строк |
-| STEP3_ROWS | загрузка `test_upsert_same_keys_v1.json` | 25 строк | 2 строки = `qExistingData` не нашёл таблицу; 26 = пустая строка в таблице |
+| STEP2_RELOAD | повторная загрузка того же файла из временной папки | 25 строк | сломан `Key` / отбор несовпавших строк |
+| STEP3_ROWS | очистка папки и загрузка `test_upsert_same_keys_v1.json` | 25 строк | 2 строки = `qExistingData` не нашёл таблицу; 26 = пустая строка в таблице |
 | STEP3_UPSERT | `modSelfTest.SelfTestUpsert`: `ЗН-002` встречается 2 раза, обе строки `arm = ПК` | `UPSERT_ARM_PK=1`, `DONE_UPSERT` | upsert работает как anti-join (старые строки не замещаются) |
 | STEP4_OFFLINE | `modMain.DebugGenerateOffline` + проверка свежего `debug_*.html` | нет `{{` (плейсхолдеры заменены), есть `[offline]` и `drill-dump` | разобрать по трём флагам в выводе |
 

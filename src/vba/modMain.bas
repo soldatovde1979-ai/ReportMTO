@@ -21,6 +21,11 @@ Attribute VB_Name = "modMain"
 '   Bearer sk-..."), источник ключа и его длина пишутся в журнал при DEBUG>=1.
 '   Сам ключ в журнал не попадает.
 '
+' v8.2 (13.09.2026) - ТЗ v1.0: записи «было/стало» переведены в тип «Веха»,
+'   манифест очереди файлов перед пакетной загрузкой, трассировка DEBUG=2
+'   (вехи/тайминги) в LoadSourceFile и LoadPackage, сортировка ListJsonFiles
+'   по дате/времени из имени файла.
+'
 ' v7.1 (08.09.2026) - ключ ИИ вынесен за пределы книги:
 '   ResolveAiApiKey: AI_API_KEY (переменная окружения) -> %APPDATA%\ReportMTO\deepseek.key
 '   (UTF-8) -> лист Variable (legacy, с предупреждением в лог). Ключ в лог и HTML не пишется.
@@ -36,29 +41,40 @@ Public Sub LoadSourceFile()
 
     On Error GoTo ErrHandler
 
+    ' Трассировка DEBUG=2 (ТЗ v1.0, п.2.3). Граница возможностей: строки внутри
+    ' Power Query VBA не видит, поэтому «каждая строка» заменена вехами/таймингами -
+    ' максимум достижимого при одном проходе.
+    Dim t0 As Single
+    t0 = Timer
+    modLog.WriteDebug 2, "Загрузка данных", "LoadSourceFile", "Старт (строк до: " & rowsBefore & ")"
+
     SetSourcePathParameter CStr(filePath)
     ' Итог этапа 1/3 (вариант А - логирование в оркестраторе): полный путь нужен для
     ' возобновления загрузки после обрыва на следующих этапах.
     modLog.WriteLogEntry Now, "Инфо", "Параметр PQ", "prmSourcePath", _
         "Путь выбранного файла: " & CStr(filePath)
 
+    modLog.WriteDebug 2, "Загрузка данных", "LoadSourceFile", "До Refresh"
     modPQSync.RefreshImportQuery
+    modLog.WriteDebug 2, "Загрузка данных", "LoadSourceFile", "После Refresh (" & Round(Timer - t0, 1) & " c)"
 
     Dim rowsAfter As Long
     rowsAfter = SafeRowCount()
 
     ' Итог этапа 2/3: строки до/после - вместо прежней общей записи «Загрузка данных»,
     ' чтобы не дублировать одни и те же цифры в двух строках лога.
-    modLog.WriteLogEntry Now, "Инфо", "Обновление импорта", "Query-ImportJSON", _
+    ' Тип «Веха» (ТЗ v1.0, п.2.1): попадает в лист Logs и в файл при DEBUG>=1.
+    modLog.WriteMilestone "Обновление импорта", "Query-ImportJSON", _
         "Строк до: " & rowsBefore & "; строк после: " & rowsAfter
 
     modContentMTO.BuildPivots
+    modLog.WriteDebug 2, "Загрузка данных", "LoadSourceFile", "BuildPivots (" & Round(Timer - t0, 1) & " c)"
     ' Итог этапа 3/3: BuildPivots не возвращает результат, поэтому фиксируем факт
     ' завершения и текущий объём tbDATA.
     modLog.WriteLogEntry Now, "Инфо", "Сводки", "modContentMTO.BuildPivots", _
         "Сводки построены; строк в tbDATA: " & SafeRowCount()
 
-    modLog.WriteLogEntry Now, "Инфо", "Загрузка данных", "LoadSourceFile", _
+    modLog.WriteMilestone "Загрузка данных", "LoadSourceFile", _
         "Загрузка завершена. Строк в tbDATA: " & rowsAfter
     Exit Sub
 
@@ -73,17 +89,17 @@ ErrHandler:
         "(Данные -> Получить данные -> Параметры запроса -> Конфиденциальность)."
 End Sub
 
-' «Загрузить пакет»: загружает все *.json из папки, указанной на листе Variable
-' (ключ DATA/SOURCE_FOLDER), по одному файлу через upsert Power Query.
+' «Загрузить пакет»: пересобирает tbDATA из всех *.json папки DATA/SOURCE_FOLDER
+' одним проходом Power Query (режим папки R-2 в Query-ImportJSON).
 '
-' Порядок загрузки - по времени выгрузки (имя файла sppr_tablet_YYYYMMDD_HHMMSS_...).
+' Порядок файлов - по имени (время выгрузки зашито в имя sppr_tablet_YYYYMMDD_HHMMSS_...).
 ' Вложенные папки НЕ читаются (только верхний уровень).
-' После каждого файла делается копия книги в bak\ (ReportMTO.xlsm.bak_<штамп>),
-' чтобы можно было посмотреть результат на любом шаге.
 '
-' v1.0 (12.09.2026): введена по запросу - загрузка нескольких выгрузок подряд
-'   без ручного выбора каждого файла. Папка берётся из Variable, а не из диалога,
-'   чтобы пакет можно было запускать повторно без повторного выбора пути.
+' v1.1 (12.09.2026): пофайловый upsert заменён одним проходом по папке - при 255 тыс.
+'   строк в tbDATA upsert одного файла занимал 5 ч 12 мин (замер R-2). Перед загрузкой
+'   tbDATA и лог очищаются: в Logs остаётся только итоговая запись «Записано N из M»,
+'   где N - строк в tbDATA после загрузки, M - суммарное число записей во всех файлах
+'   (число берётся из имени файла _NNNNNrec.json).
 Public Sub LoadPackage()
     Dim folder As String
     folder = Trim$(GetVariableDef("DATA/SOURCE_FOLDER", ""))
@@ -101,46 +117,87 @@ Public Sub LoadPackage()
         Exit Sub
     End If
 
-    Dim total As Long
-    total = UBound(files) - LBound(files) + 1
-    modLog.WriteLogEntry Now, "Инфо", "Загрузка пакета", "LoadPackage", _
-        "Папка: " & folder & "; файлов: " & total
+    Dim totalRecs As Long
+    totalRecs = SumRecsFromNames(files)
 
     On Error GoTo ErrHandler
 
-    Dim i As Long
+    ' Трассировка DEBUG=2 (ТЗ v1.0, п.2.3). Граница возможностей: строки внутри
+    ' Power Query VBA не видит, поэтому «каждая строка» заменена вехами/таймингами -
+    ' максимум достижимого при одном проходе.
+    Dim t0 As Single
+    t0 = Timer
+    Dim rowsBeforePkg As Long
+    rowsBeforePkg = SafeRowCount()
+    modLog.WriteDebug 2, "Загрузка пакета", "LoadPackage", "Старт (строк до: " & rowsBeforePkg & ")"
+
+    ClearLogs
+    ClearTbData
+
+    ' Манифест очереди (ТЗ v1.0, п.2.2): одна запись «Веха» ДО Refresh - перечень
+    ' файлов в порядке очереди: номер, имя, дата/время из имени, rec-счётчик.
+    ' Это реализация «записей между файлами» при однопроходной загрузке.
+    Dim manifest As String
+    Dim i As Long, fnameM As String
+    manifest = "Очередь файлов (" & (UBound(files) - LBound(files) + 1) & "):"
     For i = LBound(files) To UBound(files)
-        Dim path As String
-        path = CStr(files(i))
-
-        Dim rowsBefore As Long
-        rowsBefore = SafeRowCount()
-
-        SetSourcePathParameter path
-        modLog.WriteLogEntry Now, "Инфо", "Загрузка пакета", "prmSourcePath", _
-            "Файл " & (i - LBound(files) + 1) & "/" & total & ": " & path
-
-        modPQSync.RefreshImportQuery
-
-        Dim rowsAfter As Long
-        rowsAfter = SafeRowCount()
-        modLog.WriteLogEntry Now, "Инфо", "Загрузка пакета", "Query-ImportJSON", _
-            "Строк до: " & rowsBefore & "; строк после: " & rowsAfter
-
-        BackupWorkbook
+        fnameM = Mid$(CStr(files(i)), InStrRev(CStr(files(i)), "\") + 1)
+        manifest = manifest & vbCrLf & (i - LBound(files) + 1) & ") " & fnameM & _
+            " | дата/время: " & StampFromName(fnameM) & " | rec: " & RecFromName(fnameM)
     Next i
+    modLog.WriteMilestone "Загрузка пакета", "LoadPackage", manifest
+
+    ' Прогноз ожидания (Задача C)
+    Dim lastSecsStr As String, lastRowsStr As String
+    Dim lastSecs As Single, lastRows As Long, estMins As Single
+    Dim progMsg As String
+    lastSecsStr = Trim$(GetVariableDef("DATA/LAST_LOAD_SECONDS", ""))
+    lastRowsStr = Trim$(GetVariableDef("DATA/LAST_LOAD_ROWS", ""))
+    If lastSecsStr <> "" And lastRowsStr <> "" And IsNumeric(lastSecsStr) And IsNumeric(lastRowsStr) Then
+        lastSecs = CSng(Replace(lastSecsStr, ".", ",")) ' терпимость к культуре
+        lastRows = CLng(lastRowsStr)
+        If lastRows > 0 Then
+            estMins = (lastSecs / lastRows * totalRecs) / 60
+            progMsg = "Refresh начат: " & totalRecs & " записей, ожидание ~" & Round(estMins, 1) & " мин"
+        Else
+            progMsg = "Refresh начат: " & totalRecs & " записей, прогноза нет (первый замер)"
+        End If
+    Else
+        progMsg = "Refresh начат: " & totalRecs & " записей, прогноза нет (первый замер)"
+    End If
+    modLog.WriteMilestone "Загрузка пакета", "LoadPackage", progMsg
+    Application.StatusBar = progMsg
+
+    modLog.WriteDebug 2, "Загрузка пакета", "LoadPackage", "До Refresh"
+    SetSourcePathParameter folder
+    modPQSync.RefreshImportQuery
+    Dim elapsedSecs As Single
+    elapsedSecs = Timer - t0
+    modLog.WriteDebug 2, "Загрузка пакета", "LoadPackage", "После Refresh (" & Round(elapsedSecs, 1) & " c)"
+    Application.StatusBar = False
+
+    Dim finalRows As Long
+    finalRows = SafeRowCount()
+
+    ' Записываем факт
+    SetVariable "DATA/LAST_LOAD_SECONDS", CStr(Round(elapsedSecs, 1))
+    SetVariable "DATA/LAST_LOAD_ROWS", CStr(finalRows)
+
+    ' Тип «Веха» (ТЗ v1.0, п.2.1): сверка «Записано N из M» - в лист Logs и в файл.
+    modLog.WriteMilestone "Загрузка пакета", "Query-ImportJSON", _
+        "Записано " & finalRows & " из " & totalRecs
 
     modContentMTO.BuildPivots
-    modLog.WriteLogEntry Now, "Инфо", "Загрузка пакета", "LoadPackage", _
-        "Пакет загружен. Строк в tbDATA: " & SafeRowCount()
+    modLog.WriteDebug 2, "Загрузка пакета", "LoadPackage", "BuildPivots (" & Round(Timer - t0, 1) & " c)"
     Exit Sub
 
 ErrHandler:
+    Application.StatusBar = False
     modLog.WriteLogEntry Now, "Ошибка", "Загрузка пакета", "LoadPackage", _
         "Загрузка пакета прервана: " & Err.Description
 End Sub
 
-' Перечисляет *.json только верхнего уровня папки (без рекурсии), сортирует по имени.
+' Перечисляет *.json только верхнего уровня папки (без рекурсии), сортирует по дате/времени из имени.
 ' Возвращает Variant-массив путей (0-based) или Empty, если файлов нет.
 Private Function ListJsonFiles(folder As String) As Variant
     Dim fso As Object
@@ -170,11 +227,18 @@ Private Function ListJsonFiles(folder As String) As Variant
         Exit Function
     End If
 
-    ' Пузырьковая сортировка по полному пути (имя файла определяет порядок).
+    ' Пузырьковая сортировка по дате/времени, распарсенной из имени файла
+    ' (sppr_tablet_YYYYMMDD_HHMMSS_*). Если дату извлечь не удалось - fallback
+    ' на сравнение по имени файла (ТЗ v1.0, п.2.4).
     Dim i As Long, j As Long, tmp As String
+    Dim keyI As String, keyJ As String
     For i = 0 To cnt - 2
         For j = i + 1 To cnt - 1
-            If StrComp(arr(i), arr(j), vbTextCompare) > 0 Then
+            keyI = StampFromName(arr(i))
+            keyJ = StampFromName(arr(j))
+            If keyI = "" Then keyI = arr(i)
+            If keyJ = "" Then keyJ = arr(j)
+            If StrComp(keyI, keyJ, vbTextCompare) > 0 Then
                 tmp = arr(i): arr(i) = arr(j): arr(j) = tmp
             End If
         Next j
@@ -182,6 +246,107 @@ Private Function ListJsonFiles(folder As String) As Variant
 
     ListJsonFiles = arr
 End Function
+
+' Извлекает дату/время YYYYMMDD_HHMMSS из имени файла (шаблон sppr_tablet_YYYYMMDD_HHMMSS_*).
+' Возвращает "" если шаблон не найден. Чистый строковый скан, без внешних библиотек.
+Private Function StampFromName(fileName As String) As String
+    Dim i As Long
+    StampFromName = ""
+    For i = 1 To Len(fileName) - 14
+        If Mid$(fileName, i + 8, 1) = "_" And IsDigits(Mid$(fileName, i, 8)) _
+            And IsDigits(Mid$(fileName, i + 9, 6)) Then
+            StampFromName = Mid$(fileName, i, 15)
+            Exit Function
+        End If
+    Next i
+End Function
+
+' True, если s непустая и состоит только из цифр.
+Private Function IsDigits(s As String) As Boolean
+    Dim i As Long
+    IsDigits = (Len(s) > 0)
+    If Not IsDigits Then Exit Function
+    For i = 1 To Len(s)
+        If Mid$(s, i, 1) < "0" Or Mid$(s, i, 1) > "9" Then
+            IsDigits = False
+            Exit Function
+        End If
+    Next i
+End Function
+
+' Число записей из имени файла (_NNNNNrec.json); 0, если не распозналось.
+' Логика извлечения - как в SumRecsFromNames (та функция не менялась, ТЗ v1.0 п.2.5).
+Private Function RecFromName(fileName As String) As Long
+    Dim s As String, p As Long, digits As String, ch As String
+    RecFromName = 0
+    s = LCase$(fileName)
+    p = InStr(s, "rec.")
+    If p <= 1 Then Exit Function
+    digits = ""
+    p = p - 1
+    Do While p >= 1
+        ch = Mid$(s, p, 1)
+        If ch >= "0" And ch <= "9" Then
+            digits = ch & digits
+            p = p - 1
+        Else
+            Exit Do
+        End If
+    Loop
+    If digits <> "" Then RecFromName = CLng(digits)
+End Function
+
+' Суммирует число записей, зашитое в имени файла выгрузки (_NNNNNrec.json).
+' Имя не распозналось - файл даёт 0 в сумму (в итоге M просто меньше реального).
+Private Function SumRecsFromNames(files As Variant) As Long
+    Dim total As Long, i As Long, p As Long
+    Dim digits As String, ch As String, fname As String
+    total = 0
+    For i = LBound(files) To UBound(files)
+        fname = LCase$(CStr(files(i)))
+        p = InStr(fname, "rec.")
+        If p > 1 Then
+            digits = ""
+            p = p - 1
+            Do While p >= 1
+                ch = Mid$(fname, p, 1)
+                If ch >= "0" And ch <= "9" Then
+                    digits = ch & digits
+                    p = p - 1
+                Else
+                    Exit Do
+                End If
+            Loop
+            If digits <> "" Then total = total + CLng(digits)
+        End If
+    Next i
+    SumRecsFromNames = total
+End Function
+
+' Очищает таблицу tbDATA (удаляет строки, оставляя заголовок) для полной пересборки
+' из папки. Вызывается только из LoadPackage.
+Private Sub ClearTbData()
+    Dim ws As Worksheet, lo As ListObject
+    For Each ws In ThisWorkbook.Worksheets
+        For Each lo In ws.ListObjects
+            If StrComp(lo.Name, "tbDATA", vbTextCompare) = 0 Then
+                ' If Not lo.DataBodyRange Is Nothing Then lo.DataBodyRange.Delete ' Приводит к зависанию на 255k строках! PowerQuery затрет сам
+                Exit Sub
+            End If
+        Next lo
+    Next ws
+End Sub
+
+' Очищает лог книги (таблицу tbLogs на листе Logs): после загрузки пакета
+' в логе остаётся только итоговая запись «Записано N из M».
+Private Sub ClearLogs()
+    Dim lo As ListObject
+    On Error Resume Next
+    Set lo = ThisWorkbook.Sheets("Logs").ListObjects("tbLogs")
+    On Error GoTo 0
+    If lo Is Nothing Then Exit Sub
+    If Not lo.DataBodyRange Is Nothing Then lo.DataBodyRange.Delete
+End Sub
 
 ' Копия книги в bak\ рядом с книгой: ReportMTO.xlsm.bak_YYYYMMDD_HHMMSS.
 ' SaveCopyAs не трогает открытую книгу - можно продолжать загрузку.
@@ -370,7 +535,15 @@ Public Sub DebugGenerateOffline()
     html = modHTMLEngine.RenderTemplate(ThisWorkbook.Path & "\tmp_index.html", placeholders)
 
     Dim folder As String
-    folder = modHTMLEngine.ResolveOutputFolder(GetVariable("OUTPUT/RESULT_FOLDER"))
+    folder = modHTMLEngine.ResolveOutputFolder(GetVariableDef("OUTPUT/RESULT_FOLDER", "result"))
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FolderExists(folder) Then
+        On Error Resume Next
+        fso.CreateFolder folder
+        Err.Clear
+        On Error GoTo ErrHandler
+    End If
     Dim path As String
     path = folder & "\debug_" & Format(Now, "yyyymmdd_hhnnss") & ".html"
 
@@ -496,3 +669,22 @@ Public Function GetVariableDef(key As String, defaultValue As String) As String
     If Trim$(v) = "" Then v = defaultValue
     GetVariableDef = v
 End Function
+
+' Запись значения в лист Variable. Если ключа нет - он создается в конце таблицы.
+Public Sub SetVariable(key As String, value As String)
+    Dim lo As ListObject
+    Set lo = ThisWorkbook.Sheets("Variable").ListObjects(1)
+    
+    Dim r As ListRow
+    For Each r In lo.ListRows
+        If CStr(r.Range.Cells(1, 1).Value) = key Then
+            r.Range.Cells(1, 2).Value = value
+            Exit Sub
+        End If
+    Next r
+    
+    ' Ключ не найден - добавляем
+    Set r = lo.ListRows.Add
+    r.Range.Cells(1, 1).Value = key
+    r.Range.Cells(1, 2).Value = value
+End Sub

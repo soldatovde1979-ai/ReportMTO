@@ -10,6 +10,9 @@
 //   R-2 - prmSourcePath принимает ПАПКУ: полная пересборка за один проход,
 //         без перечитывания tbDATA (замер: один файл через upsert - 5 ч 12 мин).
 //
+// v8.2 (13.09.2026) - ТЗ v1.0: однократное чтение папки (буферизация Source)
+//   и очередь файлов по дате/времени из имени (fallback - по Name).
+//
 // v7.3 (09.09.2026), одна правка:
 //   R-1 — добавлен финальный шаг ретеншна (инструкция проекта §4): строки старше
 //         DATA/KEEP_WEEKS недель удаляются из результата. Глубина читается новым
@@ -57,6 +60,22 @@ let
     // Режим одного файла (кнопка «Загрузить») не менялся.
     IsFolder = not Text.EndsWith(Text.Lower(Text.Trim(prmSourcePath)), ".json"),
 
+    // Извлечение даты/времени из имени файла (шаблон \d{8}_\d{6}): позиция "_",
+    // 8 цифр до и 6 после. Не найдено - "".
+    ExtractStamp = (name as text) as text =>
+        let
+            positions = Text.PositionOfAny(name, {"_"}, Occurrence.All),
+            valid = List.Select(positions, each
+                _ >= 8 and
+                Text.Length(Text.Select(Text.Range(name, _ - 8, 8), {"0".."9"})) = 8 and
+                Text.Length(Text.Select(Text.Range(name, _ + 1, 6), {"0".."9"})) = 6
+            )
+        in if List.IsEmpty(valid) then "" else Text.Range(name, List.Min(valid) - 8, 15),
+
+    // Ключ сортировки очереди (ТЗ v1.0, п.3.2): дата/время из имени;
+    // не удалось извлечь - fallback на имя файла.
+    SortKey = (name as text) as text => let s = ExtractStamp(name) in if s = "" then name else s,
+
     FolderFiles =
         if not IsFolder then #table({}, {})
         else Table.SelectRows(
@@ -64,12 +83,19 @@ let
                 each Text.EndsWith(Text.Lower([Name]), ".json")
              ),
 
+    // Буферизация (ТЗ v1.0, п.3.1): List.Buffer для List.Combine - данные из data
+    // читаются единожды, а не пересчитываются на следующих шагах (SampleFields/Expanded).
+    // (!) List.Buffer, а не Table.Buffer: Source - СПИСОК записей (List.Combine), а
+    //     Table.Buffer требует таблицу и уронил бы режим папки на типе аргумента.
+    // Сортировка (ТЗ v1.0, п.3.2): очередь по дате/времени из имени файла; fallback - Name.
     Source =
         if not IsFolder then Json.Document(File.Contents(prmSourcePath), 65001)
-        else List.Combine(
-                List.Transform(
-                    Table.ToRecords(Table.Sort(FolderFiles, {{"Name", Order.Ascending}})),
-                    each Json.Document([Content], 65001)
+        else List.Buffer(
+                List.Combine(
+                    List.Transform(
+                        Table.ToRecords(Table.Sort(FolderFiles, (a, b) => Value.Compare(SortKey(a[Name]), SortKey(b[Name])))),
+                        each Json.Document([Content], 65001)
+                    )
                 )
              ),
 
@@ -93,14 +119,15 @@ let
 
     WithGroups = fnComputeGroupMetrics(Deduped),
 
-    NewData = Table.Buffer(WithGroups),
+    NewData = WithGroups,
 
     // Существующие данные листа — отдельный запрос (см. qExistingData.pq),
     // грузится как «Только создать подключение».
     ExistingData = qExistingData,
 
     Upserted =
-        if Table.RowCount(ExistingData) = 0 then NewData
+        if IsFolder then NewData
+        else if Table.RowCount(ExistingData) = 0 then NewData
         else if not List.Contains(Table.ColumnNames(ExistingData), "Key") then NewData
         else fnUpsert(NewData, ExistingData),
 
@@ -118,29 +145,43 @@ let
     // как any/text (см. блок «Про типы» в qExistingData.pq). Строгое DateTime.From
     // уронило бы запрос на первой же старой строке.
     ToDT = (v) as nullable datetime =>
-        if v = null then null
-        else if Value.Is(v, type datetime) then v
-        else if Value.Is(v, type date) then DateTime.From(v)
-        else if Value.Is(v, type number) then (try DateTime.From(v) otherwise null)
+        if IsFolder then
+            if v = null then null
+            else if Value.Is(v, type datetime) then v
+            else if Value.Is(v, type date) then DateTime.From(v)
+            else null
         else
-            let s = Text.Trim(Text.From(v))
-            in  if s = "" then null
-                else try DateTime.From(s)
-                     otherwise try DateTime.From(s, "ru-RU")
-                     otherwise try DateTime.From(s, "en-US")
-                     otherwise null,
+            if v = null then null
+            else if Value.Is(v, type datetime) then v
+            else if Value.Is(v, type date) then DateTime.From(v)
+            else if Value.Is(v, type number) then (try DateTime.From(v) otherwise null)
+            else
+                let s = Text.Trim(Text.From(v))
+                in  if s = "" then null
+                    else try DateTime.From(s)
+                         otherwise try DateTime.From(s, "ru-RU")
+                         otherwise try DateTime.From(s, "en-US")
+                         otherwise null,
 
     // Опорная дата строки: дата подписания, а если её нет (arm = «НЕ ПОДПИСАНО»,
     // status_date пуст у 38% выгрузки) - дата создания наряда. date непуст всегда.
     RowAnchor = (r as record) as nullable datetime =>
-        let s = ToDT(Record.FieldOrDefault(r, "status_date", null)),
-            d = ToDT(Record.FieldOrDefault(r, "date", null))
-        in  if s <> null and d <> null then List.Max({s, d})
-            else if s <> null then s
-            else d,
+        if IsFolder then
+            let s = Record.FieldOrDefault(r, "status_date", null),
+                d = Record.FieldOrDefault(r, "date", null)
+            in  if s <> null and d <> null then (if s > d then s else d)
+                else if s <> null then s
+                else d
+        else
+            let s = ToDT(Record.FieldOrDefault(r, "status_date", null)),
+                d = ToDT(Record.FieldOrDefault(r, "date", null))
+            in  if s <> null and d <> null then List.Max({s, d})
+                else if s <> null then s
+                else d,
 
     ColDates = (t as table, col as text) as list =>
         if not List.Contains(Table.ColumnNames(t), col) then {}
+        else if IsFolder then List.RemoveNulls(Table.Column(t, col))
         else List.RemoveNulls(List.Transform(Table.Column(t, col), each ToDT(_))),
 
     Anchors = List.Combine({ColDates(UpsertedBuf, "status_date"), ColDates(UpsertedBuf, "date")}),

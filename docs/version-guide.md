@@ -1,5 +1,8 @@
 # Версионирование сборки — как это работает
 
+> Версия 1.6 от 13.09.2026. Единая точка входа — install\install.ps1 (объединение
+> install + release); ключ -InstallOnly; документация входит в дайджест релиза;
+> добавлен раздел «Семантика DEBUG».
 > Версия 1.5 от 11.09.2026. Указано, что заменённые скрипты лежат в tools\archive\.
 > Версия 1.4 от 11.09.2026. Раздел «Файлы механизма» развёрнут в «Что лежит
 > в install\» — все файлы установщика и почему точка входа называется release.
@@ -24,15 +27,16 @@
 Из корня проекта, **книга должна быть закрыта**:
 
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File install\install.ps1
 ```
 
 Что происходит по шагам:
 
-1. считаются хеши исходников (`src\vba\*.bas`, `src\powerquery\*.pq`, `tmp_index.html`)
-   и сравниваются с прошлым релизом;
-2. запускается `install\install_prod.ps1` (он вызывает `install.ps1`) — модули,
-   запросы, шаблон;
+1. считаются хеши исходников (`src\vba\*.bas`, `src\powerquery\*.pq`, `tmp_index.html`
+   и документация `README.md`, `docs\**\*.md`, `install\*.md`) и сравниваются с
+   прошлым релизом;
+2. установка: бэкап в `bak\` -> VBA-модули -> запросы Power Query -> шаблон ->
+   пост-верификация;
 3. запускается `tools\compile_check.ps1` — принудительная компиляция VBA;
 4. **только если оба шага вернули 0**: поднимается версия, в книгу пишутся ключи
    `BUILD/VERSION`, `BUILD/DATE`, `BUILD/SRC_MD5`, прогоняются недостающие миграции,
@@ -41,10 +45,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1
 Если установка или компиляция упали — версия **не меняется**, журнал не трогается.
 Это и есть смысл правила «версия фиксируется только при нулевом коде возврата».
 
+Только установка без версионирования (например, для build-книги):
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File install\install.ps1 -Target ".\build" -InstallOnly
+```
+
 Посмотреть, что будет сделано, ничего не трогая:
 
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1 -DryRun
+powershell -NoProfile -ExecutionPolicy Bypass -File install\install.ps1 -DryRun
 ```
 
 ## Разбор команды и ключи
@@ -52,7 +62,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1 -DryRun
 ### Из чего состоит строка запуска
 
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File install\install.ps1
 ```
 
 | Часть | Что значит | Можно опустить |
@@ -60,35 +70,35 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1
 | `powershell` | запуск Windows PowerShell 5.1 | нет |
 | `-NoProfile` | не подгружать профиль PowerShell: он может переопределять функции и кодировку консоли, и скрипт поведёт себя иначе | можно, но не нужно |
 | `-ExecutionPolicy Bypass` | разрешить выполнение этого скрипта. Действует только на текущий запуск, системную политику не меняет | нет: иначе Windows откажется запускать `.ps1` |
-| `-File install\release.ps1` | что запускаем; путь считается от текущей папки — отсюда «из корня проекта» | нет |
+| `-File install\install.ps1` | что запускаем; путь считается от текущей папки — отсюда «из корня проекта» | нет |
 
 Всё, что идёт после имени скрипта, — ключи самого скрипта.
 
-### Ключи `install\release.ps1`
+### Ключи `install\install.ps1`
 
 | Ключ | Зачем | По умолчанию |
 |---|---|---|
-| `-DryRun` | показать план, ничего не меняя: ни книгу, ни версию, ни журнал | выключен |
+| `-DryRun` | показать план релиза, ничего не меняя: ни книгу, ни версию, ни журнал | выключен |
+| `-InstallOnly` | только установка + верификация, без версии/миграций/CHANGELOG | выключен |
 | `-Bump patch\|minor\|major` | какой разряд версии поднять | `patch` |
-| `-Target "<путь к книге>"` | поставить в другую книгу, например `build\ReportMTO v7.0.xlsm` | `.\ReportMTO.xlsm` |
+| `-Target "<путь>"` | книга (релиз) или книга/папка (с `-InstallOnly` патчатся все `*.xlsm` папки) | `.\ReportMTO.xlsm` |
 | `-Force` | поставить поверх более новой книги (осознанный откат), факт пишется в `CHANGELOG.md` | выключен |
 | `-SkipCompile` | пропустить `compile_check.ps1` | выключен, пропускать не рекомендуется |
+| `-ProjectRoot "<путь>"` | корень проекта, если скрипт запускают из другого места | папка над `install\` |
 
 Ключи комбинируются:
 
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1 -Bump minor -DryRun
-powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1 -Target ".\build\ReportMTO v7.0.xlsm"
+powershell -NoProfile -ExecutionPolicy Bypass -File install\install.ps1 -Bump minor -DryRun
+powershell -NoProfile -ExecutionPolicy Bypass -File install\install.ps1 -Target ".\build" -InstallOnly
 ```
 
 ### Ключи скриптов, которые вызываются внутри
 
-Отдельно они нужны редко — `release.ps1` вызывает их сам.
+Отдельно они нужны редко — `install.ps1` вызывает их сам.
 
 | Скрипт | Ключи |
 |---|---|
-| `install\install_prod.ps1` | `-Target` — книга, по умолчанию `.\ReportMTO.xlsm` |
-| `install\install.ps1` | `-Target` — книга **или папка** (тогда патчатся все `*.xlsm` внутри), по умолчанию `build`; `-ProjectRoot` — корень проекта, если запускают из другого места |
 | `tools\compile_check.ps1` | `-Book` — книга, компиляция идёт на временной копии |
 
 ## Первый запуск
@@ -108,7 +118,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1 -Target 
 
 1. Закрыть книгу.
 2. Посмотреть план, ничего не меняя:
-   `powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1 -DryRun`
+   `powershell -NoProfile -ExecutionPolicy Bypass -File install\install.ps1 -DryRun`
 3. Если вывод разумный — тот же запуск без `-DryRun`. Успех выглядит как `RELEASE_OK 8.1.0`.
 4. Открыть книгу, нажать «Сформировать отчёт», проверить подвал готового HTML: там
    должно появиться «сборка 8.1.0».
@@ -138,7 +148,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1 -Target 
 приходится назвать флагом; менять контракт молча всё равно нельзя.
 
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1 -Bump minor
+powershell -NoProfile -ExecutionPolicy Bypass -File install\install.ps1 -Bump minor
 ```
 
 ## Где смотреть версию
@@ -157,35 +167,30 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1 -Bump mi
 
 | Файл | Что это | Запускать напрямую | Правится руками |
 |---|---|---|---|
-| `release.ps1` | **Точка входа.** Выпуск версии: установка -> компиляция -> версия -> миграции -> журнал | да, это ваша команда | редко |
-| `install_prod.ps1` | Обёртка над `install.ps1` для продуктивной книги: печатает цель и код возврата | только если нужна установка без версионирования | нет |
-| `install.ps1` | Сама установка: заменяет VBA-модули, обновляет запросы Power Query, кладёт шаблон, делает бэкап в `bak\` и сверяет результат с исходниками | редко, обычно через обёртки | нет |
-| `VERSION` | Версия исходников: первая строка — номер, ниже описание сборки | нет | нет, ведёт `release.ps1` |
+| `install.ps1` | **Точка входа.** Установка И релиз: дайджест -> установка -> компиляция -> версия -> миграции -> журнал; `-InstallOnly` — только установка без версионирования | да, это ваша команда | редко |
+| `VERSION` | Версия исходников: первая строка — номер, ниже описание сборки | нет | нет, ведёт `install.ps1` |
 | `release.state` | Служебный: хеши исходников прошлого релиза. Отвечает на вопрос «менялись ли исходники» | нет | **никогда** |
-| `migrations\*.ps1` | Доп. код конкретной версии: то, что нужно доделать в книге сверх установки кода | нет, их вызывает `release.ps1` | да, при необходимости |
+| `migrations\*.ps1` | Доп. код конкретной версии: то, что нужно доделать в книге сверх установки кода | нет, их вызывает `install.ps1` | да, при необходимости |
 | `install-v7.1.md` | Историческая инструкция ручного обновления v7.0 -> v7.1 | — | — |
 
-Рядом, вне папки: `CHANGELOG.md` в корне (накопительный журнал, ведёт `release.ps1`)
+Рядом, вне папки: `CHANGELOG.md` в корне (накопительный журнал, ведёт `install.ps1`)
 и `tools\compile_check.ps1` (компиляция VBA на временной копии).
 
-Заменённое лежит в `tools\archive\`: `apply_v8.0.ps1` (раскатка v8.0 — её работу делает
-`release.ps1`) и `add_keep_weeks_key.ps1` (ключ ретеншна — его заводит миграция
-`8.1.0__variable_keys.ps1`). В работе не использовать.
+Заменённое лежит в `tools\archive\`: `apply_v8.0.ps1`, `add_keep_weeks_key.ps1`
+(ключ ретеншна — его заводит миграция `8.1.0__variable_keys.ps1`), а с 13.09.2026 —
+`release.ps1` и `install_prod.ps1` (объединены в `install.ps1` v2.0). В работе не
+использовать.
 
-### Почему точка входа называется release, а не install
+### Почему install и release были объединены
 
-Это две разные операции, и их специально не смешивают:
+До 13.09.2026 установка и релиз жили в двух скриптах: `install.ps1` (механика) и
+`release.ps1` (событие: версия + CHANGELOG + state) с промежуточной обёрткой
+`install_prod.ps1`. Практика показала, что обёртка не добавляла ценности, а
+трёхступенчатая цепочка вызовов затрудняла поиск места ошибки.
 
-- **установка** (`install.ps1`) — положить код в книгу. Операцию можно повторять
-  сколько угодно раз, в любую книгу, она ничего не фиксирует и следа не оставляет;
-- **релиз** (`release.ps1`) — событие: этот набор исходников признан годным и получил
-  номер. Он оставляет след в трёх местах — версия в книге, запись в `CHANGELOG.md`,
-  состояние в `release.state`.
-
-Поэтому установить можно десять раз подряд, а выпустить версию — один. Разделение
-взято из обычной практики сборки: build/install отдельно, release отдельно.
-`release.ps1` лежит в `install\` потому, что он оркестрирует именно установщики и
-без них не имеет смысла.
+Теперь всё в одном `install.ps1`: полный цикл по умолчанию, `-InstallOnly` — для
+тех, кому нужно только положить код в книгу без следа в версионировании. Прежнее
+разделение операций сохранилось на уровне флага, а не отдельного файла.
 
 ## Миграции
 
@@ -201,7 +206,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1 -Bump mi
   этой миграцией не обновлять»: релиз остановится и скажет, какую промежуточную
   версию поставить сначала;
 - миграция получает открытую книгу и **не сохраняет и не закрывает** её — это
-  делает `release.ps1`;
+  делает `install.ps1`;
 - миграция обязана быть идемпотентной: повторный прогон не должен ломать данные.
 
 Заготовка:
@@ -228,7 +233,7 @@ Write-Output "MIG ADD что-то сделано"
 (`install\release.state`). Отсюда правило:
 
 1. `git pull` — перед релизом;
-2. `release.ps1`;
+2. `install\install.ps1`;
 3. `git push` — сразу после.
 
 Релизить лучше с одной машины. Если всё-таки релизнули с двух, версии разойдутся:
@@ -236,7 +241,7 @@ Write-Output "MIG ADD что-то сделано"
 
 ### Защита от отката
 
-Перед установкой `release.ps1` читает версию из книги и сравнивает её с
+Перед установкой `install.ps1` читает версию из книги и сравнивает её с
 `install\VERSION`:
 
 | Что увидел | Что делает |
@@ -250,7 +255,7 @@ Write-Output "MIG ADD что-то сделано"
 флагом `-Force`; факт отката попадает в `CHANGELOG.md` отдельной строкой:
 
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1 -Force
+powershell -NoProfile -ExecutionPolicy Bypass -File install\install.ps1 -Force
 ```
 
 Цена проверки — одно открытие книги на чтение до установки, на 52 МБ около
@@ -264,6 +269,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install\release.ps1 -Force
 его (зависший `.git\index.lock` уже ловили 11.09.2026). Выбирайте одно: либо git
 через GitHub — и тогда папка не синхронизируется на обеих машинах сразу, либо
 Диск — и тогда не коммитить со второй машины.
+
+## Семантика DEBUG
+
+Ключ `DEBUG` на листе `Variable` управляет логами (v8.2, 13.09.2026). Ключа нет -> `0`.
+
+| DEBUG | Лист `Logs` книги | Внешний файл `ReportMTO.log` рядом с книгой |
+|---|---|---|
+| 0 | только «Веха» и «Ошибка» | не пишется |
+| 1 | только «Веха» и «Ошибка» | только «Ошибка» и «Веха» |
+| 2 | только «Веха» и «Ошибка» | полный лог: все типы записей, включая трассировку с таймингами |
+
+Лист `Logs` всегда содержит только вехи («Строк до/после», «Записано N из M») и
+ошибки. Полный текст при `DEBUG=2` смотрите в `ReportMTO.log`.
 
 ## Если что-то пошло не так
 
