@@ -7,6 +7,7 @@
 
 - `[cmd.exe/PowerShell]` Кириллица и кавычки напрямую через `cmd.exe` ломают кодировку, а командлеты (`Copy-Item`) сбоят при совпадении путей. -> Используй ASCII-маркеры (`findstr`), `powershell -NoProfile`, UTF-8/BOM `.ps1`; перед `Copy-Item` проверяй `Source` ≠ `Destination`.
 - `[PowerShell/COM]` Неподавленный вывод COM-вызова утекает в результат функции и ломает тип возврата. -> Перед каждым COM-вызовом в функции ставь `$null = ...`.
+- `[Git/Windows+Drive]` Папки `.git`/`.vscode` с атрибутом ReadOnly ломают git: commit — «unable to write new index file», checkout/rebase — «unable to create file», рабочая копия остаётся полупереключённой. -> Перед git-операциями проверяй атрибуты (`Get-Item`), снимай ReadOnly (`$d.Attributes='Directory'`), затем `git reset --hard HEAD` для восстановления.
 
 ## Инструменты и поиск
 

@@ -8,6 +8,11 @@
 > и logs.md перенесены в docs\archive\; удалены пустой tz_report_part_2.md, обрывок промпта
 > promt-kilo.md и нечитаемый (cp1251) defect-discipline.md; docs\archive\ добавлен
 > в .kilocodeignore; битые ссылки в docs\index.md починены.
+> 15.09.2026: git-sync выполнен — запушены 37 локальных коммитов (daf8941..688962a,
+> fast-forward). Коммит 688962a: план plan_fix_loadpackage_a-c, .roo/rules/role.md,
+> .gitignore v2.5 (68787400, ReportMTO.log, archive/ReportMTO._xlsm — вне git).
+> Сбой pull --rebase: папки .git/.vscode были ReadOnly — атрибуты сняты, рабочая
+> копия восстановлена reset --hard, остатки checkout удалены git clean (см. rules.md).
 > Версия 1.9 от 12.09.2026. Раскатан релиз 8.1.3 на прод-книгу корня (макрос
 > LoadPackage, COMPILE_OK); найден и исправлен дефект add_source_folder_key.ps1 (см. ниже).
 > Версия 1.8 от 11.09.2026. apply_v8.0.ps1 и add_keep_weeks_key.ps1 перенесены в
