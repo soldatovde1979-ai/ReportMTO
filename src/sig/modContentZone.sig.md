@@ -1,7 +1,7 @@
 # modContentZone
 
 Статус: CLEAN
-Обновлено: 16.09.2026
+Обновлено: 16.09.2026 (риск повторного заезда по АРМ и топ-10 возвратов недели)
 
 ## Назначение
 CONTENT-слой части «Техника» отчёта МТО (слайды 1 и 5–8, трек Б). За один проход по снимку `tbDATA` строит уровни: события → заказы-наряды (`mZn`) → машины и заезды (`mVeh`). Считает парк, заезды, возвраты, фазы наряда, хвост незакрытого, материалы (ABC), качество учёта, заявку в 1С. Примитивы разметки/графики общие с `modContentDisc`.
@@ -13,7 +13,7 @@ CONTENT-слой части «Техника» отчёта МТО (слайды
 - Вход/выход: нет. Побочные эффекты: очистка модульных переменных.
 
 ### EnsureZn() (private)
-- Назначение: один проход по снимку: события → наряды (`mZn`, 24 поля), подписи, счётчики `mSignTot`/`mSignTab`/`mArmNone`/`mNoCounter`/`mNoBounds`.
+- Назначение: один проход по снимку: события → наряды (`mZn`, 26 полей — включая `Z_ARM_LEVG`/`Z_ARM_LEVD`, АРМ подписи «Готов к выбытию» по дирекциям), подписи, счётчики `mSignTot`/`mSignTab`/`mArmNone`/`mNoCounter`/`mNoBounds`.
 - Вход: снимок `modAggregate` (обязателен, иначе raise `vbObjectError+41`). Выход: нет. Побочные эффекты: заполнение `mZn`; `WriteDebug 2`.
 
 ### EnsureVeh() (private)
@@ -36,8 +36,8 @@ CONTENT-слой части «Техника» отчёта МТО (слайды
 - Назначение: правила «ключевое слово → характер работы (уровень 0) / узел (уровень 1)»; первое совпадение выигрывает; остаток «(не классифицировано)».
 - Вход: `defect_desc` нарядов. Выход: заполненные `Z_KIND`/`Z_NODE`. Побочные эффекты: мутация `mZn`.
 
-### Счётчики и фильтры: SnapshotEnd / AgeYears / IsPlanned / YtdStart / InYtd / InYtdOrd / NoZoneOk / CohortOf / CohortLabels / AgeDays / MedDays / PostOr / OldestOf / LastEv
-- Назначение: конец снимка, возраст машины, плановые виды ремонта, граница YTD (`REPORT/YTD_START`), фильтр «без ремзоны», возрастные когорты, разбор хвоста.
+### Счётчики и фильтры: SnapshotEnd / AgeYears / IsPlanned / YtdStart / InYtd / InYtdOrd / NoZoneOk / CohortOf / CohortLabels / AgeDays / MedDays / PostOr / OldestOf / LastEv / ZLevArm / NormArm / AddUniq
+- Назначение: конец снимка, возраст машины, плановые виды ремонта, граница YTD (`REPORT/YTD_START`), фильтр «без ремзоны», возрастные когорты, разбор хвоста; `ZLevArm` — АРМ подписи «Готов к выбытию», привязанной к более ранней дирекции (та же логика выбора, что `ZLev`); `NormArm` — нормализация в 3 корзины (ПК/ПЛАНШЕТ/Не определено); `AddUniq` — накопление уникальных строковых меток по ключу словаря.
 - Вход/выход: см. подписи. Побочные эффекты: нет.
 
 ### ZoneReportWeek() : Long
@@ -52,8 +52,10 @@ CONTENT-слой части «Техника» отчёта МТО (слайды
 - Назначение: возвраты техники (окно 30 сут от `zn_closed`, уровни строгости: группа/подкатегория/отказы), хроники машин (ранги), Парето, повторы по группе дефекта, классификатор описаний.
 - Вход: нет (режимы `RetKey`). Выход: HTML/Dictionary. Побочные эффекты: кэш `EnsureRet`.
 
-### Слайд 7 (фазы и хвост): BuildPhases / BuildReturnKpi / BuildReturnHist / BuildReturnStuck / BuildReturnHang / BuildTailAge / BuildTailWhy / BuildTailRows / BuildLimits / EnsureFlow (public/private)
+### Слайд 7 (фазы и хвост): BuildPhases / BuildReturnKpi / BuildReturnArmRisk / BuildReturnTopWeek / BuildReturnHist / BuildReturnStuck / BuildReturnHang / BuildTailAge / BuildTailWhy / BuildTailRows / BuildLimits / EnsureFlow / ReturnByArmAggregate (public/private)
 - Назначение: фазы наряда (постановка/ремзона/закрытие), застрявшие/готово-но-не-закрыто, интервал выбытие→закрытие, хвост без `zn_closed`, реестр снятых отчётов.
+- `BuildReturnArmRisk(byWeek)`: риск повторного заезда (тот же признак «повтор», что в `RepeatAggregate`) в разрезе АРМ подписи «Готов к выбытию» — возвратов/из них повторных/% риска, YTD (по дате создания) или неделя (по дате самой подписи выбытия); питается `ReturnByArmAggregate`.
+- `BuildReturnTopWeek()`: топ-10 машин по числу возвратов («Готов к выбытию») на отчётной неделе — группа техники, АРМ и направление (объединение за неделю), пост/статус/дата выбытия по последнему возврату.
 - Вход: нет. Выход: HTML. Побочные эффекты: кэш `EnsureFlow` (коллекции `mCloseH`/`mStuck`/`mHang`/`mTail`).
 
 ### Слайд 8 (материалы): BuildKpiParts / BuildAbc / BuildMoneyDefekt / BuildQuality / BuildRequest / AbcSorted (public/private)

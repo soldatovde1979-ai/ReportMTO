@@ -542,6 +542,8 @@ Text.From([number] ?? "") & "|"
 | `{{BLOCK_DOWN_VS_HOURS_YTD}}`, `{{BLOCK_DOWN_VS_HOURS_WK}}` | простой против списанных/плановых часов | `BuildDownVsHours(False/True)` |
 | `{{BLOCK_CREATE_TO_ACC_YTD}}`, `{{BLOCK_CREATE_TO_ACC_WK}}` | создание → приёмка по видам техники | `BuildCreateToAcc(False/True)` |
 | `{{BLOCK_RETURN_KPI}}` | плитки: застряли / готово-но-не-закрыто / выбытие→закрытие / хвост > 7 сут | `BuildReturnKpi` |
+| `{{BLOCK_RETURN_ARM_RISK_YTD}}`, `{{BLOCK_RETURN_ARM_RISK_WK}}` | риск повторного заезда по АРМ подписи «Готов к выбытию» (ПК/планшет/не определено) — возвратов, из них повторных, % риска (YTD / неделя) | `BuildReturnArmRisk(False/True)` |
+| `{{BLOCK_RETURN_TOP_WK}}` | топ-10 машин по числу возвратов за отчётную неделю (группа, АРМ, направление, пост, статус, дата выбытия) | `BuildReturnTopWeek` |
 | `{{BLOCK_RETURN_HIST}}` | интервалы выбытие → закрытие + по площадкам | `BuildReturnHist` |
 | `{{BLOCK_RETURN_STUCK}}` | 8 старейших с приёмкой без выбытия | `BuildReturnStuck` |
 | `{{BLOCK_RETURN_HANG}}` | 8 старейших с выбытием без закрытия | `BuildReturnHang` |
