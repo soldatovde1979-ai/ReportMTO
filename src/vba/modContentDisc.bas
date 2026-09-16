@@ -1,6 +1,19 @@
 Attribute VB_Name = "modContentDisc"
 ' modContentDisc - CONTENT-слой части «Дисциплина» (слайды 2-4) отчёта МТО.
 '
+' Версия 1.2 от 16.09.2026: раскладка слайдов 2-4 по аудиту
+'   docs\plans\audit_kod_i_slaidy_v1.0.md.
+'   - ИСПРАВЛЕНО (P0-1 аудита): BuildNoSignSplit не использовал параметр дирекции,
+'     и слайды ДЭНТ и ДГМ получали байт в байт одинаковый HTML. Параметр убран,
+'     блок переехал на слайд 4; заодно снята гистограмма, повторявшая таблицу слева.
+'   - СНЯТО со слайдов 2 и 3: {{BLOCK_TABLE1_*}} (BuildBlock1) - «Таблица 1»
+'     повторяла матрицу BLOCK_WEEKS_*, стоявшую прямо над ней. Функция осталась
+'     в коде невызываемой.
+'   - СНЯТО со слайда 4: {{BLOCK_UNSIGNED_ZNTYPE}} (BuildUnsignedZnType) - та же
+'     выборка и тот же разрез, что у нового {{BLOCK_NOSIGN_TYPE}}, но без процентов.
+'     Функция осталась в коде невызываемой.
+'   - ПОРЯДОК на слайдах 2 и 3: недели -> ремзоны -> люди -> подразделения ->
+'     разбор подписей. Один показатель раскручивается вглубь, без возвратов назад.
 ' Версия 1.1 от 10.09.2026 Модульная переменная mE переименована в mOrd:
 '   VBA не различает регистр, и `mE` - это зарезервированное слово `Me`,
 '   объявление не компилировалось. Линтер дополнен до v1.1, чтобы ловить это.
@@ -980,9 +993,17 @@ Private Function AgeBucket4(ByVal dser As Double) As Long
 End Function
 
 ' {{BLOCK_NOSIGN_*}} - Таблицы 5/6 (Б9/Б10): наряды без единой подписи
-' (SignedCount = 0, как на слайде 4) в разрезе TekStatusPoDoc / zn_type.
-' Двухколоночная разметка по образцу BuildSignStat: таблица + график справа.
-Public Function BuildNoSignSplit(ByVal sDir As String, ByVal fld As Long, _
+' (SignedCount = 0) в разрезе TekStatusPoDoc / zn_type.
+'
+' v1.2 от 16.09.2026, две правки по аудиту раскладки:
+'   - убран параметр дирекции. Он НЕ ИСПОЛЬЗОВАЛСЯ в теле функции, и слайды
+'     ДЭНТ и ДГМ получали байт в байт одинаковый HTML под разными заголовками.
+'     Отбор и не может зависеть от дирекции: у наряда без единой подписи нет
+'     подписей ни одной. Блок переехал на слайд 4 «Не подписано вообще».
+'   - снята гистограмма справа: она строилась по тем же labs/vals, что таблица
+'     слева, то есть повторяла её числа один в один. Осталась таблица - в ней
+'     есть проценты, которых на полосах не было.
+Public Function BuildNoSignSplit(ByVal fld As Long, _
                                  ByVal emptyLab As String, ByVal colLab As String) As String
     EnsureDisc
     Dim d As Object
@@ -1005,7 +1026,7 @@ Public Function BuildNoSignSplit(ByVal sDir As String, ByVal fld As Long, _
     modContentZone.TopKeys d, 0, labs, vals
 
     Dim s As String, i As Long
-    s = "<div class=""two-col wide-l""><div><table><thead><tr>" & _
+    s = "<table><thead><tr>" & _
         "<th>" & modContentMTO.Esc(colLab) & "</th><th class=""n"">Количество</th>" & _
         "<th class=""n"">Процент</th></tr></thead><tbody>"
     For i = 0 To UBound(labs)
@@ -1013,13 +1034,12 @@ Public Function BuildNoSignSplit(ByVal sDir As String, ByVal fld As Long, _
             modContentMTO.FmtInt(CDbl(vals(i))) & "</td><td class=""n"">" & _
             modContentZone.Pc(modContentZone.SafePct(CDbl(vals(i)), tot), 1) & "</td></tr>"
     Next i
-    s = s & "</tbody></table></div><div>"
-    s = s & modContentZone.MockLabel("Количество нарядов")
-    s = s & modContentZone.HBars(labs, vals, 620, 170, 24) & "</div></div>"
+    s = s & "</tbody></table>"
     s = s & modContentZone.NoteBlk("Наряды без единой подписи (0 из 4 подписей с АРМ " & _
         "ПК/ПЛАНШЕТ), разрез " & modContentMTO.Esc(colLab) & "; процент от числа таких " & _
         "нарядов (" & modContentMTO.FmtInt(tot) & "). Отбор не зависит от дирекции: у " & _
-        "наряда без единой подписи нет подписей ни одной дирекции. Период - " & _
+        "наряда без единой подписи нет подписей ни одной дирекции " & ChrW$(&H2014) & _
+        " поэтому блок стоит здесь, а не на слайдах ДЭНТ и ДГМ. Период - " & _
         "с начала года (01.01.2026).")
     BuildNoSignSplit = s
 End Function
@@ -1191,33 +1211,38 @@ Public Sub FillDiscPlaceholders(ByVal d As Object)
     t0 = Timer
     EnsureDisc
 
+    ' Слайды 2 и 3 раскручивают ОДИН показатель - «% подписаний с планшета» - вглубь:
+    ' недели -> ремзоны -> люди -> подразделения -> разбор подписей наряда.
+    ' Снята «Таблица 1» (BuildBlock1): она повторяла матрицу BLOCK_WEEKS_*, стоявшую
+    ' прямо над ней (та же единица счёта, та же ось недель, зоны СТК и ПРК - строками
+    ' этой же матрицы). Функция BuildBlock1 оставлена в коде невызываемой.
     d("BLOCK_WEEKS_DENT") = BuildWeeksTable("ДЭНТ")
-    d("BLOCK_TABLE1_DENT") = BuildBlock1("ДЭНТ")
     d("BLOCK_POSTS_DENT") = BuildPostsTable("ДЭНТ")
     d("BLOCK_PEOPLE_DENT") = BuildPeople("ДЭНТ")
     d("BLOCK_DEPTS_DENT") = BuildDepts("ДЭНТ")
     d("BLOCK_SIGNSTAT_DENT") = BuildSignStat("ДЭНТ")
-    d("BLOCK_NOSIGN_STATUS_DENT") = BuildNoSignSplit("ДЭНТ", E_TEK, "(статус не указан)", "Текущий статус заказ-наряда")
-    d("BLOCK_NOSIGN_TYPE_DENT") = BuildNoSignSplit("ДЭНТ", E_TYPE, "(вид не указан)", "Вид ремонта")
     modLog.WriteDebug 1, "Дисциплина", "FillDiscPlaceholders", _
         "Слайд 2 готов: " & Round(Timer - t0, 2) & " c"
 
     d("BLOCK_WEEKS_DGM") = BuildWeeksTable("ДГМ")
-    d("BLOCK_TABLE1_DGM") = BuildBlock1("ДГМ")
     d("BLOCK_POSTS_DGM") = BuildPostsTable("ДГМ")
     d("BLOCK_PEOPLE_DGM") = BuildPeople("ДГМ")
     d("BLOCK_DEPTS_DGM") = BuildDepts("ДГМ")
     d("BLOCK_SIGNSTAT_DGM") = BuildSignStat("ДГМ")
-    d("BLOCK_NOSIGN_STATUS_DGM") = BuildNoSignSplit("ДГМ", E_TEK, "(статус не указан)", "Текущий статус заказ-наряда")
-    d("BLOCK_NOSIGN_TYPE_DGM") = BuildNoSignSplit("ДГМ", E_TYPE, "(вид не указан)", "Вид ремонта")
     modLog.WriteDebug 1, "Дисциплина", "FillDiscPlaceholders", _
         "Слайд 3 готов: " & Round(Timer - t0, 2) & " c"
 
+    ' Слайд 4. Блоки «НЕ ПОДПИСАН» переехали сюда со слайдов 2 и 3: их выборка
+    ' (наряды без единой подписи) от дирекции не зависит, и на тех слайдах они
+    ' давали две одинаковые копии. Разрез по виду ремонта заменил прежний
+    ' BLOCK_UNSIGNED_ZNTYPE - у них была одна и та же выборка и один и тот же
+    ' разрез, но таблица даёт ещё и проценты. BuildUnsignedZnType остаётся в коде.
     d("KPI_UNSIGNED") = BuildKpiUnsigned()
     d("BLOCK_UNSIGNED_AGE") = BuildUnsignedAge()
     d("BLOCK_UNSIGNED_POST") = BuildUnsignedPost()
     d("BLOCK_UNSIGNED_OWNER") = BuildUnsignedOwner()
-    d("BLOCK_UNSIGNED_ZNTYPE") = BuildUnsignedZnType()
+    d("BLOCK_NOSIGN_TYPE") = BuildNoSignSplit(E_TYPE, "(вид не указан)", "Вид ремонта")
+    d("BLOCK_NOSIGN_STATUS") = BuildNoSignSplit(E_TEK, "(статус не указан)", "Текущий статус заказ-наряда")
     modLog.WriteDebug 1, "Дисциплина", "FillDiscPlaceholders", _
         "Слайд 4 готов: " & Round(Timer - t0, 2) & " c"
 End Sub

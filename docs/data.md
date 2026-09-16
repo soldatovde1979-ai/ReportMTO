@@ -457,7 +457,7 @@ Text.From([number] ?? "") & "|"
 
 ### 3.3 Плейсхолдеры HTML-шаблона (`tmp_index.html`)
 
-Сверено 16.09.2026 с шаблоном v4.1 и кодом v8.3: **80 плейсхолдеров**, все заполняются словарём
+Сверено 16.09.2026 с шаблоном v4.2 и кодом v8.3: **72 плейсхолдера**, все заполняются словарём
 `Scripting.Dictionary` из `modContentMTO.BuildPlaceholders` (шапка/подвал/ИИ) +
 `modContentZone.FillZonePlaceholders` (слайды 1, 5–8) + `modContentDisc.FillDiscPlaceholders`
 (слайды 2–4). Механизм подстановки — `modHTMLEngine.RenderTemplate`: `Replace(html, "{{" & key & "}}", ...)`;
@@ -480,33 +480,39 @@ Text.From([number] ?? "") & "|"
 | Плейсхолдер | Назначение | Как получается |
 |---|---|---|
 | `{{KPI_OVERVIEW}}` | 8 плиток за отчётную неделю: открыто/закрыто/висит/без поста/заезды/ТС/медиана в ремзоне/возвраты (7 дн.) | `BuildKpiOverview` (ряды `Slide1Series` по `date`/`zn_closed`) |
-| `{{BLOCK_HANG_ZNTYPE}}` | «висит на конец недели» ЗН по виду ремонта | `BuildHangByZnType` |
-| `{{BLOCK_HANG_STATUS}}` | то же по текущему статусу (`TekStatusPoDoc`; «Закрыт (Омникомм)» = «Закрыт») | `BuildHangByStatus` |
-| `{{BLOCK_HANG_STATUS_CHART}}` | бары висящих ЗН по статусам (без «Отменен…» и «Ожидание ТМЦ») | `BuildHangStatusChart` |
-| `{{BLOCK_HANG_STATUS_SPECIAL}}` | статусы «Отменен…» и «Ожидание ТМЦ» выборки висящих | `BuildHangStatusSpecial` |
+| `{{BLOCK_ZNTYPE_FLOW_HANG}}` | вид воздействия: за неделю / всего с начала года / висит на конец недели / доля висящих / медиана срока. Сортировка — по доле висящих | `BuildZnTypeFlowHang` |
+| `{{BLOCK_HANG_STATUS}}` | «висит на конец недели» по текущему статусу (`TekStatusPoDoc`; «Закрыт (Омникомм)» = «Закрыт») | `BuildHangByStatus` |
 | `{{BLOCK_NOZONE_ZNTYPE}}` | наряды с пустым `postN` по виду ремонта (фильтр `NoZoneOk`) | `BuildNoZoneZnType` |
-| `{{BLOCK_NOZONE_STATUS}}` | наряды с пустым `postN` по статусу | `BuildNoZoneStatus` |
-| `{{BLOCK_FLOW_ZNTYPE}}` | поток по видам ремонта (топ-8, YTD) | `BuildFlowZnType` |
-| `{{BLOCK_FLOW_DEFEKT}}` | поток по группам дефекта за отчётную неделю | `BuildFlowDefekt` |
+| `{{BLOCK_NOZONE_STATUS}}` | наряды с пустым `postN` по статусу («Закрыт (Омникомм)» = «Закрыт») | `BuildNoZoneStatus` |
 | `{{BLOCK_NOPOST_WEEKLY}}` | столбики нарядов + линия доли без поста по неделям окна | `BuildNoPostWeekly` |
+
+> Снято со слайда 1 ревизией 16.09.2026 (функции остались в коде невызываемыми):
+> `BLOCK_HANG_ZNTYPE` и `BLOCK_FLOW_ZNTYPE` — слиты в `BLOCK_ZNTYPE_FLOW_HANG`;
+> `BLOCK_HANG_STATUS_CHART` и `BLOCK_HANG_STATUS_SPECIAL` — повторяли таблицу
+> `BLOCK_HANG_STATUS`. `BLOCK_FLOW_DEFEKT` переехал на слайд 6.
 
 #### Слайды 2–4 — дисциплина (modContentDisc.FillDiscPlaceholders)
 
 | Плейсхолдер | Назначение | Как получается |
 |---|---|---|
 | `{{BLOCK_WEEKS_DENT}}`, `{{BLOCK_WEEKS_DGM}}` | матрица «% планшета» по ремзонам × 8 недель (события) | `BuildWeeksTable("ДЭНТ"/"ДГМ")` |
-| `{{BLOCK_TABLE1_DENT}}`, `{{BLOCK_TABLE1_DGM}}` | Таблица 1: Всего / ПЛАНШЕТ / ПК / % планшет по неделям, зоны `REPORT/SLIDE_ZONES` | `BuildBlock1(dir)` |
 | `{{BLOCK_POSTS_DENT}}`, `{{BLOCK_POSTS_DGM}}` | площадки за отчётную неделю (единица — наряд) | `BuildPostsTable(dir)` |
 | `{{BLOCK_PEOPLE_DENT}}`, `{{BLOCK_PEOPLE_DGM}}` | сотрудники: тренд % за 4 недели + объём/время за отчётную (порог `REPORT/MIN_RECORDS`) | `BuildPeople(dir)` |
 | `{{BLOCK_DEPTS_DENT}}`, `{{BLOCK_DEPTS_DGM}}` | подразделения (`emp_dep`), аналог сотрудников | `BuildDepts(dir)` |
 | `{{BLOCK_SIGNSTAT_DENT}}`, `{{BLOCK_SIGNSTAT_DGM}}` | разбор нарядов по подписанным статусам + неподписанные по возрасту | `BuildSignStat(dir)` |
-| `{{BLOCK_NOSIGN_STATUS_DENT}}`, `{{BLOCK_NOSIGN_STATUS_DGM}}` | наряды без единой подписи по `TekStatusPoDoc` | `BuildNoSignSplit(dir, E_TEK, ...)` |
-| `{{BLOCK_NOSIGN_TYPE_DENT}}`, `{{BLOCK_NOSIGN_TYPE_DGM}}` | наряды без единой подписи по `zn_type` | `BuildNoSignSplit(dir, E_TYPE, ...)` |
 | `{{KPI_UNSIGNED}}` | плитки слайда 4: без подписей / событий «НЕ ПОДПИСАНО» / частично / самый старый | `BuildKpiUnsigned` |
 | `{{BLOCK_UNSIGNED_AGE}}` | возраст неподписанных нарядов (5 корзин) | `BuildUnsignedAge` |
 | `{{BLOCK_UNSIGNED_POST}}` | неподписанные по `postN` | `BuildUnsignedPost` |
 | `{{BLOCK_UNSIGNED_OWNER}}` | неподписанные по `owner_dep` | `BuildUnsignedOwner` |
-| `{{BLOCK_UNSIGNED_ZNTYPE}}` | неподписанные по `zn_type` | `BuildUnsignedZnType` |
+| `{{BLOCK_NOSIGN_TYPE}}` | наряды без единой подписи по `zn_type` (таблица с процентами) | `BuildNoSignSplit(E_TYPE, ...)` |
+| `{{BLOCK_NOSIGN_STATUS}}` | наряды без единой подписи по `TekStatusPoDoc` | `BuildNoSignSplit(E_TEK, ...)` |
+
+> Ревизия 16.09.2026: `BLOCK_TABLE1_*` снят со слайдов 2–3 (повторял матрицу
+> `BLOCK_WEEKS_*` над собой). `BLOCK_NOSIGN_*_DENT/_DGM` заменены одной парой
+> `BLOCK_NOSIGN_TYPE` / `BLOCK_NOSIGN_STATUS` на слайде 4: отбор от дирекции не
+> зависит, и две копии блока были одинаковым HTML. `BLOCK_UNSIGNED_ZNTYPE` снят —
+> та же выборка и тот же разрез, что у `BLOCK_NOSIGN_TYPE`, но без процентов.
+> Порядок слайдов 2–3: недели → ремзоны → люди → подразделения → разбор подписей.
 
 #### Слайд 5 — парк и заезды
 
@@ -524,6 +530,7 @@ Text.From([number] ?? "") & "|"
 | Плейсхолдер | Назначение | Как получается |
 |---|---|---|
 | `{{BLOCK_CHRONICS}}` | хроники машин: ранги по заездам/часам/деньгам | `BuildChronics` |
+| `{{BLOCK_FLOW_DEFEKT}}` | группы дефекта за отчётную неделю (перенесён со слайда 1) | `BuildFlowDefekt` |
 | `{{BLOCK_PARETO}}` | Парето групп дефекта (топ-8, внеплановые, YTD) | `BuildPareto` |
 | `{{BLOCK_DEFECT_DETAIL}}` | классификатор описаний: характер работы + узел | `BuildDefectDetail` (`EnsureCls`) |
 | `{{BLOCK_RET_KPI}}` | плитки возвратов (по отказу / подкатегории / группе / медиана интервала) | `BuildRetKpi` |

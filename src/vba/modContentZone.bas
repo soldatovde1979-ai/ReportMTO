@@ -30,6 +30,21 @@ Attribute VB_Name = "modContentZone"
 '   (блоки «возвраты» и «фазы наряда») лежали в середине файла, после процедур -
 '   перенесены в секцию Declarations. В BuildAgeCurve и BuildChronics цикл
 '   For Each k закрывался Next i.
+' Версия 2.6 от 16.09.2026: раскладка слайда 1 по аудиту
+'   docs\plans\audit_kod_i_slaidy_v1.0.md.
+'   - НОВОЕ: BuildZnTypeFlowHang / {{BLOCK_ZNTYPE_FLOW_HANG}} - один блок
+'     «вид воздействия: за неделю / всего / висит / доля висящих / медиана срока».
+'     Заменил два прежних: BuildFlowZnType (структура потока с начала года -
+'     статика, вывода не давала) и BuildHangByZnType (тот же zn_type, другой
+'     знаменатель). Знаменатель теперь один, колонки складываются.
+'   - СНЯТО со слайда 1 (функции остались в коде невызываемыми): BuildHangByZnType,
+'     BuildFlowZnType, BuildHangStatusChart, BuildHangStatusSpecial. Два последних
+'     повторяли таблицу BuildHangByStatus - тот же разрез в третий раз.
+'   - ПЕРЕНЕСЕНО: BLOCK_FLOW_DEFEKT со слайда 1 на слайд 6, к Парето: там недельный
+'     срез дефектов встаёт рядом с годовым.
+'   - ИСПРАВЛЕНО (P0-2 аудита): BuildNoZoneStatus не склеивал «Закрыт (Омникомм)»
+'     со «Закрыт», хотя пояснение под таблицей это обещало, - один статус давал
+'     две строки.
 ' Версия 2.1 от 10.09.2026 Возвращена потерянная WeeksFromDate: при переносе файла
 '   на диск последняя правка не доехала, и modContentMTO.WeeksList вызывал
 '   несуществующую функцию - «Sub or Function not defined» при компиляции.
@@ -101,6 +116,9 @@ Private Const RET_WINDOW As Long = 30       ' окно возврата, сут�
 Private Const UNCLS As String = "(не классифицировано)"
 Private Const EMPTYD As String = "(описание пустое)"
 Private Const NOSECT As String = "(раздел не указан)"
+' Порог достоверности доли для блока «вид воздействия» (слайд 1): на трёх нарядах
+' доля висящих - шум, такие виды уходят в хвост таблицы отдельной группой.
+Private Const ZNTYPE_MIN_ROWS As Long = 10
 
 Private mReady As Boolean
 Private mZn As Object            ' number -> Variant(Z_FIELDS)
@@ -3533,14 +3551,10 @@ Public Sub FillZonePlaceholders(ByVal d As Object)
     t0 = Timer
 
     d("KPI_OVERVIEW") = BuildKpiOverview()
-    d("BLOCK_HANG_ZNTYPE") = BuildHangByZnType()
+    d("BLOCK_ZNTYPE_FLOW_HANG") = BuildZnTypeFlowHang()
     d("BLOCK_HANG_STATUS") = BuildHangByStatus()
-    d("BLOCK_HANG_STATUS_CHART") = BuildHangStatusChart()
-    d("BLOCK_HANG_STATUS_SPECIAL") = BuildHangStatusSpecial()
     d("BLOCK_NOZONE_ZNTYPE") = BuildNoZoneZnType()
     d("BLOCK_NOZONE_STATUS") = BuildNoZoneStatus()
-    d("BLOCK_FLOW_ZNTYPE") = BuildFlowZnType()
-    d("BLOCK_FLOW_DEFEKT") = BuildFlowDefekt()
     d("BLOCK_NOPOST_WEEKLY") = BuildNoPostWeekly()
     modLog.WriteDebug 1, "Техника", "FillZonePlaceholders", _
         "Слайд 1 готов: " & Round(Timer - t0, 2) & " c"
@@ -3555,6 +3569,9 @@ Public Sub FillZonePlaceholders(ByVal d As Object)
         "Слайд 5 готов: " & Round(Timer - t0, 2) & " c"
 
     d("BLOCK_CHRONICS") = BuildChronics()
+    ' Перенесён со слайда 1: дефекты - тема этого слайда. Недельный срез стоит
+    ' перед годовым Парето: «что ломалось на неделе» против «что ломается всегда».
+    d("BLOCK_FLOW_DEFEKT") = BuildFlowDefekt()
     d("BLOCK_PARETO") = BuildPareto()
     d("BLOCK_DEFECT_DETAIL") = BuildDefectDetail()
     d("BLOCK_RET_KPI") = BuildRetKpi()
@@ -3996,6 +4013,135 @@ Public Function BuildTimeHist() As String
     BuildTimeHist = s
 End Function
 
+' Слайд 1 (обзор): вид воздействия - поток недели, накопленный объём и застрявшее.
+' Заменяет два прежних блока: «Вид ремонта» (BuildFlowZnType, структура потока с
+' начала года) и «Висит на конец недели ЗН по видам ремонта» (BuildHangByZnType).
+' Причина замены: статичная структура потока за восемь месяцев между двумя
+' еженедельными отчётами не меняется и вывода не даёт, а два разреза zn_type на
+' одном слайде имели разные знаменатели и между собой не складывались.
+' Здесь знаменатель ОДИН - наряды вида, созданные с начала года до конца отчётной
+' недели; «доля висящих» считается от него, поэтому колонки сопоставимы.
+' Сортировка - по доле висящих (где затык), а не по объёму: иначе плановое ТО
+' всегда наверху и застрявший вид уезжает вниз. Виды, где объём меньше
+' ZNTYPE_MIN_ROWS, идут после основного списка - на трёх нарядах доля недостоверна.
+Public Function BuildZnTypeFlowHang() As String
+    EnsureZn
+    Dim rw As Long, we As Double
+    rw = ZoneReportWeek()
+    we = WeekEnd(rw)
+
+    Dim dWk As Object, dTot As Object, dHang As Object, dMed As Object
+    Set dWk = CreateObject("Scripting.Dictionary")
+    Set dTot = CreateObject("Scripting.Dictionary")
+    Set dHang = CreateObject("Scripting.Dictionary")
+    Set dMed = CreateObject("Scripting.Dictionary")
+
+    Dim k As Variant, z As Variant, t As String
+    Dim sumWk As Double, sumTot As Double, sumHang As Double
+    Dim medAll As Collection
+    Set medAll = New Collection
+    sumWk = 0#: sumTot = 0#: sumHang = 0#
+    For Each k In mZn.Keys
+        z = mZn(k)
+        Dim dt As Double, cl As Double
+        dt = CDbl(z(Z_DATE)): cl = CDbl(z(Z_CLOSED))
+        If dt > 0# And dt < we And InYtd(z) Then
+            t = Trim$(CStr(z(Z_TYPE)))
+            If t = "" Then t = "(вид не указан)"
+            AddCnt dTot, t, 1#
+            sumTot = sumTot + 1#
+            If CLng(z(Z_WEEK)) = rw Then
+                AddCnt dWk, t, 1#
+                sumWk = sumWk + 1#
+            End If
+            If cl <= 0# Or cl >= we Then
+                AddCnt dHang, t, 1#
+                sumHang = sumHang + 1#
+            ElseIf cl >= dt Then
+                If Not dMed.Exists(t) Then dMed.Add t, New Collection
+                dMed(t).Add (cl - dt) * 24#
+                medAll.Add (cl - dt) * 24#
+            End If
+        End If
+    Next k
+    If sumTot = 0# Then BuildZnTypeFlowHang = modContentMTO.EmptyNote(): Exit Function
+
+    ' Ранг для сортировки: доля висящих у видов с достаточным объёмом, остальные -
+    ' заведомо ниже любой доли (0..100), между собой по объёму.
+    Dim rank As Object
+    Set rank = CreateObject("Scripting.Dictionary")
+    For Each k In dTot.Keys
+        Dim den As Double
+        den = DictVal(dTot, CStr(k))
+        If den >= ZNTYPE_MIN_ROWS Then
+            rank(CStr(k)) = SafePct(DictVal(dHang, CStr(k)), den)
+        Else
+            rank(CStr(k)) = -1000# + den
+        End If
+    Next k
+
+    Dim labs As Variant, vals As Variant, i As Long
+    TopKeys rank, 0, labs, vals
+
+    Dim s As String
+    s = "<div class=""scroll""><table><thead><tr><th>Вид воздействия</th>" & _
+        "<th class=""n"">За неделю</th><th class=""n"">Всего с начала года</th>" & _
+        "<th class=""n"">Висит на конец недели</th><th class=""n"">Доля висящих</th>" & _
+        "<th class=""n"">Медиана срока</th></tr></thead><tbody>"
+
+    Dim hasV As Boolean
+    s = s & "<tr class=""total""><td class=""head"">Все виды</td><td class=""n"">" & _
+        modContentMTO.FmtInt(sumWk) & "</td><td class=""n"">" & _
+        modContentMTO.FmtInt(sumTot) & "</td><td class=""n"">" & _
+        modContentMTO.FmtInt(sumHang) & "</td>" & _
+        PctTd(SafePct(sumHang, sumTot), sumTot > 0#) & "<td class=""n"">" & _
+        Hh(MedianOf(medAll, hasV)) & "</td></tr>"
+
+    Dim thin As Boolean
+    thin = False
+    For i = 0 To UBound(labs)
+        Dim lab As String, tot As Double, hang As Double, wkN As Double
+        lab = CStr(labs(i))
+        tot = DictVal(dTot, lab)
+        hang = DictVal(dHang, lab)
+        wkN = DictVal(dWk, lab)
+
+        ' Разделитель перед хвостом малообъёмных видов - чтобы доля у них не
+        ' читалась наравне с основными.
+        If tot < ZNTYPE_MIN_ROWS And Not thin Then
+            thin = True
+            s = s & "<tr><td colspan=""6"" style=""color:var(--muted)"">" & _
+                "Виды с объёмом меньше " & CStr(ZNTYPE_MIN_ROWS) & " нарядов " & _
+                ChrW$(&H2014) & " доля висящих недостоверна</td></tr>"
+        End If
+
+        s = s & "<tr><td>" & modContentMTO.Esc(lab) & "</td>"
+        s = s & "<td class=""n"">" & modContentMTO.FmtInt(wkN) & "</td>"
+        s = s & "<td class=""n"">" & modContentMTO.FmtInt(tot) & "</td>"
+        s = s & "<td class=""n"">" & modContentMTO.FmtInt(hang) & "</td>"
+        s = s & PctTd(SafePct(hang, tot), tot > 0#)
+        Dim medS As String
+        If dMed.Exists(lab) Then
+            medS = Hh(MedianOf(dMed(lab), hasV))
+        Else
+            medS = Dash()
+        End If
+        s = s & "<td class=""n"">" & medS & "</td></tr>"
+    Next i
+    s = s & "</tbody></table></div>"
+
+    s = s & NoteBlk("Единица счёта " & ChrW$(&H2014) & " заказ-наряд, разрез " & _
+        "<code>zn_type</code>. <b>За неделю</b> " & ChrW$(&H2014) & " наряды, созданные " & _
+        "на отчётной неделе " & WLab(rw) & ". <b>Всего с начала года</b> " & _
+        ChrW$(&H2014) & " наряды вида, созданные с 01.01.2026 до конца отчётной недели; " & _
+        "это знаменатель доли. <b>Висит</b> " & ChrW$(&H2014) & " из них без " & _
+        "<code>zn_closed</code> на конец недели. <b>Медиана срока</b> " & _
+        ChrW$(&H2014) & " медиана «создание " & ChrW$(&H2192) & " закрытие» по закрытым " & _
+        "нарядам вида. Сортировка " & ChrW$(&H2014) & " по доле висящих: вид, у которого " & _
+        "доля в потоке мала, а доля застрявшего велика, и есть затык.")
+    BuildZnTypeFlowHang = s
+End Function
+
 ' Д1: висящие на конец недели ЗН в разрезе вида ремонта. «Висит» = наряд без
 ' zn_closed, созданный до конца отчётной недели - та же выборка, что ряд hangA
 ' плитки «Висит на конец недели».
@@ -4221,6 +4367,10 @@ Public Function BuildNoZoneStatus() As String
         If Trim$(CStr(z(Z_ZONE))) = "" Then
             If NoZoneOk(z) And InYtd(z) Then
                 t = Trim$(CStr(z(Z_TEK)))
+                ' R6: «Закрыт (Омникомм)» = «Закрыт». Склейка была только в фильтре
+                ' NoZoneOk, а в разрез шло сырое значение - и один статус давал две
+                ' строки, хотя пояснение под таблицей обещало обратное.
+                If StrComp(t, "Закрыт (Омникомм)", vbTextCompare) = 0 Then t = "Закрыт"
                 If t = "" Then t = "(статус не указан)"
                 AddCnt d, t, 1#
                 tot = tot + 1#
