@@ -635,24 +635,16 @@ Public Function BuildPeople(ByVal dir As String) As String
     modContentZone.TopKeys pick, 0, pl, pv
 
     Dim s As String, i As Long
-    s = "<table><thead><tr><th rowspan=""4"">Сотрудник</th>" & _
-        "<th class=""grp"" colspan=""4"">% планшета по неделям</th>" & _
+    s = "<table><thead><tr><th rowspan=""2"">Сотрудник</th>" & _
+        "<th class=""grp"" colspan=""2"">% планшета по неделям</th>" & _
         "<th class=""grp sep-l"" colspan=""5"">Отчётная неделя " & _
         modContentZone.WLab(mRw) & " (" & modContentZone.WeekRange(mRw) & ")</th></tr>"
-    ' Шапка недель лесенкой: ПН-1 в первой строке справа, ПН слева и ПН-2 во второй,
-    ' ПН-3 в третьей (колонки слева направо: ПН, ПН-1, ПН-2, ПН-3).
-    s = s & "<tr><th></th><th class=""n"">ПН-1 " & ChrW$(&HB7) & " " & _
-        modContentZone.WLab(CLng(wk(2))) & "</th><th></th><th></th>" & _
-        "<th class=""n sep-l"" rowspan=""3"">Всего подписей</th>" & _
-        "<th class=""n"" rowspan=""3"">Из них планшет</th>" & _
-        "<th class=""n"" rowspan=""3"">Приёмка</th>" & _
-        "<th class=""n"" rowspan=""3"">Выбытие</th>" & _
-        "<th class=""n"" rowspan=""3"">Ср. время</th></tr>"
-    s = s & "<tr><th class=""n"">ПН " & ChrW$(&HB7) & " " & _
-        modContentZone.WLab(CLng(wk(3))) & "</th><th></th><th class=""n"">ПН-2 " & _
-        ChrW$(&HB7) & " " & modContentZone.WLab(CLng(wk(1))) & "</th><th></th></tr>"
-    s = s & "<tr><th></th><th></th><th></th><th class=""n"">ПН-3 " & _
-        ChrW$(&HB7) & " " & modContentZone.WLab(CLng(wk(0))) & "</th></tr></thead><tbody>"
+    s = s & "<tr>" & Wk4Head(wk) & _
+        "<th class=""n sep-l"">Всего подписей</th>" & _
+        "<th class=""n"">Из них планшет</th>" & _
+        "<th class=""n"">Приёмка</th>" & _
+        "<th class=""n"">Выбытие</th>" & _
+        "<th class=""n"">Ср. время</th></tr></thead><tbody>"
 
     For i = 0 To UBound(pl)
         Dim emp As String
@@ -668,15 +660,11 @@ Public Function BuildPeople(ByVal dir As String) As String
             pj(j) = modContentZone.SafePct(b, t)
             hj(j) = (t > 0#)
         Next j
-        ' Колонки слева направо: ПН (без стрелки), ПН-1, ПН-2, ПН-3.
-        s = s & modContentZone.PctTd(pj(3), hj(3))
-        s = s & PctArrowTd(pj(2), hj(2), pj(1), hj(1))
-        s = s & PctArrowTd(pj(1), hj(1), pj(0), hj(0))
-        Dim keyP As String, tPrev As Double
+        Dim keyP As String, tPrev As Double, pPrev As Double
         keyP = dir & "|" & emp & "|" & CStr(modContentZone.PrevWeek(CLng(wk(0))))
         tPrev = modContentZone.DictVal(mPTot, keyP)
-        s = s & PctArrowTd(pj(0), hj(0), _
-            modContentZone.SafePct(modContentZone.DictVal(mPTab, keyP), tPrev), tPrev > 0#)
+        pPrev = modContentZone.SafePct(modContentZone.DictVal(mPTab, keyP), tPrev)
+        s = s & Wk4Cells(pj, hj, pPrev, tPrev > 0#)
         Dim rk As String, tot As Double, tab1 As Double
         rk = dir & "|" & emp & "|" & CStr(mRw)
         tot = modContentZone.DictVal(mPTot, rk)
@@ -691,14 +679,75 @@ Public Function BuildPeople(ByVal dir As String) As String
     Next i
     s = s & "</tbody></table>"
 
-    s = s & modContentZone.NoteBlk("% планшета за четыре недели (ПН-3 " & _
-        ChrW$(&H2026) & " ПН) по дате статуса; стрелка " & ChrW$(&H2191) & " / " & _
+    s = s & modContentZone.NoteBlk("% планшета за четыре недели: отчётная неделя ПН - крупной ячейкой, " & _
+        "три предыдущие (ПН-1 " & ChrW$(&H2026) & " ПН-3) - мелкими строками рядом. " & _
+        "По дате статуса; стрелка " & ChrW$(&H2191) & " / " & _
         ChrW$(&H2193) & " - рост / падение процента к предыдущей неделе сотрудника. " & _
         "Справа - объём и время за отчётную неделю " & modContentZone.WLab(mRw) & ". " & _
         "Порог включения - не менее " & modContentMTO.FmtInt(minRec) & " событий за " & _
         "отчётную неделю; сотрудников в списке: " & modContentMTO.FmtInt(CDbl(pick.Count)) & _
         ". ФИО во внешнюю модель не уходят.")
     BuildPeople = s
+End Function
+
+' Шапка «лесенки» недель (разметка постановки, часть 2 п.3): крупная ячейка -
+' отчётная неделя ПН, рядом три мелкие строки ПН-1/ПН-2/ПН-3 друг под другом.
+' wk - окно из 4 недель по возрастанию: wk(3) - отчётная, wk(0) - самая старая.
+Private Function Wk4Head(ByVal wk As Variant) As String
+    Wk4Head = "<th class=""n"">ПН " & ChrW$(&HB7) & " " & _
+        modContentZone.WLab(CLng(wk(3))) & "</th><th class=""wk3"">" & _
+        "<div>ПН-1 " & ChrW$(&HB7) & " " & modContentZone.WLab(CLng(wk(2))) & "</div>" & _
+        "<div>ПН-2 " & ChrW$(&HB7) & " " & modContentZone.WLab(CLng(wk(1))) & "</div>" & _
+        "<div>ПН-3 " & ChrW$(&HB7) & " " & modContentZone.WLab(CLng(wk(0))) & "</div></th>"
+End Function
+
+' Две ячейки строки: крупный процент отчётной недели и три мелких процента
+' предыдущих недель. Стрелка у каждой недели - к следующей за ней, более старой;
+' у ПН-3 сравнение с неделей до окна (pPrev).
+Private Function Wk4Cells(ByRef pj() As Double, ByRef hj() As Boolean, _
+                          ByVal pPrev As Double, ByVal hasPrev As Boolean) As String
+    Dim s As String
+    If hj(3) Then
+        s = "<td class=""pct big""><span style=""border-color:" & _
+            modContentMTO.PctBorderColor(pj(3)) & """>" & _
+            modContentZone.FmtF(pj(3), 0) & "</span>" & _
+            ArrowSpan(pj(3), hj(3), pj(2), hj(2)) & "</td>"
+    Else
+        s = "<td class=""pct big empty""><span>" & modContentZone.Dash() & "</span></td>"
+    End If
+    s = s & "<td class=""wk3"">" & _
+        Wk3Row(pj(2), hj(2), pj(1), hj(1)) & _
+        Wk3Row(pj(1), hj(1), pj(0), hj(0)) & _
+        Wk3Row(pj(0), hj(0), pPrev, hasPrev) & "</td>"
+    Wk4Cells = s
+End Function
+
+' Мелкая строка недели внутри ячейки «лесенки».
+Private Function Wk3Row(ByVal p As Double, ByVal hasValue As Boolean, _
+                        ByVal prev As Double, ByVal hasPrev As Boolean) As String
+    If Not hasValue Then
+        Wk3Row = "<div><span class=""v"" style=""color:var(--muted)"">" & _
+            modContentZone.Dash() & "</span></div>"
+        Exit Function
+    End If
+    Wk3Row = "<div><span class=""v"" style=""color:" & _
+        modContentMTO.PctBorderColor(p) & """>" & modContentZone.FmtF(p, 0) & "</span>" & _
+        ArrowSpan(p, hasValue, prev, hasPrev) & "</div>"
+End Function
+
+' Стрелка к предыдущей неделе: вверх - рост, вниз - падение. Равенство и
+' отсутствие предыдущей недели - без стрелки.
+Private Function ArrowSpan(ByVal p As Double, ByVal hasValue As Boolean, _
+                           ByVal prev As Double, ByVal hasPrev As Boolean) As String
+    ArrowSpan = ""
+    If Not hasValue Then Exit Function
+    If Not hasPrev Then Exit Function
+    If Abs(p - prev) < 0.000000001 Then Exit Function
+    If p > prev Then
+        ArrowSpan = " <span class=""delta up"">" & ChrW$(&H2191) & "</span>"
+    Else
+        ArrowSpan = " <span class=""delta dn"">" & ChrW$(&H2193) & "</span>"
+    End If
 End Function
 
 ' Ячейка процента со стрелкой к предыдущей неделе (Б7): вверх - рост, вниз - падение.
@@ -772,22 +821,16 @@ Public Function BuildDepts(ByVal dir As String) As String
     modContentZone.TopKeys pick, 0, dl, dv
 
     Dim s As String, i As Long
-    s = "<table><thead><tr><th rowspan=""4"">Подразделение</th>" & _
-        "<th class=""grp"" colspan=""4"">% планшета по неделям</th>" & _
+    s = "<table><thead><tr><th rowspan=""2"">Подразделение</th>" & _
+        "<th class=""grp"" colspan=""2"">% планшета по неделям</th>" & _
         "<th class=""grp sep-l"" colspan=""5"">Отчётная неделя " & _
         modContentZone.WLab(mRw) & " (" & modContentZone.WeekRange(mRw) & ")</th></tr>"
-    s = s & "<tr><th></th><th class=""n"">ПН-1 " & ChrW$(&HB7) & " " & _
-        modContentZone.WLab(CLng(wk(2))) & "</th><th></th><th></th>" & _
-        "<th class=""n sep-l"" rowspan=""3"">Всего подписей</th>" & _
-        "<th class=""n"" rowspan=""3"">Из них планшет</th>" & _
-        "<th class=""n"" rowspan=""3"">Приёмка</th>" & _
-        "<th class=""n"" rowspan=""3"">Выбытие</th>" & _
-        "<th class=""n"" rowspan=""3"">Ср. время</th></tr>"
-    s = s & "<tr><th class=""n"">ПН " & ChrW$(&HB7) & " " & _
-        modContentZone.WLab(CLng(wk(3))) & "</th><th></th><th class=""n"">ПН-2 " & _
-        ChrW$(&HB7) & " " & modContentZone.WLab(CLng(wk(1))) & "</th><th></th></tr>"
-    s = s & "<tr><th></th><th></th><th></th><th class=""n"">ПН-3 " & _
-        ChrW$(&HB7) & " " & modContentZone.WLab(CLng(wk(0))) & "</th></tr></thead><tbody>"
+    s = s & "<tr>" & Wk4Head(wk) & _
+        "<th class=""n sep-l"">Всего подписей</th>" & _
+        "<th class=""n"">Из них планшет</th>" & _
+        "<th class=""n"">Приёмка</th>" & _
+        "<th class=""n"">Выбытие</th>" & _
+        "<th class=""n"">Ср. время</th></tr></thead><tbody>"
 
     For i = 0 To UBound(dl)
         Dim dep As String, depLab As String
@@ -804,14 +847,11 @@ Public Function BuildDepts(ByVal dir As String) As String
             pj(j) = modContentZone.SafePct(b, t)
             hj(j) = (t > 0#)
         Next j
-        s = s & modContentZone.PctTd(pj(3), hj(3))
-        s = s & PctArrowTd(pj(2), hj(2), pj(1), hj(1))
-        s = s & PctArrowTd(pj(1), hj(1), pj(0), hj(0))
-        Dim keyP As String, tPrev As Double
+        Dim keyP As String, tPrev As Double, pPrev As Double
         keyP = dir & "|" & dep & "|" & CStr(modContentZone.PrevWeek(CLng(wk(0))))
         tPrev = modContentZone.DictVal(mDTot, keyP)
-        s = s & PctArrowTd(pj(0), hj(0), _
-            modContentZone.SafePct(modContentZone.DictVal(mDTab, keyP), tPrev), tPrev > 0#)
+        pPrev = modContentZone.SafePct(modContentZone.DictVal(mDTab, keyP), tPrev)
+        s = s & Wk4Cells(pj, hj, pPrev, tPrev > 0#)
         Dim rk As String, tot As Double, tab1 As Double
         rk = dir & "|" & dep & "|" & CStr(mRw)
         tot = modContentZone.DictVal(mDTot, rk)
@@ -826,8 +866,9 @@ Public Function BuildDepts(ByVal dir As String) As String
     Next i
     s = s & "</tbody></table>"
 
-    s = s & modContentZone.NoteBlk("% планшета за четыре недели (ПН-3 " & _
-        ChrW$(&H2026) & " ПН) по дате статуса; стрелка " & ChrW$(&H2191) & " / " & _
+    s = s & modContentZone.NoteBlk("% планшета за четыре недели: отчётная неделя ПН - крупной ячейкой, " & _
+        "три предыдущие (ПН-1 " & ChrW$(&H2026) & " ПН-3) - мелкими строками рядом. " & _
+        "По дате статуса; стрелка " & ChrW$(&H2191) & " / " & _
         ChrW$(&H2193) & " - рост / падение процента к предыдущей неделе. " & _
         "Справа - объём и время за отчётную неделю " & modContentZone.WLab(mRw) & ". " & _
         "Порог включения - хотя бы одно событие подписания за отчётную неделю (R7); " & _
