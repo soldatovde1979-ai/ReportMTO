@@ -1,6 +1,12 @@
 # MTO Smart Analytics — data.md
 
-> Парный документ к `spec.md`. Конфигурация, схема персистентных данных, контракт промпта и шаблона.
+> Парный документ к [`spec.md`](spec.md). Конфигурация, схема персистентных данных, контракт промпта и шаблона.
+>
+> **Ревизия от 16.09.2026.** Документ перенесён из `docs/specs/` в `docs/` (рядом с `spec.md`).
+> §3.3 переписан целиком: таблица плейсхолдеров сверена с актуальным шаблоном `tmp_index.html`
+> (v4.1) — 80 токенов, источники значений — по коду `modContentMTO` / `modContentZone` /
+> `modContentDisc` (v8.3 от 14.09.2026). §2.2 сверен с `fnComputeGroupMetrics.pq` v8.3
+> (сниппет заменён на актуальный).
 >
 > **Ревизия от 10.09.2026.** §2.1 переписан целиком: состав полей сверен с реальной выгрузкой
 > (`data/sppr_tablet_*.json`, 5 файлов) и с исходником 1С `src/1C/export2mto.bsl`. Было
@@ -37,7 +43,7 @@
 паролем отдельно от остальных ключей.
 
 > ⚠️ Защита листа Excel не шифрует содержимое и снимается общедоступными средствами: `AI/API_KEY`
-> фактически доступен всем, у кого есть файл. Зафиксировано как известный риск в `spec.md` §7.2;
+> фактически доступен всем, у кого есть файл. Зафиксировано как известный риск в `spec.md` §9;
 > целевое решение — держать значение вне книги, а в `Variable` хранить ссылку. С v7.1 основной
 > путь — переменная окружения `AI_API_KEY` либо `%APPDATA%\ReportMTO\deepseek.key`; лист остаётся
 > legacy-путём с предупреждением в лог.
@@ -216,30 +222,40 @@ Text.From([number] ?? "") & "|"
 >
 > **v7 (T1 ТЗ v1.2):** добавлены `dateWeek`, `dateMonth`, `isSigned` — только при наличии исходных
 > колонок `date` / `arm`.
-
-```m
-// fnComputeGroupMetrics — вход/выход: вся таблица (после добавления Key)
-(tbl as table) as table =>
-    let
-        Grouped = Table.Group(tbl, {"number", "direction"}, {{"GroupRows", each _, type table}}),
-        WithDelta = Table.TransformColumns(Grouped, {"GroupRows", each
-            let
-                g = _,
-                // ВНИМАНИЕ: «приемке» через «е» — см. §2.1, поле ready_for
-                startRows = Table.SelectRows(g, each [ready_for] = "Готов к приемке" and [status_date] <> null),
-                endRows   = Table.SelectRows(g, each [ready_for] = "Готов к выбытию" and [status_date] <> null),
-                tStart = if Table.IsEmpty(startRows) then null else List.Min(startRows[status_date]),
-                tEnd   = if Table.IsEmpty(endRows)   then null else List.Max(endRows[status_date]),
-                delta  = if tStart = null or tEnd = null then null
-                         else try Duration.TotalHours(tEnd - tStart) otherwise null
-            in
-                Table.AddColumn(g, "deltaHours",
-                    each if [ready_for] = "Готов к выбытию" then delta else null, type nullable number)
-        }),
-        Result = Table.Combine(WithDelta[GroupRows])
-    in
-        Result
-```
+>
+> **`fnComputeGroupMetrics` v8.3 (13.09.2026, B.2.2/B.2.3):** группировка одним проходом —
+> `Table.SelectRows` внутри `Table.Group` заменены колонками-носителями и штатными
+> `List.Min`/`List.Max`; буферы убраны для потоковости. Актуальный код:
+>
+> ```m
+> // fnComputeGroupMetrics — вход/выход: вся таблица (после добавления Key)
+> (tbl as table) as table =>
+>     let
+>         Norm = (v) as text =>
+>             if v = null then "" else Text.Lower(Text.Replace(Text.From(v), "ё", "е")),
+>         IsStart = (v) as logical => Text.StartsWith(Norm(v), "готов к приемке"),
+>         IsEnd   = (v) as logical => Text.StartsWith(Norm(v), "готов к выбытию"),
+>         WithStart = Table.AddColumn(tbl, "__start_dt", each if IsStart([ready_for]) then [status_date] else null, type nullable datetime),
+>         WithHelpers = Table.AddColumn(WithStart, "__end_dt", each if IsEnd([ready_for]) then [status_date] else null, type nullable datetime),
+>         Agg = Table.Group(WithHelpers, {"number", "direction"}, {
+>             {"tStart", each List.Min([__start_dt]), type nullable datetime},
+>             {"tEnd", each List.Max([__end_dt]), type nullable datetime}
+>         }),
+>         WithDelta = Table.AddColumn(Agg, "delta", each
+>             if [tStart] = null or [tEnd] = null then null
+>             else try Duration.TotalHours([tEnd] - [tStart]) otherwise null,
+>             type nullable number),
+>         Lookup = Table.SelectColumns(WithDelta, {"number", "direction", "delta"}),
+>         Joined = Table.NestedJoin(tbl, {"number", "direction"}, Lookup, {"number", "direction"}, "__grp", JoinKind.LeftOuter),
+>         WithColumn = Table.AddColumn(Joined, "deltaHours", each
+>             if IsEnd([ready_for])
+>             then (let g = [__grp] in if Table.IsEmpty(g) then null else g{0}[delta])
+>             else null,
+>             type nullable number),
+>         Result = Table.RemoveColumns(WithColumn, {"__grp"})
+>     in
+>         Result
+> ```
 
 ```m
 // fnUpsert — CORE, generic. Полная замена совпавших по Key строк.
@@ -280,6 +296,10 @@ Text.From([number] ?? "") & "|"
   "required": ["Дата", "Тип записи", "Действие", "Источник", "Результат"]
 }
 ```
+
+> v8.2 (13.09.2026): лист `Logs` пишется ТОЛЬКО типами «Веха» и «Ошибка»; внешний файл
+> `ReportMTO.log` рядом с книгой — по уровню `DEBUG` (0 — не пишется, 1 — «Ошибка»+«Веха»,
+> 2 — все записи).
 
 ### 2.4 Базовый фильтр блоков
 
@@ -357,32 +377,37 @@ Text.From([number] ?? "") & "|"
 `AI_API_KEY` → `%APPDATA%\ReportMTO\deepseek.key` → лист `Variable` (legacy, с предупреждением).
 Ключ не пишется ни в лог, ни в HTML.
 
-**Системное сообщение (дословно):**
+**Системное сообщение (дословно, v8.0):**
 ```
-Ты ведущий аналитик данных. Проанализируй предоставленные агрегированные метрики использования
-планшетов в МТО (доля планшетов по дирекциям, ремзонам и синхронность). Сформируй краткие бизнес-выводы
-(до 4 предложений на каждый) для 3-х слайдов. Ищи аномалии. Не используй данные, которых нет во входном
-JSON. Ответ строго в формате JSON: {"slide3_conclusions": "...", "slide4_conclusions": "...",
-"slide5_conclusions": "..."}, без markdown-разметки вокруг JSON.
+Ты ведущий аналитик данных. Отчёт состоит из двух частей: слайды 1-4 - дисциплина подписания
+на планшете (обзор недели, дирекции ДЭНТ и ДГМ, неподписанные наряды), слайды 5-8 - операционка
+ремзоны (парк и заезды, что ломается и что возвращается, фазы наряда и хвост незакрытого,
+материалы и качество учёта). Сформируй краткие бизнес-выводы (2-3 пункта, каждый одним
+предложением) для каждого из 8 слайдов. Ничего не вычисляй сам и не делай прогнозов: все числа
+уже посчитаны, твоя работа - их интерпретация. Не оценивай людей. Не используй данных, которых
+нет во входном JSON. ФИО сотрудников во входных данных заменены псевдонимами вида
+«Сотрудник 7» - не изменяй и не склоняй псевдонимы, ссылайся на сотрудников только ими. Ответ
+строго в формате JSON с ключами slide1_conclusions ... slide8_conclusions, без markdown-разметки
+вокруг JSON.
 ```
 
 Дополнительные поля тела запроса: `"temperature": 0.2`, `"response_format": {"type": "json_object"}`.
 
-**Пользовательское сообщение** — JSON, собранный из словарей `modAggregate` **по белому списку полей**:
+**Пользовательское сообщение** — JSON из агрегатов по **белому списку полей**
+(`{"slide1_overview": ..., "slide2_dent": ..., "slide3_dgm": ..., "slide4_unsigned": ...,
+"part_b_zone": ...}`; `part_b_zone` — `modContentZone.ZoneFactsJson`):
 
 ```json
 {
-  "block4_percent_by_direction": [{"row":"ДГМ","week":"43","total":120,"tablet":50,"pct":0.417}],
-  "block5_percent_by_post":      [{"row":"СТК","week":"43","total":80,"tablet":31,"pct":0.388}],
-  "block7_sync_by_week":         [{"week":"43","avg_hours":7.20,"pairs":34}],
-  "block8_sync_by_week_post":    [{"week":"43","post":"СТК","avg_hours":9.10,"pairs":12}],
-  "block9_defect_types":         [{"zn_type":"Внеплановый ремонт","defekt_type":"","count":57}]
+  "slide1_overview": {"kpi": {"opened": 112, "closed": 98, "median_hours": 14.2, "tablet_pct": 0.617, "unsigned": 21, "unsigned_pct": 0.031}, "time_buckets": [{"bucket": "< 1 ч", "pairs": 120}], "zn_types": [{"zn_type": "Внеплановый ремонт", "orders": 850}], "defekt_sections": [{"defekt_type": "Электрооборудование", "orders": 230}], "nopost_weekly": [{"week": "43", "orders": 80, "nopost_pct": 0.19}]},
+  "slide2_dent": {"weeks": [{"week": "43", "events": 120, "tablet": 50, "pct": 0.417}], "posts": [{"post": "СТК", "records": 34, "pct": 0.5}], "people": [{"alias": "Сотрудник 7", "weeks": [{"week": "43", "pct": 0.9, "signs": 12, "tablet": 11}]}], "sign_stat": {"total": 1244, "both": 900, "accept_only": 120, "leave_only": 130, "none": 94}},
+  "slide4_unsigned": {"kpi": {"none": 94, "part": 88, "events_unsigned": 152, "older_14d": 40}, "aging": [{"bucket": "0–7 дней", "none": 10, "part": 4}], "by_zn_type": [{"zn_type": "Внеплановый ремонт", "orders": 70}]},
+  "part_b_zone": {"veh": 519, "visits": 910, "visits_multi_pct": 22.4, "unplanned": 2100, "fail": 1700, "ret_fail_pct": 11.2, "ret_grp_pct": 18.1, "stuck": 33, "hang": 45, "tail": 120, "report_week": 202643}
 }
 ```
 
-**Белый список полей промпта:** `direction`, `postN`, подпись недели, счётчики, доли, `zn_type`,
-`defekt_type`, часы расхождения, число пар. **Блок 6 (`employee`, ФИО) и поле `defect_desc`
-не включаются никогда.**
+**Белый список полей промпта:** агрегаты слайдов 1–8 без ФИО; сотрудники — только псевдонимы
+«Сотрудник N». **`employee` и `defect_desc` не сериализуются ни в каком виде.**
 
 **Все цифры считает VBA/PQ.** ИИ интерпретирует уже готовые числа: никаких расчётов, прогнозов
 и суждений о людях на стороне ИИ.
@@ -401,11 +426,16 @@ JSON. Ответ строго в формате JSON: {"slide3_conclusions": "..
 {
   "type": "object",
   "properties": {
-    "slide3_conclusions": { "type": "string", "description": "До 4 предложений, вывод по % планшет по дирекциям" },
-    "slide4_conclusions": { "type": "string", "description": "До 4 предложений, вывод по постам ремзоны" },
-    "slide5_conclusions": { "type": "string", "description": "До 4 предложений, вывод по синхронности дирекций" }
+    "slide1_conclusions": { "type": "string", "description": "2-3 пункта, вывод по обзору недели" },
+    "slide2_conclusions": { "type": "string", "description": "2-3 пункта, вывод по ДЭНТ" },
+    "slide3_conclusions": { "type": "string", "description": "2-3 пункта, вывод по ДГМ" },
+    "slide4_conclusions": { "type": "string", "description": "2-3 пункта, вывод по неподписанным" },
+    "slide5_conclusions": { "type": "string", "description": "2-3 пункта, вывод по парку и заездам" },
+    "slide6_conclusions": { "type": "string", "description": "2-3 пункта, вывод по возвратам" },
+    "slide7_conclusions": { "type": "string", "description": "2-3 пункта, вывод по фазам и хвосту" },
+    "slide8_conclusions": { "type": "string", "description": "2-3 пункта, вывод по материалам" }
   },
-  "required": ["slide3_conclusions", "slide4_conclusions", "slide5_conclusions"]
+  "required": ["slide1_conclusions", "slide2_conclusions", "slide3_conclusions", "slide4_conclusions", "slide5_conclusions", "slide6_conclusions", "slide7_conclusions", "slide8_conclusions"]
 }
 ```
 
@@ -416,7 +446,7 @@ JSON. Ответ строго в формате JSON: {"slide3_conclusions": "..
 1. `content = ExtractJsonStringValue(responseText, "content")` — внешний уровень;
 2. `content = JsonUnescape(content)` — развернуть `\"`, `\\`, `\n`, `\r`, `\t`, `\uXXXX`;
    при необходимости снимается обёртка ```` ```json ````;
-3. три ключа `slideN_conclusions` ищутся уже в развёрнутом тексте.
+3. восемь ключей `slideN_conclusions` ищутся уже в развёрнутом тексте.
 
 Поиск закрывающей кавычки учитывает чётность предшествующих обратных слэшей. Если `content`
 не найден — предпринимается попытка разобрать `responseText` как целевой JSON напрямую.
@@ -427,28 +457,113 @@ JSON. Ответ строго в формате JSON: {"slide3_conclusions": "..
 
 ### 3.3 Плейсхолдеры HTML-шаблона (`tmp_index.html`)
 
-| Плейсхолдер | Источник | Слайд |
-|---|---|---|
-| `{{BLOCK_3_KPI}}` | Блок 3 | 1 (Обзор) |
-| `{{BLOCK_1_TABLE}}` | Блок 1 | 2 (Свод по неделям/постам) |
-| `{{BLOCK_4_GAUGE}}` | Блок 4 | 3 (% планшет по дирекциям) |
-| `{{AI_INSIGHT_SLIDE_3}}` | `slide3_conclusions` | 3 |
-| `{{BLOCK_2_TABLE}}` | Блок 2 | 4 (Ремонты по постам) |
-| `{{BLOCK_5_TABLE}}` | Блок 5 | 4 |
-| `{{AI_INSIGHT_SLIDE_4}}` | `slide4_conclusions` | 4 |
-| `{{BLOCK_7_TABLE}}`, `{{BLOCK_8_TABLE}}`, `{{BLOCK_9_TABLE}}` | Блоки 7, 8, 9 | 5 (Синхронность дирекций) |
-| `{{AI_INSIGHT_SLIDE_5}}` | `slide5_conclusions` | 5 |
-| `{{BLOCK_6_TOP}}`, `{{BLOCK_6_BOTTOM}}` | Блок 6, первые/последние `Variable/REPORT/TOPN` строк | 6 (Рейтинг инженеров) |
+Сверено 16.09.2026 с шаблоном v4.1 и кодом v8.3: **80 плейсхолдеров**, все заполняются словарём
+`Scripting.Dictionary` из `modContentMTO.BuildPlaceholders` (шапка/подвал/ИИ) +
+`modContentZone.FillZonePlaceholders` (слайды 1, 5–8) + `modContentDisc.FillDiscPlaceholders`
+(слайды 2–4). Механизм подстановки — `modHTMLEngine.RenderTemplate`: `Replace(html, "{{" & key & "}}", ...)`;
+все значения проходят `HtmlEscape`; шаблон и результат — UTF-8. Сверка шаблон ↔ словарь —
+`modContentMTO.DebugCheckPlaceholders`.
 
-> ⚠️ Имена зафиксированы 1:1 между кодом и шаблоном, но сами имена — разумное развёртывание по
-> количеству блоков/слайдов, не сверялось с заказчиком дословно.
->
-> ⚠️ `{{BLOCK_4_GAUGE}}` содержит **раскрашенную матрицу «дирекция × неделя»**, а не круговой
-> gauge. Имя плейсхолдера сохранено, чтобы не ломать сверку 1:1.
->
-> Разметка блоков части «Техника» (слайды 5–8, `modContentZone`) обязана совпадать
-> с `docs/plans/MTO_контракт_шаблона_v1.0.md` и с эталоном
-> `temp/MTO_макет_отчета_v4.0.html`. Классы вне словаря контракта не использовать.
+#### Шапка, подвал и выводы ИИ (modContentMTO.BuildPlaceholders)
+
+| Плейсхолдер | Назначение | Как получается |
+|---|---|---|
+| `{{REPORT_TITLE}}` | заголовок отчёта | константа «Исполнительская дисциплина инженеров ДЭНТ и ДГМ» |
+| `{{REPORT_WEEK_LABEL}}` | подпись отчётной недели | `modContentZone.WeekCaption(ZoneReportWeek())` — «неделя 2026-13 (23–29 мар)» |
+| `{{REPORT_LEDE}}` | подзаголовок «Отчет о состоянии техники за {неделя} — с {дата} до {дата}» | `BuildLede(rw)`; даты — `WeekMonday(rw)` + 6 дней |
+| `{{FACTS}}` | шесть чисел шапки: событий (планшет, ПК), нарядов, открыто ЗН > мес., ТС по ЗН, без поста, повторные | `BuildFactsRef()` — счётчики `modContentZone` (`SignedEventsCount`, `OrdersCount`, `OpenOverMonth`, `FleetCount`, `NoPostPct`, `RetCount7`) |
+| `{{REPORT_FOOTER}}` | подвал: неделя, версия сборки (`BUILD/VERSION`), пометка об автономности | `BuildFooter(rw)` |
+| `{{AI_INSIGHT_SLIDE_1}}` … `{{AI_INSIGHT_SLIDE_8}}` | бизнес-выводы ИИ по слайдам 1–8 | `ParseAIResponse` → кэш `mInsights` (или заглушка); `DeAlias` (псевдонимы → ФИО) → `AiList` (`<ul><li>`) |
+
+#### Слайд 1 — обзор недели (modContentZone.FillZonePlaceholders)
+
+| Плейсхолдер | Назначение | Как получается |
+|---|---|---|
+| `{{KPI_OVERVIEW}}` | 8 плиток за отчётную неделю: открыто/закрыто/висит/без поста/заезды/ТС/медиана в ремзоне/возвраты (7 дн.) | `BuildKpiOverview` (ряды `Slide1Series` по `date`/`zn_closed`) |
+| `{{BLOCK_HANG_ZNTYPE}}` | «висит на конец недели» ЗН по виду ремонта | `BuildHangByZnType` |
+| `{{BLOCK_HANG_STATUS}}` | то же по текущему статусу (`TekStatusPoDoc`; «Закрыт (Омникомм)» = «Закрыт») | `BuildHangByStatus` |
+| `{{BLOCK_HANG_STATUS_CHART}}` | бары висящих ЗН по статусам (без «Отменен…» и «Ожидание ТМЦ») | `BuildHangStatusChart` |
+| `{{BLOCK_HANG_STATUS_SPECIAL}}` | статусы «Отменен…» и «Ожидание ТМЦ» выборки висящих | `BuildHangStatusSpecial` |
+| `{{BLOCK_NOZONE_ZNTYPE}}` | наряды с пустым `postN` по виду ремонта (фильтр `NoZoneOk`) | `BuildNoZoneZnType` |
+| `{{BLOCK_NOZONE_STATUS}}` | наряды с пустым `postN` по статусу | `BuildNoZoneStatus` |
+| `{{BLOCK_FLOW_ZNTYPE}}` | поток по видам ремонта (топ-8, YTD) | `BuildFlowZnType` |
+| `{{BLOCK_FLOW_DEFEKT}}` | поток по группам дефекта за отчётную неделю | `BuildFlowDefekt` |
+| `{{BLOCK_NOPOST_WEEKLY}}` | столбики нарядов + линия доли без поста по неделям окна | `BuildNoPostWeekly` |
+
+#### Слайды 2–4 — дисциплина (modContentDisc.FillDiscPlaceholders)
+
+| Плейсхолдер | Назначение | Как получается |
+|---|---|---|
+| `{{BLOCK_WEEKS_DENT}}`, `{{BLOCK_WEEKS_DGM}}` | матрица «% планшета» по ремзонам × 8 недель (события) | `BuildWeeksTable("ДЭНТ"/"ДГМ")` |
+| `{{BLOCK_TABLE1_DENT}}`, `{{BLOCK_TABLE1_DGM}}` | Таблица 1: Всего / ПЛАНШЕТ / ПК / % планшет по неделям, зоны `REPORT/SLIDE_ZONES` | `BuildBlock1(dir)` |
+| `{{BLOCK_POSTS_DENT}}`, `{{BLOCK_POSTS_DGM}}` | площадки за отчётную неделю (единица — наряд) | `BuildPostsTable(dir)` |
+| `{{BLOCK_PEOPLE_DENT}}`, `{{BLOCK_PEOPLE_DGM}}` | сотрудники: тренд % за 4 недели + объём/время за отчётную (порог `REPORT/MIN_RECORDS`) | `BuildPeople(dir)` |
+| `{{BLOCK_DEPTS_DENT}}`, `{{BLOCK_DEPTS_DGM}}` | подразделения (`emp_dep`), аналог сотрудников | `BuildDepts(dir)` |
+| `{{BLOCK_SIGNSTAT_DENT}}`, `{{BLOCK_SIGNSTAT_DGM}}` | разбор нарядов по подписанным статусам + неподписанные по возрасту | `BuildSignStat(dir)` |
+| `{{BLOCK_NOSIGN_STATUS_DENT}}`, `{{BLOCK_NOSIGN_STATUS_DGM}}` | наряды без единой подписи по `TekStatusPoDoc` | `BuildNoSignSplit(dir, E_TEK, ...)` |
+| `{{BLOCK_NOSIGN_TYPE_DENT}}`, `{{BLOCK_NOSIGN_TYPE_DGM}}` | наряды без единой подписи по `zn_type` | `BuildNoSignSplit(dir, E_TYPE, ...)` |
+| `{{KPI_UNSIGNED}}` | плитки слайда 4: без подписей / событий «НЕ ПОДПИСАНО» / частично / самый старый | `BuildKpiUnsigned` |
+| `{{BLOCK_UNSIGNED_AGE}}` | возраст неподписанных нарядов (5 корзин) | `BuildUnsignedAge` |
+| `{{BLOCK_UNSIGNED_POST}}` | неподписанные по `postN` | `BuildUnsignedPost` |
+| `{{BLOCK_UNSIGNED_OWNER}}` | неподписанные по `owner_dep` | `BuildUnsignedOwner` |
+| `{{BLOCK_UNSIGNED_ZNTYPE}}` | неподписанные по `zn_type` | `BuildUnsignedZnType` |
+
+#### Слайд 5 — парк и заезды
+
+| Плейсхолдер | Назначение | Как получается |
+|---|---|---|
+| `{{KPI_FLEET}}` | плитки: машин, заездов за неделю, заездов пакетом, возраст парка | `BuildKpiFleet` (`mVeh`, порог заезда 12 ч) |
+| `{{BLOCK_POSTS_WEEK}}` | наряды отчётной недели по ремзонам | `BuildPostsWeek` |
+| `{{BLOCK_AGE_CURVE}}` | парк по годам выпуска + внеплановые наряды на машину | `BuildAgeCurve` |
+| `{{BLOCK_AGE_MATRIX}}` | когорты × топ-5 групп дефекта | `BuildAgeMatrix` |
+| `{{BLOCK_AGING}}` | заезды/материалы/часы на машину по когортам | `BuildAging` |
+| `{{BLOCK_PACK}}` | распределение заездов по числу нарядов + чувствительность к порогу | `BuildPack` |
+
+#### Слайд 6 — что ломается и что возвращается
+
+| Плейсхолдер | Назначение | Как получается |
+|---|---|---|
+| `{{BLOCK_CHRONICS}}` | хроники машин: ранги по заездам/часам/деньгам | `BuildChronics` |
+| `{{BLOCK_PARETO}}` | Парето групп дефекта (топ-8, внеплановые, YTD) | `BuildPareto` |
+| `{{BLOCK_DEFECT_DETAIL}}` | классификатор описаний: характер работы + узел | `BuildDefectDetail` (`EnsureCls`) |
+| `{{BLOCK_RET_KPI}}` | плитки возвратов (по отказу / подкатегории / группе / медиана интервала) | `BuildRetKpi` |
+| `{{BLOCK_RET_MONTH}}` | возвраты по месяцам YTD (окно 30 сут) | `BuildRetMonth` |
+| `{{BLOCK_RET_WEEK}}` | возвраты по неделям окна | `BuildRetWeek` |
+| `{{BLOCK_RET_NODE}}` | узлы с ≥ 40 отказами и доля возвратов | `BuildRetNode` |
+| `{{BLOCK_REPEATS}}` | пары повторных нарядов (та же машина + группа, ≤ 30 сут) | `BuildRepeats` |
+
+#### Слайд 7 — фазы, возврат, хвост
+
+| Плейсхолдер | Назначение | Как получается |
+|---|---|---|
+| `{{BLOCK_PHASES}}` | фазы наряда (постановка/ремзона/закрытие) по неделям | `BuildPhases` |
+| `{{BLOCK_REPEAT_TOP_VEH_YTD}}`, `{{BLOCK_REPEAT_TOP_VEH_WK}}` | топ машин по повторным парам (YTD / неделя) | `BuildRepeatTopVeh(False/True)` |
+| `{{BLOCK_REPEAT_TOP_DEF_YTD}}`, `{{BLOCK_REPEAT_TOP_DEF_WK}}` | топ групп дефекта по повторным парам | `BuildRepeatTopDef(False/True)` |
+| `{{BLOCK_DOWN_VS_HOURS_YTD}}`, `{{BLOCK_DOWN_VS_HOURS_WK}}` | простой против списанных/плановых часов | `BuildDownVsHours(False/True)` |
+| `{{BLOCK_CREATE_TO_ACC_YTD}}`, `{{BLOCK_CREATE_TO_ACC_WK}}` | создание → приёмка по видам техники | `BuildCreateToAcc(False/True)` |
+| `{{BLOCK_RETURN_KPI}}` | плитки: застряли / готово-но-не-закрыто / выбытие→закрытие / хвост > 7 сут | `BuildReturnKpi` |
+| `{{BLOCK_RETURN_HIST}}` | интервалы выбытие → закрытие + по площадкам | `BuildReturnHist` |
+| `{{BLOCK_RETURN_STUCK}}` | 8 старейших с приёмкой без выбытия | `BuildReturnStuck` |
+| `{{BLOCK_RETURN_HANG}}` | 8 старейших с выбытием без закрытия | `BuildReturnHang` |
+| `{{BLOCK_TAIL_AGE}}` | возраст нарядов без `zn_closed` | `BuildTailAge` |
+| `{{BLOCK_TAIL_WHY}}` | хвост в разрезе `TekStatusPoDoc` | `BuildTailWhy` |
+| `{{BLOCK_TAIL_ROWS}}` | 8 старейших без `zn_closed` (> 14 сут), последнее событие | `BuildTailRows` |
+| `{{BLOCK_LIMITS}}` | снятые с публикации отчёты и что нужно от 1С | `BuildLimits` |
+
+#### Слайд 8 — материалы и качество учёта
+
+| Плейсхолдер | Назначение | Как получается |
+|---|---|---|
+| `{{KPI_PARTS}}` | плитки материалов: сумма YTD, машин с расходом, группа A, самая дорогая | `BuildKpiParts` |
+| `{{BLOCK_ABC}}` | ABC-таблица + топ по расходу материалов | `BuildAbc` |
+| `{{BLOCK_MONEY_DEFEKT}}` | материалы по разделам дефекта (топ-6) | `BuildMoneyDefekt` |
+| `{{BLOCK_QUALITY}}` | реестр дефектов данных выгрузки | `BuildQuality` |
+| `{{BLOCK_REQUEST}}` | заявка в 1С (8 фиксированных требований) | `BuildRequest` |
+
+> ⚠️ Имена плейсхолдеров зафиксированы 1:1 между кодом и шаблоном и проверяются
+> `DebugCheckPlaceholders`. Разметка блоков обязана совпадать с
+> `docs/plans/MTO_контракт_шаблона_v1.0.md` и с эталоном `temp/MTO_макет_отчета_v4.0.html`;
+> классы вне словаря контракта не использовать.
 >
 > **Экранирование:** все значения плейсхолдеров (данные 1С и текст ИИ) проходят через
 > `modHTMLEngine.HtmlEscape`; шаблон читается и результат пишется в UTF-8. `tmp_index.html` —
@@ -456,7 +571,10 @@ JSON. Ответ строго в формате JSON: {"slide3_conclusions": "..
 
 ### 3.4 Цветовая шкала
 
-Используется в `{{BLOCK_1_TABLE}}`, `{{BLOCK_4_GAUGE}}`, `{{BLOCK_5_TABLE}}`, строка «% планшет».
+Используется в ячейках «% планшет» (`modContentMTO.PctCell`, рамка) и рядах диаграмм.
+Шкала рамки процента (`modContentMTO.PctBorderColor`): 0 → `#e2483a`, 50 → `#e9822a`,
+75 → `#9aa93a`, 100 → `#1faf6a` (интерполяция `modColor.InterpolateHex`). Подсветка строки
+Таблицы 1 — `#ef4444 → #f59e0b → #10b981`.
 
 ```vba
 Function PercentToColor(pct As Double, cLow As String, cMid As String, cHigh As String) As String

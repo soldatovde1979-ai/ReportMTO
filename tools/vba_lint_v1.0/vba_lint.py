@@ -2,6 +2,9 @@
 """
 Структурный линтер VBA — v1.1 от 10.09.2026.
 
+Версия 1.2: проверка DIMAFTERUSE - переменная цикла For, объявленная Dim'ом
+  ПОЗЖЕ первого использования (VBA поднимает Dim на всю процедуру, поэтому
+  компиляция такое пропускает, но по тексту это цикл с необъявленной переменной).
 Версия 1.1: проверка зарезервированных слов распространена на модульные
   Private/Public и на параметры процедур. Раньше ловились только Dim/Const,
   и `Private mE As Object` (то есть `Me`) прошёл в модуль незамеченным.
@@ -113,7 +116,7 @@ def lint(path):
     ll = logical_lines(lines)
     stack = []          # (тип, номер строки)
     procs = {}          # имя -> (номер строки, число аргументов, минимум обязательных)
-    state = {'cur': None, 'declared': set(), 'module_vars': set()}
+    state = {'cur': None, 'declared': set(), 'module_vars': set(), 'used_pos': {}}
     used = []; calls = []
 
     for lineno, text, cont in ll:
@@ -150,7 +153,7 @@ def analyse_stmt(code, lineno, stack, procs, issues, path, state):
         opt = sum(1 for p in parts if re.search(r'\boptional\b', p, re.I))
         procs[name.lower()] = (lineno, len(parts), len(parts) - opt)
         stack.append((d.group(2).split()[0].lower(), lineno))
-        state['cur'] = name; state['declared'] = set()
+        state['cur'] = name; state['declared'] = set(); state['used_pos'] = {}
         for p in parts:
             mm = re.search(r'(?:byval|byref|optional|paramarray)?\s*([A-Za-z_]\w*)', p.strip(), re.I)
             if mm: state['declared'].add(mm.group(1).lower())
@@ -171,6 +174,14 @@ def analyse_stmt(code, lineno, stack, procs, issues, path, state):
     if re.match(r'^\s*else\s*$', low) or re.match(r'^\s*elseif\b.*\bthen\s*$', low):
         return
     if re.match(r'^\s*(?:exit|continue)\s+(?:for|do|sub|function)\b', low): return
+    m_for = re.match(r'^\s*for\s+each\s+([A-Za-z_]\w*)\s+in\b', low) or \
+        re.match(r'^\s*for\s+([A-Za-z_]\w*)\s*=', low)
+    if m_for:
+        v = m_for.group(1).lower()
+        if v not in RESERVED:
+            up = state['used_pos']
+            if v not in up:
+                up[v] = lineno
     if re.match(r'^\s*for\b', low): stack.append(('for', lineno)); return
     if re.match(r'^\s*next\b', low): pop_expect(stack, 'for', issues, path, lineno); return
     if re.match(r'^\s*do\b', low): stack.append(('do', lineno)); return
@@ -185,7 +196,14 @@ def analyse_stmt(code, lineno, stack, procs, issues, path, state):
     for mm in re.finditer(r'\b(?:dim|static|const|redim(?:\s+preserve)?)\s+(.+)', code, re.I):
         for part in split_args(mm.group(1)):
             nm = re.match(r'\s*([A-Za-z_]\w*)', part)
-            if nm: (state['declared'] if state['cur'] else state['module_vars']).add(nm.group(1).lower())
+            if nm:
+                nm_l = nm.group(1).lower()
+                (state['declared'] if state['cur'] else state['module_vars']).add(nm_l)
+                up = state['used_pos']
+                if nm_l in up and up[nm_l] < lineno:
+                    issues.append(Issue(path, lineno, 'DIMAFTERUSE',
+                        'переменная «' + nm.group(1) + '» используется раньше объявления Dim (строка ' +
+                        str(up[nm_l]) + ')'))
     for mm in re.finditer(r'^\s*(?:public|private)\s+(?!sub|function|property|const|declare|type|enum)(.+)',
                           code, re.I):
         for part in split_args(mm.group(1)):

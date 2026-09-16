@@ -1,10 +1,60 @@
 # Журнал версий ReportMTO
 
-Формат: [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии по
-[SemVer](https://semver.org/lang/ru/). Новая запись сверху.
+Формат: сначала человеческое описание изменений (что добавлено; какая ошибка
+исправлена; что и с каким результатом оптимизировано), затем техническая часть
+(миграции, -Force, книга, хеш). Версии по [SemVer](https://semver.org/lang/ru/).
+Новая запись сверху.
 
-Файл ведёт `install\install.ps1` автоматически при успешной установке — руками
-дописывать не нужно. Порядок работы: [`docs/version-guide.md`](docs/version-guide.md).
+Описание заполняется руками в `install\VERSION` ниже первой строки ДО релиза —
+из него `install\install.ps1` собирает запись автоматически при успешной
+установке; сам журнал руками дописывать не нужно. Порядок работы:
+[`docs/version-guide.md`](docs/version-guide.md).
+
+## 8.1.10 — 16.09.2026
+
+Собрано 16.09.2026. Изменены: src/vba/modContentDisc.bas, tmp_index.html, README.md, docs/archive/ft_Report v1.2.md, docs/archive/tz_Report v1.2.md, docs/data.md, docs/index.md, docs/presentations/Презентация и блоки данных (Трек Б) v1.0.md, docs/task-rep-v2.md, docs/presentations/Презентация (удалён), docs/archive/tz_Report (удалён), docs/specs/data.md (удалён), docs/archive/ft_Report (удалён)
+Первая строка этого файла - версия сборки, всё ниже - описание.
+Версию меняет install\install.ps1, руками править не нужно.
+
+- Книга: C:\Projects\ReportMTO\build\ReportMTO v7.0.xlsm
+- Хеш исходников: e85e042001518cd294e41c3b5fc4ae1d
+
+## 8.1.9 — 16.09.2026
+
+- Изменены исходники: src/vba/modContentDisc.bas, tmp_index.html, README.md, docs/archive/ft_Report v1.2.md, docs/archive/tz_Report v1.2.md, docs/data.md, docs/index.md, docs/presentations/Презентация и блоки данных (Трек Б) v1.0.md, docs/task-rep-v2.md, docs/presentations/Презентация (удалён), docs/archive/tz_Report (удалён), docs/specs/data.md (удалён), docs/archive/ft_Report (удалён)
+- Изменена документация: README.md, docs/archive/ft_Report v1.2.md, docs/archive/tz_Report v1.2.md, docs/data.md, docs/index.md, docs/presentations/Презентация и блоки данных (Трек Б) v1.0.md, docs/task-rep-v2.md
+- Книга: C:\Projects\ReportMTO\build\ReportMTO v7.0.xlsm
+- Хеш исходников: 5a25c162a7d011677551626afd2e65f8
+
+## 8.1.8 — 16.09.2026
+
+- Изменены исходники: docs/archive/ft_Report v1.2.md, docs/archive/tz_Report v1.2.md, docs/presentations/Презентация и блоки данных (Трек Б) v1.0.md, docs/spec.md, docs/presentations/Презентация (удалён), docs/archive/tz_Report (удалён), docs/archive/ft_Report (удалён)
+- Изменена документация: docs/archive/ft_Report v1.2.md, docs/archive/tz_Report v1.2.md, docs/presentations/Презентация и блоки данных (Трек Б) v1.0.md, docs/spec.md
+- Книга: C:\Projects\ReportMTO\ReportMTO.xlsm
+- Хеш исходников: eee190cbd65d286e66d9757e3611d2dd
+
+## 8.1.7 — 16.09.2026
+
+- Изменены исходники: src/vba/modContentDisc.bas, docs/archive/ft_Report v1.2.md, docs/archive/tz_Report v1.2.md, docs/presentations/Презентация и блоки данных (Трек Б) v1.0.md, docs/rules.md, docs/presentations/Презентация (удалён), docs/archive/tz_Report (удалён), docs/archive/ft_Report (удалён)
+- Изменена документация: docs/archive/ft_Report v1.2.md, docs/archive/tz_Report v1.2.md, docs/presentations/Презентация и блоки данных (Трек Б) v1.0.md, docs/rules.md
+- Книга: C:\Projects\ReportMTO\build\ReportMTO v7.0.xlsm
+- Хеш исходников: 8fd3615efc4f65e1bee1474c3514b311
+
+## 8.1.6 — 16.09.2026
+
+- Изменены исходники: docs/archive/ft_Report v1.2.md, docs/archive/tz_Report v1.2.md, docs/presentations/Презентация и блоки данных (Трек Б) v1.0.md, docs/presentations/Презентация (удалён), docs/archive/tz_Report (удалён), docs/archive/ft_Report (удалён)
+- Изменена документация: docs/archive/ft_Report v1.2.md, docs/archive/tz_Report v1.2.md, docs/presentations/Презентация и блоки данных (Трек Б) v1.0.md
+- Миграции: 8.1.0__variable_keys.ps1
+- Книга: C:\Projects\ReportMTO\ReportMTO.xlsm
+- Хеш исходников: 42ae05e0c23910ff33d5e47b2ddfb732
+
+## 8.1.6 — 16.09.2026
+
+- Изменены исходники: src/vba/modContentDisc.bas, src/vba/modContentMTO.bas, src/vba/modContentZone.bas, src/vba/modHTMLEngine.bas, src/vba/modMain.bas, src/powerquery/fnComputeGroupMetrics.pq, src/powerquery/fnComputeKey.pq, tmp_index.html, README.md, docs/archive/ft_Report v1.2.md, docs/archive/logs.md, docs/archive/manifest-v6.1.md, docs/archive/run-report-20260909.md, docs/archive/tz_Report v1.2.md, docs/archive/tz_Reports2.md, docs/index.md, docs/plans/analysis_loadpackage_hang_v1.0.md, docs/plans/git-sync-v1.0.md, docs/plans/MTO_контракт_шаблона_v1.0.md, docs/plans/MTO_отчёт_v8.0_раскатка_v1.0.md, docs/plans/MTO_ТЗ_доработка_отчета_v1.6.md, docs/plans/MTO_ТЗ_правки_шапки_и_слайда1_v1.0.md, docs/plans/plan_fix_loadpackage_a-c_v1.0.md, docs/plans/task-rep-v2-постановка-разработчику.md, docs/plans/task-rep-v2-часть3-постановка-разработчику.md, docs/plans/tz_developer_logging_and_release_v1.0.md, docs/plans/tz_pq_optimizations_and_e2e_v1.0.md, docs/plans/tz_pq_profile_optimize_v1.0.md, docs/plans/tz_Remzona_Part3_v1.0.md, docs/presentations/MTO_Презентация_и_блоки_данных_v2.5.md, docs/presentations/Презентация и блоки данных (Трек Б) v1.0.md, docs/rules.md, docs/specs/data.md, docs/specs/pri-json-findings-v1.md, docs/task-rep.md, docs/task-rep-v2.md, docs/tasks.md, docs/version-guide.md, docs/presentations/Презентация (удалён), docs/specs/manifest.md (удалён), docs/plans/tz_Report (удалён), docs/plans/run-report-20260909.md (удалён), docs/logs.md (удалён), docs/plans/ft_Report (удалён), docs/plans/tz_report_part_2.md (удалён), docs/plans/tz_Reports2.md (удалён)
+- Изменена документация: README.md, docs/archive/ft_Report v1.2.md, docs/archive/logs.md, docs/archive/manifest-v6.1.md, docs/archive/run-report-20260909.md, docs/archive/tz_Report v1.2.md, docs/archive/tz_Reports2.md, docs/index.md, docs/plans/analysis_loadpackage_hang_v1.0.md, docs/plans/git-sync-v1.0.md, docs/plans/MTO_контракт_шаблона_v1.0.md, docs/plans/MTO_отчёт_v8.0_раскатка_v1.0.md, docs/plans/MTO_ТЗ_доработка_отчета_v1.6.md, docs/plans/MTO_ТЗ_правки_шапки_и_слайда1_v1.0.md, docs/plans/plan_fix_loadpackage_a-c_v1.0.md, docs/plans/task-rep-v2-постановка-разработчику.md, docs/plans/task-rep-v2-часть3-постановка-разработчику.md, docs/plans/tz_developer_logging_and_release_v1.0.md, docs/plans/tz_pq_optimizations_and_e2e_v1.0.md, docs/plans/tz_pq_profile_optimize_v1.0.md, docs/plans/tz_Remzona_Part3_v1.0.md, docs/presentations/MTO_Презентация_и_блоки_данных_v2.5.md, docs/presentations/Презентация и блоки данных (Трек Б) v1.0.md, docs/rules.md, docs/specs/data.md, docs/specs/pri-json-findings-v1.md, docs/task-rep.md, docs/task-rep-v2.md, docs/tasks.md, docs/version-guide.md
+- Миграции: 8.1.0__variable_keys.ps1
+- Книга: C:\Projects\ReportMTO\build\ReportMTO v7.0.xlsm
+- Хеш исходников: 42ae05e0c23910ff33d5e47b2ddfb732
 
 ## 8.1.5 — 13.09.2026
 

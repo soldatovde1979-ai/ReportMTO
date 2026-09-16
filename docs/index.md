@@ -1,6 +1,9 @@
 # Карта документации
 
-> Версия 1.5 от 16.09.2026. В archive/ перенесены выполненные ТЗ/планы
+> Версия 1.5 от 16.09.2026. `spec.md` создан в `docs/` (полная спецификация системы,
+> собрана из кода v8.3); `data.md` перенесён из `docs/specs/` в `docs/` (рядом со `spec.md`),
+> §3.3 переписан под актуальный шаблон (80 плейсхолдеров).
+> Также в archive/ перенесены выполненные ТЗ/планы
 > (`tz_developer_logging_and_release_v1.0.md`, `tz_pq_profile_optimize_v1.0.md`,
 > `tz_pq_optimizations_and_e2e_v1.0.md`, `git-sync-v1.0.md`, `MTO_отчёт_v8.0_раскатка_v1.0.md`,
 > `MTO_ТЗ_доработка_отчета_v1.6.md`, `next-steps.md`) и исходник постановки `task-rep.md`
@@ -23,8 +26,8 @@
 
 | Файл | Назначение |
 |---|---|
-| `spec.md` | Полная спецификация системы. **На диске отсутствует** — ведётся в проекте Claude (`claude/spec.md`); в репозитории последняя версия доступна как `git show 7146c03^:docs/spec.md` |
-| [`specs/data.md`](specs/data.md) | Описание данных: источники, форматы, поля (ревизия 10.09.2026, поля сверены с выгрузкой и `src/1C/export2mto.bsl`) |
+| [`spec.md`](spec.md) | Полная спецификация системы (создан 16.09.2026, собран из кода `src/` v8.3) |
+| [`data.md`](data.md) | Описание данных: источники, форматы, поля, контракт промпта и шаблона (ревизия 16.09.2026: §3.3 — 80 плейсхолдеров) |
 | [`archive/logs.md`](archive/logs.md) | Журнал работ (история до 08.09.2026; текущая хроника — в [`tasks.md`](tasks.md)) |
 | [`rules.md`](rules.md) | Память правил и уроков |
 | [`version-guide.md`](version-guide.md) | Версионирование сборки: команда раскатки, миграции, где смотреть версию книги |
@@ -34,8 +37,9 @@
 
 | Где | Что искать |
 |---|---|
-| [`specs/`](specs/data.md) | Спецификации: `data.md` (данные и поля), `brief-data-mto.md` (предметная область), `pri-json-findings-v1.md` (разбор выгрузки), `architecture-diagram.html`. Манифест v6.1 — в `archive/`, контроль целостности ведёт `install\install.ps1`. `content-spec.md` удалён вместе с `spec.md` в 7146c03 |
-| [`plans/`](plans/plan_fix_loadpackage_a-c_v1.0.md) | Планы. Актуальные: `plan_fix_loadpackage_a-c_v1.0.md` (оптимизация загрузки), `analysis_loadpackage_hang_v1.0.md`, `task-rep-v2-постановка-разработчику.md`, `MTO_контракт_шаблона_v1.0.md`. Выполненные ТЗ/планы и ревизия 24.08 (`next-steps.md`) — в `archive/` |
+| [`spec.md`](spec.md) / [`data.md`](data.md) | Спецификация системы и описание данных (16.09.2026) |
+| [`specs/`](specs/brief-data-mto.md) | `brief-data-mto.md` (предметная область), `pri-json-findings-v1.md` (разбор выгрузки), `architecture-diagram.html`. Манифест v6.1 — в `archive/`, контроль целостности ведёт `install\install.ps1`. `content-spec.md` удалён вместе со старой версией `spec.md` в 7146c03 |
+| [`plans/`](plans/plan_fix_loadpackage_a-c_v1.0.md) | Планы. Актуальные: `plan_fix_loadpackage_a-c_v1.0.md` (оптимизация загрузки), `analysis_loadpackage_hang_v1.0.md`, `task-rep-v2-постановка-разработчику.md` (в т.ч. часть 3 — `task-rep-v2-часть3-постановка-разработчику.md`), `tz_Remzona_Part3_v1.0.md`, `MTO_контракт_шаблона_v1.0.md`. Выполненные ТЗ/планы и ревизия 24.08 (`next-steps.md`) — в `archive/` |
 | [`presentations/`](presentations/MTO_Презентация_и_блоки_данных_v2.5.md) | Презентации (актуальные версии) |
 | [`archive/`](archive/logs.md) | История: выполненные планы, старые версии документов и инструкций, handoff-записки |
 | [`../install/`](../install/install-v7.1.md) | Инструкции установки/обновления и скрипты `install.ps1` (установка + релиз) / `install_prod.ps1` (прод) |

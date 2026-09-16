@@ -1,0 +1,6 @@
+﻿OPENED
+PIVOTS_OK
+ERR BuildDownVsHours week=False sec=2835 | Исключение при вызове "Run" с "2" аргументами: "The remote procedure call failed. (Исключение из HRESULT: 0x800706BE)"
+ERR BuildDownVsHours week=True sec=0 | Исключение при вызове "Run" с "2" аргументами: "The RPC server is unavailable. (Исключение из HRESULT: 0x800706BA)"
+ALL_DONE
+FATAL The RPC server is unavailable. (Исключение из HRESULT: 0x800706BA)
