@@ -24,7 +24,7 @@
 #   - флаг -InstallOnly: только установка + верификация (для build-книг и повторных
 #     установок), без версии/миграций/CHANGELOG;
 #   - документация (README.md, docs\**\*.md, install\*.md) включена в дайджест исходников:
-#     правки документации поднимают патч и перечисляются в CHANGELOG отдельной строкой;
+#     правки документации поднимают патч; отдельной строкой в CHANGELOG не пишутся;
 #   - запись в CHANGELOG не дублируется при неизменных исходниках (RELEASE_SOURCES_SAME);
 #   - install\release.ps1 и install\install_prod.ps1 перенесены в tools\archive\.
 #
@@ -126,7 +126,7 @@ function Compare-Version([string]$a, [string]$b) {
 
 # ---------------------------------------------------------------- хеши исходников
 # v2.0: в дайджест включена документация (README.md, docs\**\*.md, install\*.md):
-# правки документации поднимают патч и перечисляются в CHANGELOG (ТЗ v1.0, п.4).
+# правки документации поднимают патч; отдельной строкой в CHANGELOG не пишутся.
 # Служебные файлы (VERSION, release.state) - не .md и в дайджест не входят.
 function Get-SourceMap() {
     $map = New-Object System.Collections.Specialized.OrderedDictionary
@@ -642,12 +642,8 @@ if (-not $sourcesChanged -and -not $forced -and ($applied.Count -eq 0)) {
     $entry = @()
     $entry += ("## " + $newVersion + " " + [char]0x2014 + " " + (Get-Date -Format "dd.MM.yyyy"))
     $entry += ""
-    if ($changedFiles.Count -gt 0) { $entry += ("- Изменены исходники: " + ($changedFiles -join ", ")) }
-    else { $entry += "- Исходники не менялись, переустановка в книгу" }
-    $docChanged = $changedFiles | Where-Object { $_ -match "\.md$|README" }
-    if ($null -ne $docChanged -and @($docChanged).Count -gt 0) {
-        $entry += ("- Изменена документация: " + (@($docChanged) -join ", "))
-    }
+    # v3.0: строки «Изменены исходники/документация» убраны — их даёт git;
+    # CHANGELOG оставляет только факты раскатки (миграции, -Force, книга, хеш).
     if ($applied.Count -gt 0) { $entry += ("- Миграции: " + ($applied -join ", ")) }
     if ($forced) { $entry += ("- ВНИМАНИЕ: установлено с -Force поверх более новой книги " + $book.Version) }
     $entry += ("- Книга: " + $full)

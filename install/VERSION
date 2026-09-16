@@ -1,5 +1,5 @@
-8.1.5
-Собрано 13.09.2026. Изменены: src/vba/modMain.bas, src/powerquery/fnComputeGroupMetrics.pq, src/powerquery/fnComputeKey.pq, src/powerquery/qProf1_Source.pq, src/powerquery/qProf2_Expanded.pq, src/powerquery/qProf3_Normalized.pq, src/powerquery/qProf4_Key.pq, src/powerquery/qProf5_Dedup.pq, src/powerquery/qProf6_Groups.pq, src/powerquery/qProf7_Retention.pq, src/powerquery/Query-ImportJSON.pq, docs/plans/analysis_loadpackage_hang_v1.0.md, docs/plans/ft_Report v1.2.md, docs/plans/tz_developer_logging_and_release_v1.0.md, docs/plans/tz_pq_optimizations_and_e2e_v1.0.md, docs/plans/tz_pq_profile_optimize_v1.0.md, docs/plans/tz_Report v1.2.md, docs/presentations/Презентация и блоки данных (Трек Б) v1.0.md, docs/rules.md, docs/tasks.md
+8.1.9
+Собрано 16.09.2026. Изменены: src/vba/modContentDisc.bas, tmp_index.html, README.md, docs/archive/ft_Report v1.2.md, docs/archive/tz_Report v1.2.md, docs/data.md, docs/index.md, docs/presentations/Презентация и блоки данных (Трек Б) v1.0.md, docs/task-rep-v2.md, docs/presentations/Презентация (удалён), docs/archive/tz_Report (удалён), docs/specs/data.md (удалён), docs/archive/ft_Report (удалён)
 
 Первая строка этого файла - версия сборки, всё ниже - описание.
 Версию меняет install\install.ps1, руками править не нужно.

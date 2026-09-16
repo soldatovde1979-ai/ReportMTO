@@ -54,6 +54,11 @@ Private mPTab As Object
 Private mPAcc As Object          ' «дирекция|ФИО» за отчётную неделю
 Private mPLev As Object
 Private mPPairs As Object        ' «дирекция|ФИО» -> Collection номеров нарядов (выбытие)
+Private mDTot As Object          ' «дирекция|подразделение|неделя» -> событий (R9)
+Private mDTab As Object
+Private mDAcc As Object          ' «дирекция|подразделение» за отчётную неделю
+Private mDLev As Object
+Private mDPairs As Object        ' «дирекция|подразделение» -> Collection «номер наряда|G/D»
 Private mEvRows As Long
 Private mEvUnsigned As Long
 Private mRw As Long
@@ -70,6 +75,11 @@ Public Sub ResetDisc()
     Set mPAcc = Nothing
     Set mPLev = Nothing
     Set mPPairs = Nothing
+    Set mDTot = Nothing
+    Set mDTab = Nothing
+    Set mDAcc = Nothing
+    Set mDLev = Nothing
+    Set mDPairs = Nothing
     mRw = 0
 End Sub
 
@@ -90,6 +100,11 @@ Private Sub EnsureDisc()
     Set mPAcc = CreateObject("Scripting.Dictionary")
     Set mPLev = CreateObject("Scripting.Dictionary")
     Set mPPairs = CreateObject("Scripting.Dictionary")
+    Set mDTot = CreateObject("Scripting.Dictionary")
+    Set mDTab = CreateObject("Scripting.Dictionary")
+    Set mDAcc = CreateObject("Scripting.Dictionary")
+    Set mDLev = CreateObject("Scripting.Dictionary")
+    Set mDPairs = CreateObject("Scripting.Dictionary")
 
     mRw = modContentZone.ZoneReportWeek()
 
@@ -186,6 +201,21 @@ Private Sub EnsureDisc()
                             If Not mPPairs.Exists(pk) Then mPPairs.Add pk, New Collection
                             mPPairs(pk).Add num & Chr$(1) & IIf(isG, "G", "D")
                         End If
+                    End If
+                End If
+
+                ' Агрегаты по подразделениям (R9: ключ с дирекцией, без ФИО).
+                Dim dk2 As String
+                dk2 = dk & "|" & dep
+                modContentZone.AddCnt mDTot, dk2 & "|" & wS, 1#
+                If tab1 Then modContentZone.AddCnt mDTab, dk2 & "|" & wS, 1#
+                If CLng(wS) = mRw Then
+                    If isAcc Then
+                        modContentZone.AddCnt mDAcc, dk2, 1#
+                    Else
+                        modContentZone.AddCnt mDLev, dk2, 1#
+                        If Not mDPairs.Exists(dk2) Then mDPairs.Add dk2, New Collection
+                        mDPairs(dk2).Add num & Chr$(1) & IIf(isG, "G", "D")
                     End If
                 End If
             End If
@@ -459,7 +489,27 @@ Public Function BuildPostsTable(ByVal dir As String) As String
     Set zn = CreateObject("Scripting.Dictionary")
     Set zt = CreateObject("Scripting.Dictionary")
 
-    Dim k As Variant, e As Variant
+    ' И1: все ремзоны. Набор строк - REPORT/ZONES_ALL (разделитель «+»/«;»);
+    ' по умолчанию - объединение REPORT/SLIDE_ZONES и всех postN снимка.
+    Dim zonesAll As Object
+    Set zonesAll = CreateObject("Scripting.Dictionary")
+    Dim raw As String, pz As Variant, k As Variant, e As Variant
+    raw = modMain.GetVariableDef("REPORT/ZONES_ALL", "")
+    raw = Replace$(Trim$(raw), "+", ";")
+    For Each pz In Split(raw, ";")
+        If Len(Trim$(CStr(pz))) > 0 Then zonesAll(Trim$(CStr(pz))) = True
+    Next pz
+    If zonesAll.Count = 0 Then
+        raw = Replace$(Trim$(modMain.GetVariableDef("REPORT/SLIDE_ZONES", "СТК+ПРК")), "+", ";")
+        For Each pz In Split(raw, ";")
+            If Len(Trim$(CStr(pz))) > 0 Then zonesAll(Trim$(CStr(pz))) = True
+        Next pz
+        For Each k In mOrd.Keys
+            e = mOrd(k)
+            zonesAll(ZoneOf(e)) = True
+        Next k
+    End If
+
     For Each k In mOrd.Keys
         e = mOrd(k)
         Dim cntS As Long, cntT As Long, p As Long
@@ -486,6 +536,26 @@ Public Function BuildPostsTable(ByVal dir As String) As String
 
     Dim zl As Variant, zv As Variant
     modContentZone.TopKeys zn, 0, zl, zv
+
+    ' И1: ремзоны набора без нарядов за неделю - строками с нулями.
+    Dim ext As Long
+    ext = 0
+    For Each pz In zonesAll.Keys
+        If Not zn.Exists(CStr(pz)) Then ext = ext + 1
+    Next pz
+    If ext > 0 Then
+        ReDim Preserve zl(0 To UBound(zl) + ext)
+        ReDim Preserve zv(0 To UBound(zv) + ext)
+        Dim gi As Long
+        gi = UBound(zl) - ext
+        For Each pz In zonesAll.Keys
+            If Not zn.Exists(CStr(pz)) Then
+                zl(gi) = CStr(pz)
+                zv(gi) = 0#
+                gi = gi + 1
+            End If
+        Next pz
+    End If
 
     Dim s As String, i As Long
     s = "<table><thead><tr><th>РемЗона</th><th class=""n"">Нарядов</th>" & _
@@ -522,7 +592,9 @@ Public Function BuildPostsTable(ByVal dir As String) As String
         "статуса). «С планшета» " & ChrW$(&H2014) & " наряд, у которого все подписи " & _
         "дирекции за эту неделю поставлены с планшета. Разрез " & ChrW$(&H2014) & _
         " нормализованная ремзона <code>postN</code>; «пост не указан» " & _
-        ChrW$(&H2014) & " отдельной строкой.")
+        ChrW$(&H2014) & " отдельной строкой. Строки - все ремзоны набора " & _
+        "<code>REPORT/ZONES_ALL</code> (по умолчанию SLIDE_ZONES + все postN " & _
+        "снимка); ремзоны без нарядов за неделю показаны нулями.")
     BuildPostsTable = s
 End Function
 
@@ -668,6 +740,122 @@ Private Function AvgSpan(ByVal pk As String) As String
     If cnt > 0 Then AvgSpan = modContentZone.Hh(sum / cnt)
 End Function
 
+' {{BLOCK_DEPTS_*}} - подразделения дирекции (по образцу BuildPeople, без сотрудников).
+' Слева тренд % планшета за четыре недели, справа объём и время за отчётную неделю.
+' Ключи агрегатов содержат дирекцию (решение R9): слайды 2 и 3 различаются.
+Public Function BuildDepts(ByVal dir As String) As String
+    EnsureDisc
+    Dim wk As Variant
+    wk = modContentZone.WeekWindow(4)
+
+    ' Отбор (R7): подразделения с хотя бы одним событием за отчётную неделю.
+    Dim pick As Object
+    Set pick = CreateObject("Scripting.Dictionary")
+    Dim k As Variant, parts As Variant
+    For Each k In mDTot.Keys
+        parts = Split(CStr(k), "|")
+        If CStr(parts(0)) = dir And CLng(parts(2)) = mRw Then
+            pick(CStr(parts(1))) = modContentZone.SafePct( _
+                modContentZone.DictVal(mDTab, CStr(k)), _
+                modContentZone.DictVal(mDTot, CStr(k)))
+        End If
+    Next k
+    If pick.Count = 0 Then BuildDepts = modContentMTO.EmptyNote(): Exit Function
+
+    Dim dl As Variant, dv As Variant
+    modContentZone.TopKeys pick, 0, dl, dv
+
+    Dim s As String, i As Long
+    s = "<table><thead><tr><th rowspan=""4"">Подразделение</th>" & _
+        "<th class=""grp"" colspan=""4"">% планшета по неделям</th>" & _
+        "<th class=""grp sep-l"" colspan=""5"">Отчётная неделя " & _
+        modContentZone.WLab(mRw) & " (" & modContentZone.WeekRange(mRw) & ")</th></tr>"
+    s = s & "<tr><th></th><th class=""n"">ПН-1 " & ChrW$(&HB7) & " " & _
+        modContentZone.WLab(CLng(wk(2))) & "</th><th></th><th></th>" & _
+        "<th class=""n sep-l"" rowspan=""3"">Всего подписей</th>" & _
+        "<th class=""n"" rowspan=""3"">Из них планшет</th>" & _
+        "<th class=""n"" rowspan=""3"">Приёмка</th>" & _
+        "<th class=""n"" rowspan=""3"">Выбытие</th>" & _
+        "<th class=""n"" rowspan=""3"">Ср. время</th></tr>"
+    s = s & "<tr><th class=""n"">ПН " & ChrW$(&HB7) & " " & _
+        modContentZone.WLab(CLng(wk(3))) & "</th><th></th><th class=""n"">ПН-2 " & _
+        ChrW$(&HB7) & " " & modContentZone.WLab(CLng(wk(1))) & "</th><th></th></tr>"
+    s = s & "<tr><th></th><th></th><th></th><th class=""n"">ПН-3 " & _
+        ChrW$(&HB7) & " " & modContentZone.WLab(CLng(wk(0))) & "</th></tr></thead><tbody>"
+
+    For i = 0 To UBound(dl)
+        Dim dep As String, depLab As String
+        dep = CStr(dl(i))
+        If dep = "" Then depLab = "(подразделение не указано)" Else depLab = dep
+        s = s & "<tr><td class=""head"">" & modContentMTO.Esc(depLab) & "</td>"
+        Dim j As Long
+        Dim pj(0 To 3) As Double, hj(0 To 3) As Boolean
+        For j = 0 To 3
+            Dim key As String, t As Double, b As Double
+            key = dir & "|" & dep & "|" & CStr(wk(j))
+            t = modContentZone.DictVal(mDTot, key)
+            b = modContentZone.DictVal(mDTab, key)
+            pj(j) = modContentZone.SafePct(b, t)
+            hj(j) = (t > 0#)
+        Next j
+        s = s & modContentZone.PctTd(pj(3), hj(3))
+        s = s & PctArrowTd(pj(2), hj(2), pj(1), hj(1))
+        s = s & PctArrowTd(pj(1), hj(1), pj(0), hj(0))
+        Dim keyP As String, tPrev As Double
+        keyP = dir & "|" & dep & "|" & CStr(modContentZone.PrevWeek(CLng(wk(0))))
+        tPrev = modContentZone.DictVal(mDTot, keyP)
+        s = s & PctArrowTd(pj(0), hj(0), _
+            modContentZone.SafePct(modContentZone.DictVal(mDTab, keyP), tPrev), tPrev > 0#)
+        Dim rk As String, tot As Double, tab1 As Double
+        rk = dir & "|" & dep & "|" & CStr(mRw)
+        tot = modContentZone.DictVal(mDTot, rk)
+        tab1 = modContentZone.DictVal(mDTab, rk)
+        s = s & "<td class=""n sep-l"">" & modContentMTO.FmtInt(tot) & "</td>"
+        s = s & "<td class=""n"">" & modContentMTO.FmtInt(tab1) & "</td>"
+        s = s & "<td class=""n"">" & modContentMTO.FmtInt( _
+            modContentZone.DictVal(mDAcc, dir & "|" & dep)) & "</td>"
+        s = s & "<td class=""n"">" & modContentMTO.FmtInt( _
+            modContentZone.DictVal(mDLev, dir & "|" & dep)) & "</td>"
+        s = s & "<td class=""n"">" & AvgSpanD(dir & "|" & dep) & "</td></tr>"
+    Next i
+    s = s & "</tbody></table>"
+
+    s = s & modContentZone.NoteBlk("% планшета за четыре недели (ПН-3 " & _
+        ChrW$(&H2026) & " ПН) по дате статуса; стрелка " & ChrW$(&H2191) & " / " & _
+        ChrW$(&H2193) & " - рост / падение процента к предыдущей неделе. " & _
+        "Справа - объём и время за отчётную неделю " & modContentZone.WLab(mRw) & ". " & _
+        "Порог включения - хотя бы одно событие подписания за отчётную неделю (R7); " & _
+        "в списке " & modContentMTO.FmtInt(CDbl(pick.Count)) & _
+        " подразделений. Подразделение - <code>emp_dep</code> сотрудника.")
+    BuildDepts = s
+End Function
+
+' Среднее «приёмка -> выбытие» по нарядам подразделения (аналог AvgSpan на mDPairs).
+Private Function AvgSpanD(ByVal dk2 As String) As String
+    AvgSpanD = ChrW$(&H2014)
+    If Not mDPairs.Exists(dk2) Then Exit Function
+    Dim col As Collection, i As Long, sum As Double, cnt As Long
+    Set col = mDPairs(dk2)
+    sum = 0#: cnt = 0
+    For i = 1 To col.Count
+        Dim pr As Variant, e As Variant, a As Double, l As Double
+        pr = Split(CStr(col(i)), Chr$(1))
+        If mOrd.Exists(CStr(pr(0))) Then
+            e = mOrd(CStr(pr(0)))
+            If CStr(pr(1)) = "G" Then
+                a = CDbl(e(E_TAG)): l = CDbl(e(E_TLG))
+            Else
+                a = CDbl(e(E_TAD)): l = CDbl(e(E_TLD))
+            End If
+            If a > 0# And l >= a Then
+                sum = sum + (l - a) * 24#
+                cnt = cnt + 1
+            End If
+        End If
+    Next i
+    If cnt > 0 Then AvgSpanD = modContentZone.Hh(sum / cnt)
+End Function
+
 ' {{BLOCK_SIGNSTAT_*}} - разбор всех нарядов дирекции по подписанным статусам.
 ' Единица счёта - ЗАКАЗ-НАРЯД.
 Public Function BuildSignStat(ByVal dir As String) As String
@@ -679,39 +867,41 @@ Public Function BuildSignStat(ByVal dir As String) As String
     Dim k As Variant, e As Variant
     For Each k In mOrd.Keys
         e = mOrd(k)
-        tot = tot + 1#
-        Dim aa As String, ll As String, accS As Boolean, levS As Boolean
-        aa = CStr(e(ArmField(dir, True)))
-        ll = CStr(e(ArmField(dir, False)))
-        accS = (aa = "ПК" Or aa = "ПЛАНШЕТ")
-        levS = (ll = "ПК" Or ll = "ПЛАНШЕТ")
+        If modContentZone.InYtdOrd(e) Then
+            tot = tot + 1#
+            Dim aa As String, ll As String, accS As Boolean, levS As Boolean
+            aa = CStr(e(ArmField(dir, True)))
+            ll = CStr(e(ArmField(dir, False)))
+            accS = (aa = "ПК" Or aa = "ПЛАНШЕТ")
+            levS = (ll = "ПК" Or ll = "ПЛАНШЕТ")
 
-        If accS And levS Then
-            full = full + 1#
-            Dim nt As Long
-            nt = 0
-            If aa = "ПЛАНШЕТ" Then nt = nt + 1
-            If ll = "ПЛАНШЕТ" Then nt = nt + 1
-            If nt = 2 Then
-                bothT = bothT + 1#
-            ElseIf nt = 1 Then
-                mixT = mixT + 1#
+            If accS And levS Then
+                full = full + 1#
+                Dim nt As Long
+                nt = 0
+                If aa = "ПЛАНШЕТ" Then nt = nt + 1
+                If ll = "ПЛАНШЕТ" Then nt = nt + 1
+                If nt = 2 Then
+                    bothT = bothT + 1#
+                ElseIf nt = 1 Then
+                    mixT = mixT + 1#
+                Else
+                    bothP = bothP + 1#
+                End If
+            ElseIf accS Then
+                onlyA = onlyA + 1#
+            ElseIf levS Then
+                onlyL = onlyL + 1#
             Else
-                bothP = bothP + 1#
+                none = none + 1#
             End If
-        ElseIf accS Then
-            onlyA = onlyA + 1#
-        ElseIf levS Then
-            onlyL = onlyL + 1#
-        Else
-            none = none + 1#
-        End If
 
-        Dim b As Long
-        b = AgeBucket4(CDbl(e(E_DATE)))
-        If b >= 0 Then
-            If Not accS Then aUn(b) = aUn(b) + 1#
-            If Not levS Then lUn(b) = lUn(b) + 1#
+            Dim b As Long
+            b = AgeBucket4(CDbl(e(E_DATE)))
+            If b >= 0 Then
+                If Not accS Then aUn(b) = aUn(b) + 1#
+                If Not levS Then lUn(b) = lUn(b) + 1#
+            End If
         End If
     Next k
     If tot = 0# Then BuildSignStat = modContentMTO.EmptyNote(): Exit Function
@@ -755,7 +945,7 @@ Public Function BuildSignStat(ByVal dir As String) As String
         "различаются АРМ подписей (" & dir & ": " & _
         modContentZone.Pc(modContentZone.SafePct(bothT, full), 1) & " нарядов целиком с " & _
         "планшета). График справа " & ChrW$(&H2014) & " неподписанные статусы в разрезе " & _
-        "возраста наряда от даты создания. Период - весь снимок.")
+        "возраста наряда от даты создания. Период - с начала года (01.01.2026).")
     BuildSignStat = s
 End Function
 
@@ -801,7 +991,7 @@ Public Function BuildNoSignSplit(ByVal sDir As String, ByVal fld As Long, _
     tot = 0#
     For Each k In mOrd.Keys
         e = mOrd(k)
-        If SignedCount(e) = 0 Then
+        If SignedCount(e) = 0 And modContentZone.InYtdOrd(e) Then
             Dim v As String
             v = Trim$(CStr(e(fld)))
             If v = "" Then v = emptyLab
@@ -829,7 +1019,8 @@ Public Function BuildNoSignSplit(ByVal sDir As String, ByVal fld As Long, _
     s = s & modContentZone.NoteBlk("Наряды без единой подписи (0 из 4 подписей с АРМ " & _
         "ПК/ПЛАНШЕТ), разрез " & modContentMTO.Esc(colLab) & "; процент от числа таких " & _
         "нарядов (" & modContentMTO.FmtInt(tot) & "). Отбор не зависит от дирекции: у " & _
-        "наряда без единой подписи нет подписей ни одной дирекции. Период - весь снимок.")
+        "наряда без единой подписи нет подписей ни одной дирекции. Период - " & _
+        "с начала года (01.01.2026).")
     BuildNoSignSplit = s
 End Function
 
@@ -855,18 +1046,20 @@ Public Function BuildKpiUnsigned() As String
     tot = 0#: none = 0#: part = 0#: oldest = 0#
     For Each k In mOrd.Keys
         e = mOrd(k)
-        tot = tot + 1#
-        Dim c As Long
-        c = SignedCount(e)
-        If c = 0 Then
-            none = none + 1#
-            If CDbl(e(E_DATE)) > 0# Then
-                Dim a As Double
-                a = modContentZone.SnapshotEnd() - CDbl(e(E_DATE))
-                If a > oldest Then oldest = a
+        If modContentZone.InYtdOrd(e) Then
+            tot = tot + 1#
+            Dim c As Long
+            c = SignedCount(e)
+            If c = 0 Then
+                none = none + 1#
+                If CDbl(e(E_DATE)) > 0# Then
+                    Dim a As Double
+                    a = modContentZone.SnapshotEnd() - CDbl(e(E_DATE))
+                    If a > oldest Then oldest = a
+                End If
+            ElseIf c < 4 Then
+                part = part + 1#
             End If
-        ElseIf c < 4 Then
-            part = part + 1#
         End If
     Next k
     If tot = 0# Then BuildKpiUnsigned = modContentMTO.EmptyNote(): Exit Function
@@ -884,6 +1077,12 @@ Public Function BuildKpiUnsigned() As String
         "часть из 4 строк наряда")
     s = s & modContentZone.KpiTile("Самый старый", modContentMTO.FmtInt(Int(oldest)) & _
         " <small>сут</small>", "crit", "от даты создания наряда")
+    s = s & modContentZone.NoteBlk("Плитки слайда 4: нарядов без единой подписи - " & _
+        "наряды без подписей с АРМ ПК/ПЛАНШЕТ (0 из 4), % от всех нарядов; событий " & _
+        "«НЕ ПОДПИСАНО» - строки снимка с пустым АРМ, % от всех событий; подписан " & _
+        "частично - наряды с 1-3 подписями из 4; самый старый - возраст в сутках " & _
+        "самого старого неподписанного наряда от даты создания до конца снимка. " & _
+        "Период - с начала года (01.01.2026).")
     BuildKpiUnsigned = s & "</div>"
 End Function
 
@@ -895,7 +1094,7 @@ Private Function UnsignedBy(ByVal fld As Long, ByVal emptyLab As String) As Obje
     Dim k As Variant, e As Variant
     For Each k In mOrd.Keys
         e = mOrd(k)
-        If SignedCount(e) = 0 Then
+        If SignedCount(e) = 0 And modContentZone.InYtdOrd(e) Then
             Dim v As String
             v = Trim$(CStr(e(fld)))
             If v = "" Then v = emptyLab
@@ -914,7 +1113,7 @@ Public Function BuildUnsignedAge() As String
     Dim k As Variant, e As Variant
     For Each k In mOrd.Keys
         e = mOrd(k)
-        If SignedCount(e) = 0 And CDbl(e(E_DATE)) > 0# Then
+        If SignedCount(e) = 0 And CDbl(e(E_DATE)) > 0# And modContentZone.InYtdOrd(e) Then
             Dim a As Double
             a = modContentZone.SnapshotEnd() - CDbl(e(E_DATE))
             If a < 3# Then
@@ -957,7 +1156,7 @@ Public Function BuildUnsignedPost() As String
     BuildUnsignedPost = modContentZone.HBars(labs, vals, 660, 230, 24) & _
         modContentZone.NoteBlk("Наряды без единой подписи в разрезе нормализованной " & _
         "ремзоны <code>postN</code>; пустой postN " & ChrW$(&H2014) & _
-        " отдельной строкой «(пост не указан)». Период - весь снимок.")
+        " отдельной строкой «(пост не указан)». Период - с начала года (01.01.2026).")
 End Function
 
 Public Function BuildUnsignedOwner() As String
@@ -968,7 +1167,8 @@ Public Function BuildUnsignedOwner() As String
     modContentZone.TopKeys d, 6, labs, vals
     BuildUnsignedOwner = modContentZone.HBars(labs, vals, 660, 280, 24) & _
         modContentZone.NoteBlk("Наряды без единой подписи в разрезе <code>owner_dep</code>; " & _
-        "пустой владелец показан отдельной строкой «(владелец не указан)». Период - весь снимок.")
+        "пустой владелец показан отдельной строкой «(владелец не указан)». Период - " & _
+        "с начала года (01.01.2026).")
 End Function
 
 Public Function BuildUnsignedZnType() As String
@@ -979,7 +1179,8 @@ Public Function BuildUnsignedZnType() As String
     modContentZone.TopKeys d, 6, labs, vals
     BuildUnsignedZnType = modContentZone.HBars(labs, vals, 680, 230, 24) & _
         modContentZone.NoteBlk("Наряды без единой подписи в разрезе <code>zn_type</code>; " & _
-        "пустой вид показан отдельной строкой «(вид не указан)». Период - весь снимок.")
+        "пустой вид показан отдельной строкой «(вид не указан)». Период - с начала " & _
+        "года (01.01.2026).")
 End Function
 
 ' =====================================================================================
@@ -994,6 +1195,7 @@ Public Sub FillDiscPlaceholders(ByVal d As Object)
     d("BLOCK_TABLE1_DENT") = BuildBlock1("ДЭНТ")
     d("BLOCK_POSTS_DENT") = BuildPostsTable("ДЭНТ")
     d("BLOCK_PEOPLE_DENT") = BuildPeople("ДЭНТ")
+    d("BLOCK_DEPTS_DENT") = BuildDepts("ДЭНТ")
     d("BLOCK_SIGNSTAT_DENT") = BuildSignStat("ДЭНТ")
     d("BLOCK_NOSIGN_STATUS_DENT") = BuildNoSignSplit("ДЭНТ", E_TEK, "(статус не указан)", "Текущий статус заказ-наряда")
     d("BLOCK_NOSIGN_TYPE_DENT") = BuildNoSignSplit("ДЭНТ", E_TYPE, "(вид не указан)", "Вид ремонта")
@@ -1004,6 +1206,7 @@ Public Sub FillDiscPlaceholders(ByVal d As Object)
     d("BLOCK_TABLE1_DGM") = BuildBlock1("ДГМ")
     d("BLOCK_POSTS_DGM") = BuildPostsTable("ДГМ")
     d("BLOCK_PEOPLE_DGM") = BuildPeople("ДГМ")
+    d("BLOCK_DEPTS_DGM") = BuildDepts("ДГМ")
     d("BLOCK_SIGNSTAT_DGM") = BuildSignStat("ДГМ")
     d("BLOCK_NOSIGN_STATUS_DGM") = BuildNoSignSplit("ДГМ", E_TEK, "(статус не указан)", "Текущий статус заказ-наряда")
     d("BLOCK_NOSIGN_TYPE_DGM") = BuildNoSignSplit("ДГМ", E_TYPE, "(вид не указан)", "Вид ремонта")
