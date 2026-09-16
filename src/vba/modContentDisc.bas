@@ -544,10 +544,16 @@ Public Function BuildPostsTable(ByVal dir As String) As String
         If Not zn.Exists(CStr(pz)) Then ext = ext + 1
     Next pz
     If ext > 0 Then
-        ReDim Preserve zl(0 To UBound(zl) + ext)
-        ReDim Preserve zv(0 To UBound(zv) + ext)
+        ' Дописывать нулевые ремзоны надо ПОСЛЕ последней реальной, поэтому граница
+        ' массива запоминается до ReDim: UBound после расширения уже сдвинут на ext, и
+        ' счёт от него затирал последнюю реальную ремзону, а последний элемент
+        ' оставался пустым - в таблице пропадала ремзона и появлялась строка без имени.
+        Dim ub0 As Long
+        ub0 = UBound(zl)
+        ReDim Preserve zl(0 To ub0 + ext)
+        ReDim Preserve zv(0 To ub0 + ext)
         Dim gi As Long
-        gi = UBound(zl) - ext
+        gi = ub0 + 1
         For Each pz In zonesAll.Keys
             If Not zn.Exists(CStr(pz)) Then
                 zl(gi) = CStr(pz)
@@ -690,8 +696,8 @@ Public Function BuildPeople(ByVal dir As String) As String
         ChrW$(&H2193) & " - рост / падение процента к предыдущей неделе сотрудника. " & _
         "Справа - объём и время за отчётную неделю " & modContentZone.WLab(mRw) & ". " & _
         "Порог включения - не менее " & modContentMTO.FmtInt(minRec) & " событий за " & _
-        "отчётную неделю; в списке " & modContentMTO.FmtInt(CDbl(pick.Count)) & _
-        " человек. ФИО во внешнюю модель не уходят.")
+        "отчётную неделю; сотрудников в списке: " & modContentMTO.FmtInt(CDbl(pick.Count)) & _
+        ". ФИО во внешнюю модель не уходят.")
     BuildPeople = s
 End Function
 
@@ -825,8 +831,8 @@ Public Function BuildDepts(ByVal dir As String) As String
         ChrW$(&H2193) & " - рост / падение процента к предыдущей неделе. " & _
         "Справа - объём и время за отчётную неделю " & modContentZone.WLab(mRw) & ". " & _
         "Порог включения - хотя бы одно событие подписания за отчётную неделю (R7); " & _
-        "в списке " & modContentMTO.FmtInt(CDbl(pick.Count)) & _
-        " подразделений. Подразделение - <code>emp_dep</code> сотрудника.")
+        "подразделений в списке: " & modContentMTO.FmtInt(CDbl(pick.Count)) & _
+        ". Подразделение - <code>emp_dep</code> сотрудника.")
     BuildDepts = s
 End Function
 
