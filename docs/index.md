@@ -1,5 +1,10 @@
 # Карта документации
 
+> Версия 1.5 от 16.09.2026. В archive/ перенесены выполненные ТЗ/планы
+> (`tz_developer_logging_and_release_v1.0.md`, `tz_pq_profile_optimize_v1.0.md`,
+> `tz_pq_optimizations_and_e2e_v1.0.md`, `git-sync-v1.0.md`, `MTO_отчёт_v8.0_раскатка_v1.0.md`,
+> `MTO_ТЗ_доработка_отчета_v1.6.md`, `next-steps.md`) и исходник постановки `task-rep.md`
+> (заменён `task-rep-v2.md`). Ссылки в README/index/tasks/task-rep-v2 обновлены.
 > Версия 1.4 от 14.09.2026. Наведён порядок в docs: устаревшие планы/ТЗ, манифест v6.1 и
 > logs.md перенесены в archive/; пустой и нечитаемые файлы удалены; docs/archive/ добавлен
 > в .kilocodeignore.
@@ -30,9 +35,9 @@
 | Где | Что искать |
 |---|---|
 | [`specs/`](specs/data.md) | Спецификации: `data.md` (данные и поля), `brief-data-mto.md` (предметная область), `pri-json-findings-v1.md` (разбор выгрузки), `architecture-diagram.html`. Манифест v6.1 — в `archive/`, контроль целостности ведёт `install\install.ps1`. `content-spec.md` удалён вместе с `spec.md` в 7146c03 |
-| [`plans/`](plans/next-steps.md) | Планы. Актуальное по текущей задаче — `MTO_отчёт_v8.0_раскатка_v1.0.md` и `MTO_контракт_шаблона_v1.0.md`; `next-steps.md` — ревизия 24.08.2026, ссылается на удалённые документы, читать как историю |
+| [`plans/`](plans/plan_fix_loadpackage_a-c_v1.0.md) | Планы. Актуальные: `plan_fix_loadpackage_a-c_v1.0.md` (оптимизация загрузки), `analysis_loadpackage_hang_v1.0.md`, `task-rep-v2-постановка-разработчику.md`, `MTO_контракт_шаблона_v1.0.md`. Выполненные ТЗ/планы и ревизия 24.08 (`next-steps.md`) — в `archive/` |
 | [`presentations/`](presentations/MTO_Презентация_и_блоки_данных_v2.5.md) | Презентации (актуальные версии) |
-| [`archive/`](archive/reorganize-project.md) | История: выполненные планы, старые версии документов и инструкций, handoff-записки |
+| [`archive/`](archive/logs.md) | История: выполненные планы, старые версии документов и инструкций, handoff-записки |
 | [`../install/`](../install/install-v7.1.md) | Инструкции установки/обновления и скрипты `install.ps1` (установка + релиз) / `install_prod.ps1` (прод) |
 | [`../tests/`](../tests/testing-e2e-v1.md) | Тесты: код, данные, эталоны, инструкция запуска |
 
