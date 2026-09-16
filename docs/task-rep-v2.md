@@ -183,7 +183,25 @@
 
 ## Часть 3
 
-- [ ] **1.** Кто чаще заезжает на повторный и какими поломками.
+- [x] **1.** Кто чаще заезжает на повторный и какими поломками (часть 3 целиком).
+  Реализовано по [`docs/plans/tz_Remzona_Part3_v1.0.md`](plans/tz_Remzona_Part3_v1.0.md)
+  в [`modContentZone.bas`](../src/vba/modContentZone.bas:1):
+  - «Топ машин по числу повторных заездов» — [`BuildRepeatTopVeh()`](../src/vba/modContentZone.bas:3146),
+    плейсхолдеры `BLOCK_REPEAT_TOP_VEH_YTD` / `BLOCK_REPEAT_TOP_VEH_WK`;
+  - «Повторы по группам дефектов» — [`BuildRepeatTopDef()`](../src/vba/modContentZone.bas:3174),
+    плейсхолдеры `BLOCK_REPEAT_TOP_DEF_YTD` / `BLOCK_REPEAT_TOP_DEF_WK`;
+  - «Сколько машина стояла и сколько трудочасов списано» — [`BuildDownVsHours()`](../src/vba/modContentZone.bas:3196)
+    (полные пары «Готов к приемке → Готов к выбытию» по дирекциям, `cost_Trudozatrat`, `hourdlit`),
+    плейсхолдеры `BLOCK_DOWN_VS_HOURS_YTD` / `BLOCK_DOWN_VS_HOURS_WK`;
+  - «Время от создания до приёмки по видам техники» — [`BuildCreateToAcc()`](../src/vba/modContentZone.bas:3270),
+    плейсхолдеры `BLOCK_CREATE_TO_ACC_YTD` / `BLOCK_CREATE_TO_ACC_WK`;
+  - NoteBlk фаз [`BuildPhases()`](../src/vba/modContentZone.bas:2455) уточнён: «день ремзоны» —
+    фазы «ремзона» и «закрытие», фаза «постановка» (создание → приёмка) в него не входит.
+  Решения владельца: **R1** — разрез топ-10 `vehicle_group` + строка «прочие»; **R2** — по два
+  экземпляра каждого блока (YTD — весь снимок, WK — отчётная неделя, `Z_WEEK = ZoneReportWeek()`);
+  **R3** — размещение на слайде 7; **R4** — блок простоя/трудочасов в виде таблицы
+  «Машина / Стояла / Списано / План» + бары простоя (три серии на одном графике не делались).
+  Установлено в build- и прод-книги, компиляция и прогон отчёта — 15.09.2026.
 
 ## Контроль переноса
 

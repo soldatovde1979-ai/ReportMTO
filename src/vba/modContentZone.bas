@@ -82,7 +82,9 @@ Private Const Z_NODE As Long = 18       ' узел внутри группы (к
 Private Const Z_WEEK As Long = 19       ' ISO год*100 + неделя по date
 Private Const Z_MONTH As Long = 20      ' год*100 + месяц по date
 Private Const Z_ZONE As Long = 21       ' postN - нормализованная ремзона (блоки «без ремзоны»)
-Private Const Z_FIELDS As Long = 22
+Private Const Z_TRUD As Long = 22       ' cost_Trudozatrat, фактические часы (уровень наряда)
+Private Const Z_PLAN As Long = 23       ' hourdlit, плановая длительность ремонта, часы
+Private Const Z_FIELDS As Long = 24
 
 ' Поля записи машины (mVeh: vehicle_number -> Variant-массив)
 Private Const V_ZN As Long = 0
@@ -180,6 +182,7 @@ Private Sub EnsureZn()
     Set mSignTab = CreateObject("Scripting.Dictionary")
 
     Dim hasVeh As Boolean, hasParts As Boolean, hasClosed As Boolean
+    Dim hasTrud As Boolean, hasPlan As Boolean
     Dim hasMade As Boolean, hasTek As Boolean, hasGroup As Boolean, hasOwner As Boolean
     Dim hasDesc As Boolean, hasOdo As Boolean, hasEng As Boolean, hasBounds As Boolean
     Dim hasZone As Boolean
@@ -189,6 +192,8 @@ Private Sub EnsureZn()
     hasMade = modAggregate.HasColumn("MadeYear")
     hasTek = modAggregate.HasColumn("TekStatusPoDoc")
     hasGroup = modAggregate.HasColumn("vehicle_group")
+    hasTrud = modAggregate.HasColumn("cost_Trudozatrat")
+    hasPlan = modAggregate.HasColumn("hourdlit")
     hasOwner = modAggregate.HasColumn("owner_dep")
     hasDesc = modAggregate.HasColumn("defect_desc")
     hasOdo = modAggregate.HasColumn("odometer")
@@ -231,6 +236,8 @@ Private Sub EnsureZn()
                 If hasMade Then z(Z_MADE) = ToSerial(modAggregate.CellRaw(r, "MadeYear")) Else z(Z_MADE) = 0#
                 If hasClosed Then z(Z_CLOSED) = ToSerial(modAggregate.CellRaw(r, "zn_closed")) Else z(Z_CLOSED) = 0#
                 If hasParts Then z(Z_PARTS) = ToNum(modAggregate.CellRaw(r, "cost_parts")) Else z(Z_PARTS) = 0#
+                If hasTrud Then z(Z_TRUD) = ToNum(modAggregate.CellRaw(r, "cost_Trudozatrat")) Else z(Z_TRUD) = 0#
+                If hasPlan Then z(Z_PLAN) = ToNum(modAggregate.CellRaw(r, "hourdlit")) Else z(Z_PLAN) = 0#
             End If
 
             Dim sd As Double
@@ -2450,6 +2457,9 @@ Public Function BuildPhases() As String
         ChrW$(&H2192) & " выбытие), закрытие (выбытие " & ChrW$(&H2192) & _
         " zn_closed). Средняя полоса включает очередь и ожидание запчастей: отделить " & _
         "очередь от ремонта можно только по истории смены поста, а её в выгрузке нет. " & _
+        "День ремзоны - фазы «ремзона» и «закрытие»; фаза «постановка» (создание -> " & _
+        "приёмка) в него не входит: в этой фазе машина ещё движется, разрез этой фазы " & _
+        "по видам техники - в блоке ниже. " & _
         "Медианы недели " & WLab(CLng(wk(UBound(wk)))) & ": постановка " & Hh(s1) & _
         ", ремзона " & Hh(s2) & ", закрытие " & Hh(s3) & ".")
     BuildPhases = s
@@ -3050,6 +3060,309 @@ Public Function BuildRequest() As String
 End Function
 
 ' =====================================================================================
+' Часть 3 постановки docs/task-rep.md: повторные топы, простой против трудочасов,
+' создание -> приёмка по видам техники. Период: byWeek = False - с начала года
+' (весь снимок), True - отчётная неделя (Z_WEEK = ZoneReportWeek()).
+' =====================================================================================
+Private Function InPeriod(ByVal z As Variant, ByVal byWeek As Boolean) As Boolean
+    If Not byWeek Then InPeriod = True: Exit Function
+    InPeriod = (CLng(z(Z_WEEK)) = ZoneReportWeek())
+End Function
+
+Private Function PerLabel(ByVal byWeek As Boolean) As String
+    If byWeek Then
+        PerLabel = "отчётная неделя " & WLab(ZoneReportWeek())
+    Else
+        PerLabel = "с начала года (весь снимок)"
+    End If
+End Function
+
+' Пары повторов как в BuildRepeats (внеплановые, та же машина + группа, <=30 сут).
+' Недельный экземпляр засчитывает пару, если второй наряд пары создан на отчётной неделе.
+Private Sub RepeatAggregate(ByVal byWeek As Boolean, _
+        ByRef vCnt As Object, ByRef vGrp As Object, ByRef vGap As Object, _
+        ByRef dCnt As Object, ByRef totPairs As Long)
+    Set vCnt = CreateObject("Scripting.Dictionary")
+    Set vGrp = CreateObject("Scripting.Dictionary")
+    Set vGap = CreateObject("Scripting.Dictionary")
+    Set dCnt = CreateObject("Scripting.Dictionary")
+    totPairs = 0
+    EnsureZn
+    Dim byK As Object
+    Set byK = CreateObject("Scripting.Dictionary")
+    Dim k As Variant, z As Variant, kk As String
+    For Each k In mZn.Keys
+        z = mZn(k)
+        If Not IsPlanned(CStr(z(Z_TYPE))) Then
+            If Len(CStr(z(Z_VEH))) > 0 And CDbl(z(Z_DATE)) > 0# _
+               And Len(Trim$(CStr(z(Z_DEFEKT)))) > 0 Then
+                kk = CStr(z(Z_VEH)) & Chr$(1) & CStr(z(Z_DEFEKT))
+                If Not byK.Exists(kk) Then byK.Add kk, New Collection
+                byK(kk).Add CStr(k)
+            End If
+        End If
+    Next k
+
+    Dim col As Collection, i As Long, ds() As Double, ns() As String
+    For Each k In byK.Keys
+        Set col = byK(k)
+        If col.Count > 1 Then
+            ReDim ds(0 To col.Count - 1)
+            ReDim ns(0 To col.Count - 1)
+            For i = 1 To col.Count
+                ns(i - 1) = CStr(col(i))
+                ds(i - 1) = CDbl(mZn(ns(i - 1))(Z_DATE))
+            Next i
+            QSortPair ds, ns, 0, UBound(ds)
+            For i = 0 To UBound(ds) - 1
+                Dim gp As Double
+                gp = Int(ds(i + 1) - ds(i))
+                If gp > 0# And gp <= 30# Then
+                    If Not byWeek Or CLng(mZn(ns(i + 1))(Z_WEEK)) = ZoneReportWeek() Then
+                        Dim veh As String, defk As String, j As Long, ex As Boolean
+                        defk = CStr(mZn(ns(i))(Z_DEFEKT))
+                        veh = CStr(mZn(ns(i))(Z_VEH))
+                        totPairs = totPairs + 1
+                        AddCnt dCnt, defk, 1#
+                        AddCnt vCnt, veh, 1#
+                        If vGap.Exists(veh) Then
+                            If gp > CDbl(vGap(veh)) Then vGap(veh) = gp
+                        Else
+                            vGap.Add veh, gp
+                        End If
+                        If Not vGrp.Exists(veh) Then vGrp.Add veh, New Collection
+                        ex = False
+                        For j = 1 To vGrp(veh).Count
+                            If vGrp(veh)(j) = defk Then ex = True: Exit For
+                        Next j
+                        If Not ex Then vGrp(veh).Add defk
+                    End If
+                End If
+            Next i
+        End If
+    Next k
+End Sub
+
+Public Function BuildRepeatTopVeh(ByVal byWeek As Boolean) As String
+    Dim vCnt As Object, vGrp As Object, vGap As Object, dCnt As Object, tot As Long
+    RepeatAggregate byWeek, vCnt, vGrp, vGap, dCnt, tot
+    Dim labs As Variant, vals As Variant, i As Long
+    TopKeys vCnt, 10, labs, vals
+    Dim s As String, g As Variant, gn As String
+    s = "<div class=""scroll""><table><thead><tr><th>Машина</th><th class=""n"">Повторных пар</th>" & _
+        "<th>Группы дефектов</th><th class=""n"">Макс. интервал, сут</th></tr></thead><tbody>"
+    For i = 0 To UBound(labs)
+        gn = ""
+        For Each g In vGrp(CStr(labs(i)))
+            If gn <> "" Then gn = gn & ", "
+            gn = gn & CStr(g)
+        Next g
+        s = s & "<tr><td class=""mono"">" & modContentMTO.Esc(CStr(labs(i))) & "</td>" & _
+            "<td class=""n"">" & modContentMTO.FmtInt(CDbl(vals(i))) & "</td>" & _
+            "<td>" & modContentMTO.Esc(Left$(gn, 60)) & "</td>" & _
+            "<td class=""n"">" & modContentMTO.FmtInt(CDbl(vGap(CStr(labs(i))))) & "</td></tr>"
+    Next i
+    If UBound(labs) < 0 Then s = s & "<tr><td colspan=""4"">" & Dash() & "</td></tr>"
+    s = s & "</tbody></table></div>"
+    s = s & NoteBlk("Топ машин по числу повторных заездов, всего " & modContentMTO.FmtInt(CDbl(tot)) & _
+        " повторных пар. Правило пары: внеплановые наряды одной машины с той же группой дефекта, " & _
+        "интервал между датами создания не более 30 суток. Период - " & PerLabel(byWeek) & ". " & _
+        "Группа дефекта крупная, поэтому список - верхняя граница кандидатов.")
+    BuildRepeatTopVeh = s
+End Function
+
+Public Function BuildRepeatTopDef(ByVal byWeek As Boolean) As String
+    Dim vCnt As Object, vGrp As Object, vGap As Object, dCnt As Object, tot As Long
+    RepeatAggregate byWeek, vCnt, vGrp, vGap, dCnt, tot
+    Dim labs As Variant, vals As Variant, i As Long, vv() As Variant
+    TopKeys dCnt, 10, labs, vals
+    Dim s As String
+    If UBound(labs) < 0 Then
+        s = modContentMTO.EmptyNote()
+    Else
+        ReDim vv(0 To UBound(labs))
+        For i = 0 To UBound(labs)
+            vv(i) = CDbl(vals(i))
+        Next i
+        s = "<figure>" & HBars(labs, vv, 680, 200, 25)
+        s = s & "<figcaption>Всего повторных пар: " & modContentMTO.FmtInt(CDbl(tot)) & "</figcaption></figure>"
+    End If
+    s = s & NoteBlk("Повторы по группам дефектов: топ-10 групп по числу повторных пар (внеплановые " & _
+        "наряды одной машины с той же группой дефекта, интервал создания не более 30 суток). " & _
+        "Период - " & PerLabel(byWeek) & ".")
+    BuildRepeatTopDef = s
+End Function
+
+Public Function BuildDownVsHours(ByVal byWeek As Boolean) As String
+    EnsureZn
+    Dim down As Object, trud As Object, plan As Object
+    Set down = CreateObject("Scripting.Dictionary")
+    Set trud = CreateObject("Scripting.Dictionary")
+    Set plan = CreateObject("Scripting.Dictionary")
+    Dim k As Variant, z As Variant, veh As String, hasPair As Boolean, j As Long
+    For Each k In mZn.Keys
+        z = mZn(k)
+        If InPeriod(z, byWeek) And Len(CStr(z(Z_VEH))) > 0 Then
+            veh = CStr(z(Z_VEH))
+            hasPair = False
+            If CDbl(z(Z_ACCG)) > 0# And CDbl(z(Z_LEVG)) >= CDbl(z(Z_ACCG)) Then
+                AddCnt down, veh, (CDbl(z(Z_LEVG)) - CDbl(z(Z_ACCG))) * 24#
+                hasPair = True
+            End If
+            If CDbl(z(Z_ACCD)) > 0# And CDbl(z(Z_LEVD)) >= CDbl(z(Z_ACCD)) Then
+                AddCnt down, veh, (CDbl(z(Z_LEVD)) - CDbl(z(Z_ACCD))) * 24#
+                hasPair = True
+            End If
+            If hasPair Then
+                AddCnt trud, veh, CDbl(z(Z_TRUD))
+                AddCnt plan, veh, CDbl(z(Z_PLAN))
+            End If
+        End If
+    Next k
+
+    Dim labs As Variant, vals As Variant
+    TopKeys down, 10, labs, vals
+    Dim s As String
+    If UBound(labs) < 0 Then
+        s = modContentMTO.EmptyNote()
+        s = s & NoteBlk("Простой (подписи «Готов к приемке» -> «Готов к выбытию») и трудочасы " & _
+            "по машинам. Период - " & PerLabel(byWeek) & ".")
+        BuildDownVsHours = s
+        Exit Function
+    End If
+    Dim col As Collection
+    Set col = New Collection
+    For Each k In down.Keys
+        col.Add CDbl(down(k))
+    Next k
+    Dim hasV As Boolean, med As Double
+    med = MedianOf(col, hasV)
+    Dim dv() As Variant, tv() As Variant
+    ReDim dv(0 To UBound(labs))
+    ReDim tv(0 To UBound(labs))
+    For j = 0 To UBound(labs)
+        dv(j) = CDbl(vals(j))
+        tv(j) = DictVal(trud, CStr(labs(j)))
+    Next j
+    s = "<div class=""scroll""><table><thead><tr><th>Машина</th><th class=""n"">Стояла, ч</th>" & _
+        "<th class=""n"">Списано, ч</th><th class=""n"">План, ч</th></tr></thead><tbody>"
+    For j = 0 To UBound(labs)
+        s = s & "<tr><td class=""mono"">" & modContentMTO.Esc(CStr(labs(j))) & "</td>" & _
+            "<td class=""n"">" & modContentMTO.FmtInt(CDbl(dv(j))) & "</td>" & _
+            "<td class=""n"">" & FmtF(tv(j), 1) & "</td>" & _
+            "<td class=""n"">" & FmtF(DictVal(plan, CStr(labs(j))), 1) & "</td></tr>"
+    Next j
+    s = s & "</tbody></table></div>"
+    s = s & "<figure>" & HBars(labs, dv, 680, 200, 25)
+    s = s & "<figcaption>Медиана простоя " & Hh(med) & " по машинам выборки</figcaption></figure>"
+    s = s & NoteBlk("Топ машин по суммарному простою. Стояла - сумма пар «Готов к приемке» -> " & _
+        "«Готов к выбытию» по нарядам машины (пара считается по каждой дирекции отдельно, " & _
+        "возможен двойной счёт дирекций). Списано - cost_Trudozatrat (фактические часы), " & _
+        "план - hourdlit (плановая длительность). Период - " & PerLabel(byWeek) & ".")
+    BuildDownVsHours = s
+End Function
+
+Public Function BuildCreateToAcc(ByVal byWeek As Boolean) As String
+    EnsureZn
+    Dim grpCnt As Object, grpH As Object
+    Dim colAll As Collection
+    Dim k As Variant, z As Variant, g As Variant
+    Dim acc As Double, t As Double
+    Dim labs As Variant, vals As Variant
+    Dim s As String, i As Long, j As Long, inTop As Boolean
+    Dim fl() As Variant, fm() As Double, fc() As Double, n As Long, others As Long
+    Dim medCol As Collection, hasV As Boolean
+    Dim medAll As Double
+    Dim flv() As Variant, fmv() As Variant
+
+    Set grpCnt = CreateObject("Scripting.Dictionary")
+    Set grpH = CreateObject("Scripting.Dictionary")
+    Set colAll = New Collection
+
+    For Each k In mZn.Keys
+        z = mZn(k)
+        If InPeriod(z, byWeek) Then
+            acc = 0#
+            If CDbl(z(Z_ACCG)) > 0# And CDbl(z(Z_ACCD)) > 0# Then
+                acc = CDbl(z(Z_ACCG))
+                If CDbl(z(Z_ACCD)) < acc Then acc = CDbl(z(Z_ACCD))
+            ElseIf CDbl(z(Z_ACCG)) > 0# Then
+                acc = CDbl(z(Z_ACCG))
+            ElseIf CDbl(z(Z_ACCD)) > 0# Then
+                acc = CDbl(z(Z_ACCD))
+            End If
+            If acc > 0# And acc >= CDbl(z(Z_DATE)) Then
+                t = (acc - CDbl(z(Z_DATE))) * 24#
+                g = Trim$(CStr(z(Z_VGROUP)))
+                If CStr(g) = "" Then g = "(не указан)"
+                AddCnt grpCnt, CStr(g), 1#
+                If Not grpH.Exists(g) Then grpH.Add g, New Collection
+                grpH(g).Add t
+                colAll.Add t
+            End If
+        End If
+    Next k
+
+    TopKeys grpCnt, 10, labs, vals
+    If UBound(labs) < 0 Then
+        s = modContentMTO.EmptyNote()
+        s = s & NoteBlk("Время от создания до приёмки по видам техники. Период - " & PerLabel(byWeek) & ".")
+        BuildCreateToAcc = s
+        Exit Function
+    End If
+
+    ' Остальные группы - строкой «прочие» (решение владельца R1).
+    n = UBound(labs) + 1
+    others = 0
+    If grpCnt.Count > n Then others = 1
+    ReDim fl(0 To n - 1 + others)
+    ReDim fm(0 To n - 1 + others)
+    ReDim fc(0 To n - 1 + others)
+
+    For i = 0 To n - 1
+        fl(i) = CStr(labs(i))
+        fc(i) = CDbl(vals(i))
+        Set medCol = grpH(CStr(labs(i)))
+        fm(i) = MedianOf(medCol, hasV)
+    Next i
+
+    If others = 1 Then
+        fl(n) = "прочие"
+        Set medCol = New Collection
+        fc(n) = 0#
+        For Each g In grpH.Keys
+            inTop = False
+            For j = 0 To n - 1
+                If CStr(g) = CStr(labs(j)) Then inTop = True: Exit For
+            Next j
+            If Not inTop Then
+                fc(n) = fc(n) + CDbl(grpCnt(CStr(g)))
+                For i = 1 To grpH(CStr(g)).Count
+                    medCol.Add grpH(CStr(g))(i)
+                Next i
+            End If
+        Next g
+        fm(n) = MedianOf(medCol, hasV)
+    End If
+
+    medAll = MedianOf(colAll, hasV)
+    ReDim flv(0 To UBound(fl))
+    ReDim fmv(0 To UBound(fl))
+    For i = 0 To UBound(fl)
+        flv(i) = CStr(fl(i)) & " (" & modContentMTO.FmtInt(fc(i)) & ")"
+        fmv(i) = fm(i)
+    Next i
+
+    s = "<figure>" & HBars(flv, fmv, 680, 240, 25)
+    s = s & "<figcaption>Медиана по всем нарядам " & Hh(medAll) & "</figcaption></figure>"
+    s = s & NoteBlk("Медиана времени от создания наряда до подписи «Готов к приемке» (первая " & _
+        "подпись любой дирекции) по видам техники; топ-10 групп по числу нарядов с приёмкой, " & _
+        "остальное - «прочие». В скобках - число нарядов. Машина в этой фазе ещё движется, " & _
+        "поэтому интервал в день ремзоны не входит. Период - " & PerLabel(byWeek) & ".")
+    BuildCreateToAcc = s
+End Function
+
+' =====================================================================================
 ' Точка входа: заполнение плейсхолдеров слайдов 5-8.
 ' Ключи и их состав зафиксированы в docs/plans/MTO_контракт_шаблона_v1.0.md.
 ' =====================================================================================
@@ -3089,6 +3402,14 @@ Public Sub FillZonePlaceholders(ByVal d As Object)
         "Слайд 6 готов: " & Round(Timer - t0, 2) & " c"
 
     d("BLOCK_PHASES") = BuildPhases()
+    d("BLOCK_REPEAT_TOP_VEH_YTD") = BuildRepeatTopVeh(False)
+    d("BLOCK_REPEAT_TOP_VEH_WK") = BuildRepeatTopVeh(True)
+    d("BLOCK_REPEAT_TOP_DEF_YTD") = BuildRepeatTopDef(False)
+    d("BLOCK_REPEAT_TOP_DEF_WK") = BuildRepeatTopDef(True)
+    d("BLOCK_DOWN_VS_HOURS_YTD") = BuildDownVsHours(False)
+    d("BLOCK_DOWN_VS_HOURS_WK") = BuildDownVsHours(True)
+    d("BLOCK_CREATE_TO_ACC_YTD") = BuildCreateToAcc(False)
+    d("BLOCK_CREATE_TO_ACC_WK") = BuildCreateToAcc(True)
     d("BLOCK_RETURN_KPI") = BuildReturnKpi()
     d("BLOCK_RETURN_HIST") = BuildReturnHist()
     d("BLOCK_RETURN_STUCK") = BuildReturnStuck()
