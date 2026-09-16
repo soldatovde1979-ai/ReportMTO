@@ -84,7 +84,9 @@ Private Const Z_MONTH As Long = 20      ' год*100 + месяц по date
 Private Const Z_ZONE As Long = 21       ' postN - нормализованная ремзона (блоки «без ремзоны»)
 Private Const Z_TRUD As Long = 22       ' cost_Trudozatrat, фактические часы (уровень наряда)
 Private Const Z_PLAN As Long = 23       ' hourdlit, плановая длительность ремонта, часы
-Private Const Z_FIELDS As Long = 24
+Private Const Z_ARM_LEVG As Long = 24   ' arm подписи «Готов к выбытию», ДГМ
+Private Const Z_ARM_LEVD As Long = 25   ' arm подписи «Готов к выбытию», ДЭНТ
+Private Const Z_FIELDS As Long = 26
 
 ' Поля записи машины (mVeh: vehicle_number -> Variant-массив)
 Private Const V_ZN As Long = 0
@@ -227,6 +229,7 @@ Private Sub EnsureZn()
                 z(Z_DEFEKT) = modAggregate.CellText(r, "defekt_type")
                 z(Z_POST) = modAggregate.CellText(r, "post")
                 z(Z_ACCG) = 0#: z(Z_ACCD) = 0#: z(Z_LEVG) = 0#: z(Z_LEVD) = 0#
+                z(Z_ARM_LEVG) = "": z(Z_ARM_LEVD) = ""
                 z(Z_SIGNED) = 0#
                 z(Z_KIND) = "": z(Z_NODE) = ""
                 If hasDesc Then z(Z_DESC) = modAggregate.CellText(r, "defect_desc") Else z(Z_DESC) = ""
@@ -242,6 +245,9 @@ Private Sub EnsureZn()
                 If hasPlan Then z(Z_PLAN) = ToNum(modAggregate.CellRaw(r, "hourdlit")) Else z(Z_PLAN) = 0#
             End If
 
+            Dim arm As String
+            arm = modAggregate.CellText(r, "arm")
+
             Dim sd As Double
             sd = ToSerial(modAggregate.CellRaw(r, "status_date"))
             If sd > 0# Then
@@ -256,12 +262,14 @@ Private Sub EnsureZn()
                     If InStr(1, dr, "ДГМ", vbTextCompare) > 0 Then fld = Z_LEVG Else fld = Z_LEVD
                 End If
                 If fld >= 0 Then
-                    If CDbl(z(fld)) = 0# Or sd < CDbl(z(fld)) Then z(fld) = sd
+                    If CDbl(z(fld)) = 0# Or sd < CDbl(z(fld)) Then
+                        z(fld) = sd
+                        If fld = Z_LEVG Then z(Z_ARM_LEVG) = arm
+                        If fld = Z_LEVD Then z(Z_ARM_LEVD) = arm
+                    End If
                 End If
             End If
 
-            Dim arm As String
-            arm = modAggregate.CellText(r, "arm")
             If arm = "ПК" Or arm = "ПЛАНШЕТ" Then
                 z(Z_SIGNED) = CDbl(z(Z_SIGNED)) + 1#
                 If sd > 0# Then
@@ -614,6 +622,17 @@ Public Function DictVal(ByVal d As Object, ByVal key As String) As Double
     If d.Exists(key) Then DictVal = CDbl(d(key)) Else DictVal = 0#
 End Function
 
+' Копит уникальные текстовые значения по ключу в одну строку через запятую
+' (список АРМ/направлений машины за период, без повторов).
+Public Sub AddUniq(ByVal d As Object, ByVal key As String, ByVal val As String)
+    If val = "" Then Exit Sub
+    If d.Exists(key) Then
+        If InStr(1, CStr(d(key)), val, vbTextCompare) = 0 Then d(key) = CStr(d(key)) & ", " & val
+    Else
+        d.Add key, val
+    End If
+End Sub
+
 ' Ключи словаря по убыванию значения. limit <= 0 - все.
 Public Sub TopKeys(ByVal d As Object, ByVal limit As Long, _
                     ByRef labs As Variant, ByRef vals As Variant)
@@ -823,6 +842,32 @@ End Function
 
 Private Function ZLev(ByVal z As Variant) As Double
     ZLev = MinPos(CDbl(z(Z_LEVG)), CDbl(z(Z_LEVD)))
+End Function
+
+' АРМ подписи «Готов к выбытию», привязанной к той же дирекции, чья дата дала ZLev
+' (та же логика выбора, что в MinPos: если заполнена только одна дирекция - берём её).
+Private Function ZLevArm(ByVal z As Variant) As String
+    Dim ag As Double, ad As Double
+    ag = CDbl(z(Z_LEVG)): ad = CDbl(z(Z_LEVD))
+    If ag <= 0# Then
+        ZLevArm = CStr(z(Z_ARM_LEVD))
+    ElseIf ad <= 0# Then
+        ZLevArm = CStr(z(Z_ARM_LEVG))
+    ElseIf ag < ad Then
+        ZLevArm = CStr(z(Z_ARM_LEVG))
+    Else
+        ZLevArm = CStr(z(Z_ARM_LEVD))
+    End If
+End Function
+
+' Три корзины АРМ для отчёта: «ПК», «ПЛАНШЕТ», остальное (пусто/незнакомое значение) -
+' «Не определено».
+Private Function NormArm(ByVal raw As String) As String
+    If raw = "ПК" Or raw = "ПЛАНШЕТ" Then
+        NormArm = raw
+    Else
+        NormArm = "Не определено"
+    End If
 End Function
 
 Private Function DMon(ByVal ser As Double) As String
@@ -2792,6 +2837,213 @@ Public Function BuildReturnHang() As String
     BuildReturnHang = s
 End Function
 
+' =====================================================================================
+' Риск повторного заезда в разрезе АРМ подписи «Готов к выбытию» - показывает, на
+' сколько подпись с планшета снижает риск возврата техники в ремзону по сравнению с ПК.
+' «Возврат» - подписанное «Готов к выбытию» по внеплановому наряду; «повторный» -
+' тот же признак, что в RepeatAggregate (слайд 7, топ машин по повторным заездам):
+' следующий внеплановый наряд той же машины с той же группой дефекта создан не позднее
+' 30 суток после этого. YTD-экземпляр фильтрует наряды по дате создания (InYtd, как
+' везде); недельный - по дате самой подписи выбытия (иначе неделя считала бы наряды,
+' а не возвраты).
+' =====================================================================================
+Private Sub ReturnByArmAggregate(ByVal byWeek As Boolean, _
+        ByRef den As Object, ByRef num As Object, ByRef totDen As Long, ByRef totNum As Long)
+    Set den = CreateObject("Scripting.Dictionary")
+    Set num = CreateObject("Scripting.Dictionary")
+    totDen = 0: totNum = 0
+    EnsureZn
+
+    Dim byK As Object
+    Set byK = CreateObject("Scripting.Dictionary")
+    Dim k As Variant, z As Variant, kk As String
+    For Each k In mZn.Keys
+        z = mZn(k)
+        If Not IsPlanned(CStr(z(Z_TYPE))) Then
+            If Len(CStr(z(Z_VEH))) > 0 And CDbl(z(Z_DATE)) > 0# _
+               And Len(Trim$(CStr(z(Z_DEFEKT)))) > 0 Then
+                kk = CStr(z(Z_VEH)) & Chr$(1) & CStr(z(Z_DEFEKT))
+                If Not byK.Exists(kk) Then byK.Add kk, New Collection
+                byK(kk).Add CStr(k)
+            End If
+        End If
+    Next k
+
+    Dim col As Collection, i As Long, ds() As Double, ns() As String
+    For Each k In byK.Keys
+        Set col = byK(k)
+        ReDim ds(0 To col.Count - 1)
+        ReDim ns(0 To col.Count - 1)
+        For i = 1 To col.Count
+            ns(i - 1) = CStr(col(i))
+            ds(i - 1) = CDbl(mZn(ns(i - 1))(Z_DATE))
+        Next i
+        QSortPair ds, ns, 0, UBound(ds)
+
+        For i = 0 To UBound(ds)
+            z = mZn(ns(i))
+            Dim lv As Double
+            lv = ZLev(z)
+            If lv > 0# Then
+                Dim incl As Boolean
+                If byWeek Then incl = (IsoYearWeek(lv) = ZoneReportWeek()) Else incl = InYtd(z)
+                If incl Then
+                    Dim arm As String
+                    arm = NormArm(ZLevArm(z))
+                    AddCnt den, arm, 1#
+                    totDen = totDen + 1
+                    If i < UBound(ds) Then
+                        Dim gp As Double
+                        gp = Int(ds(i + 1) - ds(i))
+                        If gp > 0# And gp <= 30# Then
+                            AddCnt num, arm, 1#
+                            totNum = totNum + 1
+                        End If
+                    End If
+                End If
+            End If
+        Next i
+    Next k
+End Sub
+
+Public Function BuildReturnArmRisk(ByVal byWeek As Boolean) As String
+    Dim den As Object, num As Object, totDen As Long, totNum As Long
+    ReturnByArmAggregate byWeek, den, num, totDen, totNum
+
+    Dim arms As Variant
+    arms = Array("ПЛАНШЕТ", "ПК", "Не определено")
+
+    Dim s As String
+    s = "<div class=""scroll""><table><thead><tr><th>АРМ подписи «Готов к выбытию»</th>" & _
+        "<th class=""n"">Возвратов</th><th class=""n"">Из них повторных</th>" & _
+        "<th class=""n"">Риск повтора</th></tr></thead><tbody>"
+    Dim i As Long, a As String, d As Double, n As Double, hasRows As Boolean
+    hasRows = False
+    For i = LBound(arms) To UBound(arms)
+        a = CStr(arms(i))
+        d = DictVal(den, a)
+        If d > 0# Then
+            hasRows = True
+            n = DictVal(num, a)
+            s = s & "<tr><td>" & modContentMTO.Esc(a) & "</td>" & _
+                "<td class=""n"">" & modContentMTO.FmtInt(d) & "</td>" & _
+                "<td class=""n"">" & modContentMTO.FmtInt(n) & "</td>" & _
+                PctTd(n / d * 100#) & "</tr>"
+        End If
+    Next i
+    If Not hasRows Then s = s & "<tr><td colspan=""4"">" & Dash() & "</td></tr>"
+    s = s & "</tbody></table></div>"
+
+    Dim dTab As Double, dPc As Double, pTab As Double, pPc As Double, cmp As String
+    dTab = DictVal(den, "ПЛАНШЕТ"): dPc = DictVal(den, "ПК")
+    If dTab > 0# And dPc > 0# Then
+        pTab = DictVal(num, "ПЛАНШЕТ") / dTab * 100#
+        pPc = DictVal(num, "ПК") / dPc * 100#
+        If pTab < pPc Then
+            cmp = "риск повторного заезда после подписи с планшета ниже, чем с ПК, на " & _
+                FmtF(pPc - pTab, 1) & Nb() & "п.п. (" & FmtF(pTab, 1) & Nb() & "% против " & _
+                FmtF(pPc, 1) & Nb() & "%)."
+        ElseIf pTab > pPc Then
+            cmp = "риск повторного заезда после подписи с планшета выше, чем с ПК, на " & _
+                FmtF(pTab - pPc, 1) & Nb() & "п.п. (" & FmtF(pTab, 1) & Nb() & "% против " & _
+                FmtF(pPc, 1) & Nb() & "%)."
+        Else
+            cmp = "риск повторного заезда для планшета и ПК совпадает (" & FmtF(pTab, 1) & Nb() & "%)."
+        End If
+    Else
+        cmp = "сравнить планшет и ПК нельзя - по одному из АРМ в периоде нет возвратов."
+    End If
+
+    s = s & NoteBlk("Возврат - подписанное «Готов к выбытию» по внеплановому наряду; " & _
+        "повторный - тот же признак, что в блоке «Топ машин по повторным заездам»: " & _
+        "следующий внеплановый наряд той же машины с той же группой дефекта создан не " & _
+        "позднее 30 суток после этого. АРМ - более ранняя из подписей ДГМ/ДЭНТ. Период - " & _
+        PerLabel(byWeek) & _
+        IIf(byWeek, " (по дате самой подписи выбытия)", " (наряды с начала года)") & _
+        ", всего возвратов " & modContentMTO.FmtInt(CDbl(totDen)) & ", из них повторных " & _
+        modContentMTO.FmtInt(CDbl(totNum)) & ". " & cmp)
+    BuildReturnArmRisk = s
+End Function
+
+' =====================================================================================
+' Топ-10 возвратов за отчётную неделю: машины с наибольшим числом подписанных
+' «Готов к выбытию» на отчётной неделе, отсортированные по числу возвратов.
+' Пост, статус по документу и дата выбытия - по последнему из возвратов машины за
+' неделю; АРМ и направление - объединение по всем возвратам машины за неделю.
+' =====================================================================================
+Public Function BuildReturnTopWeek() As String
+    EnsureZn
+    Dim cnt As Object, groupOf As Object, postOf As Object, statusOf As Object
+    Dim armOf As Object, dirOf As Object, lastLv As Object
+    Set cnt = CreateObject("Scripting.Dictionary")
+    Set groupOf = CreateObject("Scripting.Dictionary")
+    Set postOf = CreateObject("Scripting.Dictionary")
+    Set statusOf = CreateObject("Scripting.Dictionary")
+    Set armOf = CreateObject("Scripting.Dictionary")
+    Set dirOf = CreateObject("Scripting.Dictionary")
+    Set lastLv = CreateObject("Scripting.Dictionary")
+
+    Dim k As Variant, z As Variant, veh As String, lv As Double
+    For Each k In mZn.Keys
+        z = mZn(k)
+        lv = ZLev(z)
+        If lv > 0# And Len(CStr(z(Z_VEH))) > 0 Then
+            If IsoYearWeek(lv) = ZoneReportWeek() Then
+                veh = CStr(z(Z_VEH))
+                AddCnt cnt, veh, 1#
+                If Not groupOf.Exists(veh) Then groupOf.Add veh, CStr(z(Z_VGROUP))
+                AddUniq armOf, veh, NormArm(ZLevArm(z))
+
+                Dim dirLbl As String
+                dirLbl = ""
+                If CDbl(z(Z_LEVG)) = lv Then dirLbl = "ДГМ"
+                If CDbl(z(Z_LEVD)) = lv Then
+                    If dirLbl <> "" Then dirLbl = dirLbl & "+ДЭНТ" Else dirLbl = "ДЭНТ"
+                End If
+                AddUniq dirOf, veh, dirLbl
+
+                If Not lastLv.Exists(veh) Then
+                    lastLv.Add veh, lv
+                    postOf.Add veh, PostOr(z)
+                    statusOf.Add veh, CStr(z(Z_TEK))
+                ElseIf lv >= CDbl(lastLv(veh)) Then
+                    lastLv(veh) = lv
+                    postOf(veh) = PostOr(z)
+                    statusOf(veh) = CStr(z(Z_TEK))
+                End If
+            End If
+        End If
+    Next k
+
+    Dim labs As Variant, vals As Variant, i As Long
+    TopKeys cnt, 10, labs, vals
+
+    Dim s As String
+    s = "<div class=""scroll""><table><thead><tr><th>Машина</th><th>Группа техники</th>" & _
+        "<th class=""n"">Возвратов за неделю</th><th>АРМ</th><th>Направление</th>" & _
+        "<th>Пост</th><th>Статус по документу</th><th>Выбытие</th></tr></thead><tbody>"
+    For i = 0 To UBound(labs)
+        veh = CStr(labs(i))
+        s = s & "<tr><td class=""mono"">" & modContentMTO.Esc(veh) & "</td>" & _
+            "<td>" & modContentMTO.Esc(CStr(groupOf(veh))) & "</td>" & _
+            "<td class=""n"">" & modContentMTO.FmtInt(CDbl(vals(i))) & "</td>" & _
+            "<td>" & modContentMTO.Esc(CStr(armOf(veh))) & "</td>" & _
+            "<td>" & modContentMTO.Esc(CStr(dirOf(veh))) & "</td>" & _
+            "<td>" & CStr(postOf(veh)) & "</td>" & _
+            "<td style=""color:var(--ink-2)"">" & modContentMTO.Esc(CStr(statusOf(veh))) & "</td>" & _
+            "<td>" & DMon(CDbl(lastLv(veh))) & "</td></tr>"
+    Next i
+    If UBound(labs) < 0 Then s = s & "<tr><td colspan=""8"">" & Dash() & "</td></tr>"
+    s = s & "</tbody></table></div>"
+    s = s & NoteBlk("Топ-10 машин по числу подписанных «Готов к выбытию» на отчётной неделе " & _
+        WLab(ZoneReportWeek()) & ", сортировка - по числу возвратов за неделю. АРМ и " & _
+        "направление - объединение по всем возвратам машины за неделю (возможны оба " & _
+        "значения, если возвратов несколько); пост, статус по документу и дата выбытия - по " & _
+        "последнему из них. В отличие от блока риска по АРМ, здесь считаются все наряды, " & _
+        "включая плановые.")
+    BuildReturnTopWeek = s
+End Function
+
 Public Function BuildTailAge() As String
     EnsureFlow
     Dim labs As Variant
@@ -3575,6 +3827,9 @@ Public Sub FillZonePlaceholders(ByVal d As Object)
     d("BLOCK_CREATE_TO_ACC_YTD") = BuildCreateToAcc(False)
     d("BLOCK_CREATE_TO_ACC_WK") = BuildCreateToAcc(True)
     d("BLOCK_RETURN_KPI") = BuildReturnKpi()
+    d("BLOCK_RETURN_ARM_RISK_YTD") = BuildReturnArmRisk(False)
+    d("BLOCK_RETURN_ARM_RISK_WK") = BuildReturnArmRisk(True)
+    d("BLOCK_RETURN_TOP_WK") = BuildReturnTopWeek()
     d("BLOCK_RETURN_HIST") = BuildReturnHist()
     d("BLOCK_RETURN_STUCK") = BuildReturnStuck()
     d("BLOCK_RETURN_HANG") = BuildReturnHang()
