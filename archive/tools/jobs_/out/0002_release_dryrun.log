@@ -1,0 +1,15 @@
+ЗАДАНИЕ 0002_release_dryrun
+СТРОКА  release -DryRun
+НАЧАЛО  2026-09-11 11:53:55
+
+--- -NoProfile -ExecutionPolicy Bypass -File D:\GOOGLEDISK\PROJECTs\ReportMTO\install\release.ps1 -DryRun
+RELEASE_TARGET D:\GOOGLEDISK\PROJECTs\ReportMTO\ReportMTO.xlsm
+RELEASE_VERSION_CURRENT 8.1.0 - версия из install\VERSION
+RELEASE_FIRST_RUN - прошлого состояния нет, версия не поднимается, фиксируем текущую
+BOOK_VERSION_BEFORE 0.0.0 - версия, которая уже стоит в книге
+RELEASE_DRYRUN - книга не тронута, версия не записана
+
+EXITCODE 0
+
+
+КОНЕЦ   2026-09-11 11:54:26

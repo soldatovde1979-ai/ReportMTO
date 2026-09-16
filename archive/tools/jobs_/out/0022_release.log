@@ -1,0 +1,68 @@
+ЗАДАНИЕ 0022_release
+СТРОКА  release
+НАЧАЛО  2026-09-12 13:37:01
+
+--- -NoProfile -ExecutionPolicy Bypass -File D:\GOOGLEDISK\PROJECTs\ReportMTO\install\release.ps1
+RELEASE_TARGET D:\GOOGLEDISK\PROJECTs\ReportMTO\ReportMTO.xlsm
+RELEASE_VERSION_CURRENT 8.1.1 - версия из install\VERSION
+RELEASE_SOURCES_CHANGED 2 - изменились: modContentMTO.bas, Query-ImportJSON.pq
+RELEASE_VERSION_NEXT 8.1.2 - поднимаем (patch)
+BOOK_VERSION_BEFORE 8.1.1 - версия, которая уже стоит в книге
+BOOK_MD5_MISMATCH ea8f339fa25234f6c61e23608cebbe62 - в книге та же версия 8.1.1, но другое содержимое: похоже, релиз делали с другой машины. Сверьте git перед установкой
+--- ШАГ 1: установка модулей и запросов
+PROD_TARGET D:\GOOGLEDISK\PROJECTs\ReportMTO\ReportMTO.xlsm - цель установки (полный путь)
+RUNNING D:\GOOGLEDISK\PROJECTs\ReportMTO\install\install.ps1 - запуск установщика
+TARGET D:\GOOGLEDISK\PROJECTs\ReportMTO\ReportMTO.xlsm - цель установки (полный путь)
+VBA_SAME modMain - совпадает с исходником, пропущен
+VBA_DIFF modContentMTO - различается, переустановлен из исходника
+  VBA modContentMTO - первое отличие на позиции 182 (длина исходника 182397, длина в книге 181535), исходник: код символа 52, в книге: код символа 51
+VBA_SAME modContentZone - совпадает с исходником, пропущен
+VBA_SAME modContentDisc - совпадает с исходником, пропущен
+VBA_SAME modAggregate - совпадает с исходником, пропущен
+PQ_SAME fnComputeGroupMetrics - совпадает, пропущен
+PQ_SAME qExistingData - совпадает, пропущен
+PQ_SAME fnUpsert - совпадает, пропущен
+PQ_SKIP qDiagImport - диагностический запрос, не устанавливается
+PQ_SAME fnComputeKey - совпадает, пропущен
+PQ_SAME fnDedupByKey - совпадает, пропущен
+PQ_DIFF Query-ImportJSON - формула различается, обновлена из исходника
+  PQ Query-ImportJSON - первое отличие на позиции 475 (длина исходника 8895, длина в книге 7659), исходник: код символа 52, в книге: код символа 51
+PQ_SAME fnNormalizeFields - совпадает, пропущен
+PQ_SAME qKeepWeeks - совпадает, пропущен
+VBA_VERIFY_OK modMain - код в книге совпал с исходником
+VBA_VERIFY_OK modContentMTO - код в книге совпал с исходником
+VBA_VERIFY_OK modContentZone - код в книге совпал с исходником
+VBA_VERIFY_OK modContentDisc - код в книге совпал с исходником
+VBA_VERIFY_OK modAggregate - код в книге совпал с исходником
+PQ_VERIFY_OK fnComputeGroupMetrics - формула в книге совпала с исходником
+PQ_VERIFY_OK qExistingData - формула в книге совпала с исходником
+PQ_VERIFY_OK fnUpsert - формула в книге совпала с исходником
+PQ_VERIFY_OK fnComputeKey - формула в книге совпала с исходником
+PQ_VERIFY_OK fnDedupByKey - формула в книге совпала с исходником
+PQ_VERIFY_OK Query-ImportJSON - формула в книге совпала с исходником
+PQ_VERIFY_OK fnNormalizeFields - формула в книге совпала с исходником
+PQ_VERIFY_OK qKeepWeeks - формула в книге совпала с исходником
+TPL_SAME tmp_index.html - совпадает, пропущен
+TPL_VERIFY_OK tmp_index.html - шаблон рядом с книгой совпал с исходником
+VERIFY_OK D:\GOOGLEDISK\PROJECTs\ReportMTO\ReportMTO.xlsm - ПРОВЕРКА ПРОЙДЕНА: все модули, запросы и шаблон совпали с исходниками
+PATCHED D:\GOOGLEDISK\PROJECTs\ReportMTO\ReportMTO.xlsm - книга обработана
+DONE 1 - обработано книг: 1
+INSTALL_EXIT 0 - код возврата установщика
+PROD_OK - установка выполнена и подтверждена проверкой
+--- ШАГ 2: компиляция VBA
+COMPILE_OK D:\GOOGLEDISK\PROJECTs\ReportMTO\ReportMTO.xlsm - HasColumn returned False
+--- ШАГ 3: версия и миграции в книге
+BOOK_VERSION 8.1.1 - версия, записанная в книге до этого прогона
+MIG_SKIP 8.1.0__variable_keys.ps1 - версия книги уже 8.1.1
+BUILD_VERSION SET 8.1.2
+BUILD_DATE SET 12.09.2026 13:39
+BUILD_SRC_MD5 SET 5db39ee5bce54f897b1efc98a3eddfd9
+VERSION_WRITTEN 8.1.2
+STATE_WRITTEN install\release.state
+CHANGELOG_WRITTEN CHANGELOG.md
+RELEASE_OK 8.1.2 - книга D:\GOOGLEDISK\PROJECTs\ReportMTO\ReportMTO.xlsm
+
+EXITCODE 0
+
+
+КОНЕЦ   2026-09-12 13:39:33

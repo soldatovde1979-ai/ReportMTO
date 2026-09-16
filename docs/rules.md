@@ -7,12 +7,14 @@
 
 - `[cmd.exe/PowerShell]` Кириллица и кавычки напрямую через `cmd.exe` ломают кодировку, а командлеты (`Copy-Item`) сбоят при совпадении путей. -> Используй ASCII-маркеры (`findstr`), `powershell -NoProfile`, UTF-8/BOM `.ps1`; перед `Copy-Item` проверяй `Source` ≠ `Destination`.
 - `[PowerShell/COM]` Неподавленный вывод COM-вызова утекает в результат функции и ломает тип возврата. -> Перед каждым COM-вызовом в функции ставь `$null = ...`.
+- `[Git/Windows+Drive]` Папки `.git`/`.vscode` с атрибутом ReadOnly ломают git: commit — «unable to write new index file», checkout/rebase — «unable to create file», рабочая копия остаётся полупереключённой. -> Перед git-операциями проверяй атрибуты (`Get-Item`), снимай ReadOnly (`$d.Attributes='Directory'`), затем `git reset --hard HEAD` для восстановления.
 
 ## Инструменты и поиск
 
 - `[search_files/list_files]` Поиск кириллицы регистрозависим, однострочные JSON режут контекст, а `.gitignore` скрывает файлы. -> Используй `[Пп]остановк`, а чтение JSON и скрытых файлов делай через PowerShell (`IndexOf`, `Test-Path`).
 - `[Режимы/CLI]` В Architect нет `execute_command`, а цепочки команд `;` сбоят из-за слияния флагов. -> Переключайся в Code (`switch_mode`) и запускай git-команды строго по одной.
 - `[apply_diff]` Многоблочный дифф может примениться частично без явной ошибки («unable to apply all diff parts»). -> Перечитывай изменённые области файла после диффа и доноси пропущенное отдельными правками.
+- `[Проект/планы]` Разработка планов, ТЗ и сценариев. -> Всегда сохраняй новые планы в директорию `docs/plans/`.
 
 ## VBA
 
@@ -28,12 +30,12 @@
 - `[Excel/прогон отчёта]` `generate_report_open.ps1` цепляется к первому инстансу Excel (`GetActiveObject`) и падает «workbook not open», если запущено несколько EXCEL.EXE. -> Выполняй BuildPivots+GenerateReport в собственном COM-инстансе (`New-Object -ComObject Excel.Application`), книгу открывай и закрывай там же.
 - `[Excel/сборка и VBE]` Remove+Import без `$wb.Save()` и без учета `Attribute` ломает обновление и сравнение модулей. -> Всегда делай `$wb.Save()` до `Run`, а перед сравнением с `.bas` вырезай `Attribute`-строки (regex) и делай `TrimEnd()`.
 - `[Power Query/диагностика]` Refresh падает с `[Expression.Error]` из-за неверных комментариев (`//` вместо `'`) или битых шагов. -> Проверяй комментарии M, локализуй запрос с `Json.Document(..., 65001)` и перехватывай ошибки VBA-макросом.
-- `[Сборка/версия]` Релиз, версия, миграции, CHANGELOG, install\release.ps1. -> Действуй по docs/version-guide.md: релиз только через install\release.ps1 (книга закрыта), версия фиксируется только при RELEASE_OK, `-Bump minor/major` — осознанное решение, выбор уровня — по «кто заметит разницу».
+- `[Сборка/версия]` Релиз, версия, миграции, CHANGELOG, install\install.ps1. -> Действуй по docs/version-guide.md: релиз только через install\install.ps1 (книга закрыта), версия фиксируется только при RELEASE_OK, `-Bump minor/major` — осознанное решение, выбор уровня — по «кто заметит разницу».
 
 ## Тестирование
 
-- `[e2e/порядок]` Изменил src ba или src\powerquery -> строго по этапам: 1) install\install.ps1 -Target build, 2) e2e (tools
-un-e2e-tests-v1.ps1) и исправления до зелёного, 3) только потом прод (install\install_prod.ps1). Прод до зелёного e2e запрещён; недогруженный модуль даёт «Method or data member not found».
+- `[e2e/порядок]` Изменил src\vba или src\powerquery -> строго по этапам: 1) install\install.ps1 -Target build -InstallOnly, 2) e2e (tools
+run-e2e-tests-v1.ps1) и исправления до зелёного, 3) только потом прод (install\install_prod.ps1). Прод до зелёного e2e запрещён; недогруженный модуль даёт «Method or data member not found».
 - `[e2e/входы-выходы]` Сквозной тест: на входе фиксированные JSON, на выходе сравнение с эталонными значениями (число строк, CHECK-маркеры). -> Меняешь логику — обновляй эталоны той же правкой (tests\expected.md, CHECK-константы tests\modSelfTest.bas).
 - `[e2e/отчёты]` Проверяй не только факт генерации отчёта, но и содержимое: сверяй ключевые цифры (YTD, дельта, медиана, топ-позиции) с эталоном. -> Эталонные цифры — в tests\expected.md, проверку встрой в e2e (STEP4) и modSelfTest.
 
@@ -42,6 +44,6 @@ un-e2e-tests-v1.ps1) и исправления до зелёного, 3) тол�
 - `[ReportMTO/Core и M]` Модификация `ParseAIResponse`/`BuildPlaceholders` ломает контракт, а комментарии не в формате `//` рушат Power Query. -> Изменяй логику через module-level кэш (`mPairs`), а `.pq` проверяй на валидность M-синтаксиса.
 - `[ReportMTO/Данные]` Разделители `+` в фильтрах `col@=` и арифметика дат ломают выборку на стыке годов. -> Нормализуй `Variable` через `Replace("+",";")`, а периоды строй только по упорядоченным `yearWeek`.
 - `[ReportMTO/Выгрузка 2026]` Поля `day/month/year/week_status` отсутствуют в свежих выгрузках. -> Вычисляй их из `status_date` через `fnNormalizeFields v6`, бери год/неделю из `yearWeek`, а связку `in_bounds=true` + `arm=НЕ ПОДПИСАНО` считай нормой.
-- `[ReportMTO/Окружение и логи]` Файлы `.bak` в корне замусоривают проект, а `DEBUG` требует дублирования. -> Храни бэкапы в папке `bak\` (вне git), а лог пиши параллельно на лист `Logs` и в `ReportMTO_log.txt` (UTF-8, append).
+- `[ReportMTO/Окружение и логи]` Файлы `.bak` в корне замусоривают проект, а лист `Logs` раздувают записи «Инфо». -> Храни бэкапы в папке `bak\` (вне git). Лог ведётся по ключу `DEBUG`: лист `Logs` всегда только «Веха» и «Ошибка»; внешний `ReportMTO.log` — по уровню (0 = не пишется, 1 = ошибки и вехи, 2 = всё, UTF-8 append).
 - `[ReportMTO/ретеншн]` На данных одной недели KEEP_WEEKS=1 и 52 дают одинаковое число строк. -> Доказывай отсечение сравнением с KEEP_WEEKS=0 (база без ретеншна, tools/check_retention.ps1).
 - `[ReportMTO/KPI-окна]` Окно из одной недели (cnt=1): прямые обращения к элементам (2) массивов недель (opened(2)/closed(2)/hang(2)/med(2)) дают «Subscript out of range» на однонедельных данных. -> Считай cur/prev заранее (prev=0), (2) бери только под `If hasPrev Then`.

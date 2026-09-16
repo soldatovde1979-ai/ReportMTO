@@ -1,4 +1,37 @@
-# v2.1 от 14.09.2026 — приведено к стандарту folders v2.1, раздел 2.
+# .gitignore
+# Версия 2.5 от 15.09.2026 — gitignore для ZIP-дампа 68787400, ReportMTO.log,
+# archive/ReportMTO._xlsm.
+
+# Служебные файлы блокировки Excel
+~$*
+
+# Резервные копии книг и локальные бэкапы
+*.bak
+*.bak_*
+bak/
+ReportMTO — копия.xlsm
+
+# Локальная книга в корне проекта — собирается скриптом и хранится вне git
+/ReportMTO.xlsm
+
+# Старая копия книги в корне (не собирается скриптом, в git не нужна)
+/ReportMTO._xlsm
+
+# Временная копия книги в archive (появляется при сохранении из COM)
+/archive/ReportMTO._xlsm
+
+# Случайный ZIP-дамп в корне (временный, ~52 МБ)
+/68787400
+
+# Runtime-лог книги (VBA, DEBUG 0/1/2) — дописывается при каждом запуске, вне git
+/ReportMTO_log.txt
+/ReportMTO.log
+
+# Локальный бэкап репозитория (вложенный git-репозиторий)
+repo_github_current/
+
+# Ключи внешних провайдеров ИИ — в git не попадают ни при каких условиях
+*.key
 
 # Данные и результаты: вне git, только каркасы .gitkeep.
 data/*
@@ -6,16 +39,19 @@ result/*
 !data/.gitkeep
 !result/.gitkeep
 
-# Рабочая книга и рантайм-лог в корне — вне git.
-# Книги из build/ передаются в git (политика проекта), этот игнор их не касается.
-/ReportMTO.xlsm
-/ReportMTO_log.txt
-~$*
+# Кэш Python
+__pycache__/
+*.pyc
 
-# Бэкапы — вне git, сами файлы не удалять.
-*.bak
-*.bak_*
-bak/
+# Служебные папки
+.claude/
+_to_delete/
+
+# Скриншоты и файлы, отданные в чат — не содержимое проекта
+Claude outputs/
+
+# Рабочие копии модулей в ANSI-1251 для импорта в VBE: производные от src/vba
+tools/_import_ansi/
 
 # Временная диагностика в tools/ — вне git.
 tools/*_tmp*
@@ -30,4 +66,3 @@ build/ReportMTO_log.txt
 /node_modules
 logs
 /xvba_excel_backup
-.gitignore

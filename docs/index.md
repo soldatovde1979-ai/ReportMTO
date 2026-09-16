@@ -29,11 +29,11 @@
 
 | Где | Что искать |
 |---|---|
-| [`specs/`](specs/data.md) | Спецификации: `data.md` (данные и поля), `brief-data-mto.md` (предметная область), `pri-json-findings-v1.md` (разбор выгрузки), `architecture-diagram.html`. Манифест v6.1 — в `archive/`, контроль целостности ведёт `install\release.ps1`. `content-spec.md` удалён вместе с `spec.md` в 7146c03 |
+| [`specs/`](specs/data.md) | Спецификации: `data.md` (данные и поля), `brief-data-mto.md` (предметная область), `pri-json-findings-v1.md` (разбор выгрузки), `architecture-diagram.html`. Манифест v6.1 — в `archive/`, контроль целостности ведёт `install\install.ps1`. `content-spec.md` удалён вместе с `spec.md` в 7146c03 |
 | [`plans/`](plans/next-steps.md) | Планы. Актуальное по текущей задаче — `MTO_отчёт_v8.0_раскатка_v1.0.md` и `MTO_контракт_шаблона_v1.0.md`; `next-steps.md` — ревизия 24.08.2026, ссылается на удалённые документы, читать как историю |
 | [`presentations/`](presentations/MTO_Презентация_и_блоки_данных_v2.5.md) | Презентации (актуальные версии) |
 | [`archive/`](archive/reorganize-project.md) | История: выполненные планы, старые версии документов и инструкций, handoff-записки |
-| [`../install/`](../install/install-v7.1.md) | Инструкции установки/обновления и скрипты-обработки `install.ps1` (v1.1) / `install_prod.ps1` |
+| [`../install/`](../install/install-v7.1.md) | Инструкции установки/обновления и скрипты `install.ps1` (установка + релиз) / `install_prod.ps1` (прод) |
 | [`../tests/`](../tests/testing-e2e-v1.md) | Тесты: код, данные, эталоны, инструкция запуска |
 
 ## Задачи

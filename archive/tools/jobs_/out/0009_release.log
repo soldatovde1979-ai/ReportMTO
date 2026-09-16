@@ -1,0 +1,66 @@
+ЗАДАНИЕ 0009_release
+СТРОКА  release
+НАЧАЛО  2026-09-11 17:45:00
+
+--- -NoProfile -ExecutionPolicy Bypass -File D:\GOOGLEDISK\PROJECTs\ReportMTO\install\release.ps1
+RELEASE_TARGET D:\GOOGLEDISK\PROJECTs\ReportMTO\ReportMTO.xlsm
+RELEASE_VERSION_CURRENT 8.1.0 - версия из install\VERSION
+RELEASE_FIRST_RUN - прошлого состояния нет, версия не поднимается, фиксируем текущую
+BOOK_VERSION_BEFORE 0.0.0 - версия, которая уже стоит в книге
+--- ШАГ 1: установка модулей и запросов
+PROD_TARGET D:\GOOGLEDISK\PROJECTs\ReportMTO\ReportMTO.xlsm - цель установки (полный путь)
+RUNNING D:\GOOGLEDISK\PROJECTs\ReportMTO\install\install.ps1 - запуск установщика
+TARGET D:\GOOGLEDISK\PROJECTs\ReportMTO\ReportMTO.xlsm - цель установки (полный путь)
+VBA_SAME modMain - совпадает с исходником, пропущен
+VBA_SAME modContentMTO - совпадает с исходником, пропущен
+VBA_SAME modContentZone - совпадает с исходником, пропущен
+VBA_SAME modContentDisc - совпадает с исходником, пропущен
+VBA_SAME modAggregate - совпадает с исходником, пропущен
+PQ_SAME fnComputeGroupMetrics - совпадает, пропущен
+PQ_SAME qExistingData - совпадает, пропущен
+PQ_SAME fnUpsert - совпадает, пропущен
+PQ_SKIP qDiagImport - диагностический запрос, не устанавливается
+PQ_SAME fnComputeKey - совпадает, пропущен
+PQ_SAME fnDedupByKey - совпадает, пропущен
+PQ_SAME Query-ImportJSON - совпадает, пропущен
+PQ_SAME fnNormalizeFields - совпадает, пропущен
+PQ_SAME qKeepWeeks - совпадает, пропущен
+VBA_VERIFY_OK modMain - код в книге совпал с исходником
+VBA_VERIFY_OK modContentMTO - код в книге совпал с исходником
+VBA_VERIFY_OK modContentZone - код в книге совпал с исходником
+VBA_VERIFY_OK modContentDisc - код в книге совпал с исходником
+VBA_VERIFY_OK modAggregate - код в книге совпал с исходником
+PQ_VERIFY_OK fnComputeGroupMetrics - формула в книге совпала с исходником
+PQ_VERIFY_OK qExistingData - формула в книге совпала с исходником
+PQ_VERIFY_OK fnUpsert - формула в книге совпала с исходником
+PQ_VERIFY_OK fnComputeKey - формула в книге совпала с исходником
+PQ_VERIFY_OK fnDedupByKey - формула в книге совпала с исходником
+PQ_VERIFY_OK Query-ImportJSON - формула в книге совпала с исходником
+PQ_VERIFY_OK fnNormalizeFields - формула в книге совпала с исходником
+PQ_VERIFY_OK qKeepWeeks - формула в книге совпала с исходником
+TPL_SAME tmp_index.html - совпадает, пропущен
+TPL_VERIFY_OK tmp_index.html - шаблон рядом с книгой совпал с исходником
+VERIFY_OK D:\GOOGLEDISK\PROJECTs\ReportMTO\ReportMTO.xlsm - ПРОВЕРКА ПРОЙДЕНА: все модули, запросы и шаблон совпали с исходниками
+PATCHED D:\GOOGLEDISK\PROJECTs\ReportMTO\ReportMTO.xlsm - книга обработана
+DONE 1 - обработано книг: 1
+INSTALL_EXIT 0 - код возврата установщика
+PROD_OK - установка выполнена и подтверждена проверкой
+--- ШАГ 2: компиляция VBA
+COMPILE_OK D:\GOOGLEDISK\PROJECTs\ReportMTO\ReportMTO.xlsm - HasColumn returned False
+--- ШАГ 3: версия и миграции в книге
+BOOK_VERSION 0.0.0 - версия, записанная в книге до этого прогона
+MIG_RUN 8.1.0__variable_keys.ps1 - применяем
+  MIG STEP 1 - ищу лист Variable
+  MIG STEP 2 - ищу таблицу tblVariable
+  MIG STEP 3 - читаю существующие ключи
+  MIG STEP 3 - ключей в таблице: 14
+  MIG STEP 4 - добавляю строку DATA/KEEP_WEEKS
+  MIG STEP 4 - строка добавлена через ListRows.Add
+  MIG STEP 5 - пишу в строку таблицы номер 15
+BOOK_ERROR Unable to cast object of type 'System.Double' to type 'System.String'.
+RELEASE_FAIL модули установлены, но версия/миграции в книгу не записаны - смотрите BOOK_ERROR выше
+
+EXITCODE 1
+
+
+КОНЕЦ   2026-09-11 17:47:11
