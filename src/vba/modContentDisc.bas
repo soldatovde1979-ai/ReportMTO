@@ -436,14 +436,10 @@ Public Function BuildBlock1(ByVal sDir As String) As String
                 Case 2
                     s = s & "<td class=""n"">" & modContentMTO.FmtInt(pw) & "</td>"
                 Case 3
-                    If tw > 0# Then
-                        s = s & "<td class=""n"" style=""background:" & PctHeat( _
-                            modContentZone.SafePct(bw, tw)) & ";color:#fff"">" & _
-                            modContentZone.FmtF(modContentZone.SafePct(bw, tw), 0) & "</td>"
-                    Else
-                        s = s & "<td class=""n"" style=""color:var(--muted)"">" & _
-                            modContentZone.Dash() & "</td>"
-                    End If
+                    ' Процент - рамкой, а не заливкой: контракт шаблона держит цвет в
+                    ' рамке, фон остаётся фоном темы (как во всех прочих % отчёта).
+                    s = s & modContentZone.PctTd( _
+                        modContentZone.SafePct(bw, tw), tw > 0#)
             End Select
         Next i
         Select Case i2
@@ -454,14 +450,8 @@ Public Function BuildBlock1(ByVal sDir As String) As String
             Case 2
                 s = s & "<td class=""n"">" & modContentMTO.FmtInt(sumPc) & "</td></tr>"
             Case 3
-                If sumTot > 0# Then
-                    s = s & "<td class=""n"" style=""background:" & PctHeat( _
-                        modContentZone.SafePct(sumTab, sumTot)) & ";color:#fff"">" & _
-                        modContentZone.FmtF(modContentZone.SafePct(sumTab, sumTot), 0) & "</td></tr>"
-                Else
-                    s = s & "<td class=""n"" style=""color:var(--muted)"">" & _
-                        modContentZone.Dash() & "</td></tr>"
-                End If
+                s = s & modContentZone.PctTd( _
+                    modContentZone.SafePct(sumTab, sumTot), sumTot > 0#) & "</tr>"
         End Select
     Next i2
     s = s & "</tbody></table></div>"
@@ -469,9 +459,10 @@ Public Function BuildBlock1(ByVal sDir As String) As String
         "ПЛАНШЕТ} дирекции <b>" & modContentMTO.Esc(sDir) & "</b>, ремзоны набора " & _
         "<code>REPORT/SLIDE_ZONES</code> (по умолчанию СТК + ПРК). Недели - последние 8 " & _
         "по дате статуса (<code>status_date</code>), от свежей к старой. % планшет = " & _
-        "ПЛАНШЕТ / (ПЛАНШЕТ + ПК) за неделю; цвет строки - шкала #ef4444 " & _
-        ChrW$(&H2192) & " #f59e0b " & ChrW$(&H2192) & " #10b981. «НЕ ПОДПИСАНО» " & _
-        "исключено.")
+        "ПЛАНШЕТ / (ПЛАНШЕТ + ПК) за неделю; цвет - в рамке ячейки по общей шкале " & _
+        "процентов отчёта (0 красный " & ChrW$(&H2192) & " 50 оранжевый " & _
+        ChrW$(&H2192) & " 75 оливковый " & ChrW$(&H2192) & " 100 зелёный). " & _
+        "«НЕ ПОДПИСАНО» исключено.")
     BuildBlock1 = s
 End Function
 
