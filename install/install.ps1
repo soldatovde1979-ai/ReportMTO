@@ -100,9 +100,10 @@ function Read-VersionDescription() {
     $out = @()
     foreach ($l in $lines) {
         if (-not $seen) { if ($l.Trim() -ne "") { $seen = $true }; continue }
+        if ($l.Trim() -eq "") { continue }
         $out += $l
     }
-    return ($out -join " ").Trim()
+    return $out
 }
 
 function Step-Version([string]$ver, [string]$kind) {
@@ -315,6 +316,15 @@ if (-not $InstallOnly) {
         Write-Output ("RELEASE_VERSION_NEXT " + $newVersion + " - поднимаем (" + $Bump + ")")
     } else {
         Write-Output "RELEASE_SOURCES_SAME - исходники не менялись, версия остаётся прежней"
+    }
+
+    # Человеческое описание для CHANGELOG: заполняется руками в install\VERSION ниже
+    # первой строки ДО релиза. Читаем до записи VERSION (запись сбрасывает описание).
+    $desc = @(Read-VersionDescription)
+    if ($desc.Count -gt 0) {
+        Write-Output ("DESC_FOUND " + $desc.Count + " - описание для CHANGELOG прочитано из install\VERSION")
+    } else {
+        Write-Output "DESC_EMPTY - описание не заполнено: впишите его в install\VERSION ниже первой строки до релиза"
     }
 
     # --- защита от отката: что уже стоит в книге против того, что лежит в исходниках
@@ -619,13 +629,15 @@ $excel.Quit()
 
 # ================================================================== VERSION, state, CHANGELOG
 if ($newVersion -ne $curVersion) {
-    $desc = Read-VersionDescription
+    # Описание ушло в CHANGELOG этой записи; VERSION сбрасывается под описание
+    # следующей версии, чтобы старое описание не продублировалось в след. релизе.
     $lines = @()
     $lines += $newVersion
-    $lines += ("Собрано " + (Get-Date -Format "dd.MM.yyyy") + ". Изменены: " + ($changedFiles -join ", "))
     $lines += ""
-    $lines += "Первая строка этого файла - версия сборки, всё ниже - описание."
-    $lines += "Версию меняет install\install.ps1, руками править не нужно."
+    $lines += "Первая строка этого файла - версия сборки, её ведёт install\install.ps1."
+    $lines += "Ниже, до следующего релиза, впишите человеческое описание изменений:"
+    $lines += "  что добавлено; какая ошибка исправлена; что и с каким результатом оптимизировано."
+    $lines += "Оно попадёт в CHANGELOG.md первым абзацем записи новой версии."
     [IO.File]::WriteAllLines($versionFile, $lines, (New-Object System.Text.UTF8Encoding($false)))
     Write-Output ("VERSION_WRITTEN " + $newVersion)
 }
@@ -642,8 +654,16 @@ if (-not $sourcesChanged -and -not $forced -and ($applied.Count -eq 0)) {
     $entry = @()
     $entry += ("## " + $newVersion + " " + [char]0x2014 + " " + (Get-Date -Format "dd.MM.yyyy"))
     $entry += ""
+    # Сначала человеческое описание (из install\VERSION), техника - строго после.
+    if ($desc.Count -gt 0) {
+        $entry += $desc
+        $entry += ""
+    } else {
+        $entry += "- Описание изменений не заполнено: впишите его в install\VERSION ниже первой строки до релиза"
+        $entry += ""
+    }
     # v3.0: строки «Изменены исходники/документация» убраны — их даёт git;
-    # CHANGELOG оставляет только факты раскатки (миграции, -Force, книга, хеш).
+    # CHANGELOG оставляет описание и факты раскатки (миграции, -Force, книга, хеш).
     if ($applied.Count -gt 0) { $entry += ("- Миграции: " + ($applied -join ", ")) }
     if ($forced) { $entry += ("- ВНИМАНИЕ: установлено с -Force поверх более новой книги " + $book.Version) }
     $entry += ("- Книга: " + $full)
@@ -658,7 +678,7 @@ if (-not $sourcesChanged -and -not $forced -and ($applied.Count -eq 0)) {
         elseif ($idx -eq 0) { $new = ($entry + $old) }
         else { $new = ($old[0..($idx - 1)] + $entry + $old[$idx..($old.Count - 1)]) }
     } else {
-        $head = @("# Журнал версий ReportMTO", "", "Формат: Keep a Changelog, новая запись сверху. Файл ведёт install\install.ps1.", "")
+        $head = @("# Журнал версий ReportMTO", "", "Формат: человеческое описание изменений, затем техническая часть; новая запись сверху. Файл ведёт install\install.ps1.", "")
         $new = $head + $entry
     }
     [IO.File]::WriteAllLines($changelog, $new, (New-Object System.Text.UTF8Encoding($false)))

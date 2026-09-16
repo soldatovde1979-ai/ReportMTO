@@ -1,10 +1,23 @@
 # Журнал версий ReportMTO
 
-Формат: [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии по
-[SemVer](https://semver.org/lang/ru/). Новая запись сверху.
+Формат: сначала человеческое описание изменений (что добавлено; какая ошибка
+исправлена; что и с каким результатом оптимизировано), затем техническая часть
+(миграции, -Force, книга, хеш). Версии по [SemVer](https://semver.org/lang/ru/).
+Новая запись сверху.
 
-Файл ведёт `install\install.ps1` автоматически при успешной установке — руками
-дописывать не нужно. Порядок работы: [`docs/version-guide.md`](docs/version-guide.md).
+Описание заполняется руками в `install\VERSION` ниже первой строки ДО релиза —
+из него `install\install.ps1` собирает запись автоматически при успешной
+установке; сам журнал руками дописывать не нужно. Порядок работы:
+[`docs/version-guide.md`](docs/version-guide.md).
+
+## 8.1.10 — 16.09.2026
+
+Собрано 16.09.2026. Изменены: src/vba/modContentDisc.bas, tmp_index.html, README.md, docs/archive/ft_Report v1.2.md, docs/archive/tz_Report v1.2.md, docs/data.md, docs/index.md, docs/presentations/Презентация и блоки данных (Трек Б) v1.0.md, docs/task-rep-v2.md, docs/presentations/Презентация (удалён), docs/archive/tz_Report (удалён), docs/specs/data.md (удалён), docs/archive/ft_Report (удалён)
+Первая строка этого файла - версия сборки, всё ниже - описание.
+Версию меняет install\install.ps1, руками править не нужно.
+
+- Книга: C:\Projects\ReportMTO\build\ReportMTO v7.0.xlsm
+- Хеш исходников: e85e042001518cd294e41c3b5fc4ae1d
 
 ## 8.1.9 — 16.09.2026
 

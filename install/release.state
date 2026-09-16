@@ -1,7 +1,7 @@
 # Служебный файл install\install.ps1 - состояние последнего успешного релиза.
 # Руками не править: отсюда берётся ответ на вопрос «менялись ли исходники».
-version 8.1.9
-digest 5a25c162a7d011677551626afd2e65f8
+version 8.1.10
+digest e85e042001518cd294e41c3b5fc4ae1d
 file src/vba/modAggregate.bas 6E701973B32F50F176EB23F9F075AA3F
 file src/vba/modAIGateway.bas 326ACCDCC53035229FE4922FDDB88F58
 file src/vba/modColor.bas 35CB06FF36A3AE0ED0F0B286ABB7828F
@@ -30,7 +30,7 @@ file src/powerquery/qProf6_Groups.pq 238FE2A049014A7350279A6A7983C703
 file src/powerquery/qProf7_Retention.pq 74826B85C168B04B82924652FE43A88B
 file src/powerquery/Query-ImportJSON.pq B8E5A47500BE4C11E2E6F9EA68BF61BE
 file tmp_index.html 031BA82BCC4EEC6A620E18512A1060E2
-file README.md 891B5FC96AEF25B2BE8916720F52F27A
+file README.md A7E72A59F9BEB1FBEC0C4F13FB9F3547
 file docs/archive/ft_Report v1.2.md 723D2916E12460C25ED5723CF183B80B
 file docs/archive/logs.md 8B6616DF39A9AA917E957AF3075534C5
 file docs/archive/manifest-v6.1.md D36D0478BB0EC17502738E659F815BF1
@@ -63,5 +63,5 @@ file docs/specs/pri-json-findings-v1.md BB90964325B0E051E5B85FD8B990A5BA
 file docs/task-rep.md DCD4C1E78EA7CA5DD0421273FA9E2920
 file docs/task-rep-v2.md 8D51EDFA8B112D07D63C8B6BFDBF2C33
 file docs/tasks.md 9A73259CB4AEA23DC305FA29C442CFAE
-file docs/version-guide.md 29652154A71966A2E3382E07B06D7126
+file docs/version-guide.md 31B0E756E274EFFF2755F164905E6D20
 file install/install-v7.1.md 5029B74F81DC07B69D6DD9895385AA43
