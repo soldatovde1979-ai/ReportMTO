@@ -1,6 +1,14 @@
 Attribute VB_Name = "modContentDisc"
 ' modContentDisc - CONTENT-слой части «Дисциплина» (слайды 2-4) отчёта МТО.
 '
+' Версия 1.3 от 17.09.2026: приёмка против выдачи.
+'   Новое: BuildAccLev / {{BLOCK_ACCLEV_DENT}} и {{BLOCK_ACCLEV_DGM}} - события
+'   подписания раздельно по статусу ready_for: ПЛАНШЕТ / ПК / % планшета по неделям
+'   окна. Данные для этого в снимке были всегда (arm + ready_for), но нигде не
+'   сводились: все блоки слайда считали «% планшета» по всем подписям сразу, и разрыв
+'   между приёмкой и выдачей был неотличим от общего отставания дирекции.
+'   Счётчики mALTot/mALTab наполняются в том же проходе EnsureDisc, лишнего прохода
+'   по снимку не добавилось.
 ' Версия 1.2 от 16.09.2026: раскладка слайдов 2-4 по аудиту
 '   docs\plans\audit_kod_i_slaidy_v1.0.md.
 '   - ИСПРАВЛЕНО (P0-1 аудита): BuildNoSignSplit не использовал параметр дирекции,
@@ -72,6 +80,8 @@ Private mDTab As Object
 Private mDAcc As Object          ' «дирекция|подразделение» за отчётную неделю
 Private mDLev As Object
 Private mDPairs As Object        ' «дирекция|подразделение» -> Collection «номер наряда|G/D»
+Private mALTot As Object         ' «дирекция|A/L|неделя» -> событий с известным АРМ
+Private mALTab As Object         ' то же, только планшет. A - «Готов к приемке», L - «Готов к выбытию»
 Private mEvRows As Long
 Private mEvUnsigned As Long
 Private mRw As Long
@@ -93,6 +103,8 @@ Public Sub ResetDisc()
     Set mDAcc = Nothing
     Set mDLev = Nothing
     Set mDPairs = Nothing
+    Set mALTot = Nothing
+    Set mALTab = Nothing
     mRw = 0
 End Sub
 
@@ -118,6 +130,8 @@ Private Sub EnsureDisc()
     Set mDAcc = CreateObject("Scripting.Dictionary")
     Set mDLev = CreateObject("Scripting.Dictionary")
     Set mDPairs = CreateObject("Scripting.Dictionary")
+    Set mALTot = CreateObject("Scripting.Dictionary")
+    Set mALTab = CreateObject("Scripting.Dictionary")
 
     mRw = modContentZone.ZoneReportWeek()
 
@@ -193,6 +207,12 @@ Private Sub EnsureDisc()
                 If zn = "" Then zn = NOPOST
                 modContentZone.AddCnt mZoneTot, dk & "|" & zn & "|" & wS, 1#
                 modContentZone.AddCnt mWeekTot, dk & "|" & wS, 1#
+                ' Приёмка против выдачи: тот же % планшета, но раздельно по статусам.
+                ' Ключ A/L, а не текст статуса - статус в выгрузке пишется через «е».
+                Dim alK As String
+                alK = dk & "|" & IIf(isAcc, "A", "L") & "|" & wS
+                modContentZone.AddCnt mALTot, alK, 1#
+                If tab1 Then modContentZone.AddCnt mALTab, alK, 1#
                 If tab1 Then
                     modContentZone.AddCnt mZoneTab, dk & "|" & zn & "|" & wS, 1#
                     modContentZone.AddCnt mWeekTab, dk & "|" & wS, 1#
@@ -491,6 +511,125 @@ End Function
 ' Подсветка строки «% планшет»: 0-50 % - красный к жёлтому, 50-100 % - жёлтый к зелёному.
 Private Function PctHeat(ByVal p As Double) As String
     PctHeat = modColor.PercentToColor(p / 100#, "#ef4444", "#f59e0b", "#10b981")
+End Function
+
+' {{BLOCK_ACCLEV_*}} - приёмка против выдачи: чем подписывают. Единица счёта -
+' СОБЫТИЕ подписания с известным АРМ (arm из {ПК, ПЛАНШЕТ}), неделя - по дате статуса.
+'
+' Зачем отдельный блок: соседние блоки слайда считают «% планшета» по всем подписям
+' сразу, и разрыв между двумя статусами в них не виден. А он и есть рабочая гипотеза:
+' приёмку инженер подписывает на площадке с планшета, а выдачу - вернувшись за ПК.
+' Пока приёмка и выдача смешаны в одном проценте, этот перекос не отличить от общего
+' отставания дирекции, и меры принимаются не те.
+Public Function BuildAccLev(ByVal dir As String) As String
+    EnsureDisc
+    Dim wk As Variant
+    wk = modContentZone.WeekWindow(8)
+    Dim n As Long, i As Long
+    n = UBound(wk) + 1
+
+    Dim hasAny As Boolean
+    hasAny = False
+    For i = 0 To n - 1
+        If modContentZone.DictVal(mALTot, dir & "|A|" & CStr(wk(i))) > 0# Then hasAny = True
+        If modContentZone.DictVal(mALTot, dir & "|L|" & CStr(wk(i))) > 0# Then hasAny = True
+    Next i
+    If Not hasAny Then BuildAccLev = modContentMTO.EmptyNote(): Exit Function
+
+    Dim s As String
+    s = "<div class=""scroll""><table><thead><tr><th>Статус</th><th>АРМ</th>"
+    For i = 0 To n - 1
+        s = s & "<th class=""n"">" & modContentZone.WLab(CLng(wk(i))) & "</th>"
+    Next i
+    s = s & "<th class=""n"">Всего за окно</th></tr></thead><tbody>"
+
+    Dim g As Long
+    For g = 0 To 1
+        Dim code As String, lab As String
+        If g = 0 Then
+            code = "A": lab = "Готов к приемке"
+        Else
+            code = "L": lab = "Готов к выбытию"
+        End If
+
+        Dim sTot As Double, sTab As Double
+        sTot = 0#: sTab = 0#
+        For i = 0 To n - 1
+            sTot = sTot + modContentZone.DictVal(mALTot, dir & "|" & code & "|" & CStr(wk(i)))
+            sTab = sTab + modContentZone.DictVal(mALTab, dir & "|" & code & "|" & CStr(wk(i)))
+        Next i
+
+        Dim r As Long
+        For r = 0 To 2
+            If r = 0 Then
+                s = s & "<tr" & IIf(g = 1, " class=""total""", "") & _
+                    "><th rowspan=""3"">" & modContentMTO.Esc(lab) & "</th>"
+            Else
+                s = s & "<tr>"
+            End If
+            Select Case r
+                Case 0: s = s & "<td>ПЛАНШЕТ</td>"
+                Case 1: s = s & "<td>ПК</td>"
+                Case 2: s = s & "<td class=""head"">% планшета</td>"
+            End Select
+
+            For i = 0 To n - 1
+                Dim t As Double, b As Double
+                t = modContentZone.DictVal(mALTot, dir & "|" & code & "|" & CStr(wk(i)))
+                b = modContentZone.DictVal(mALTab, dir & "|" & code & "|" & CStr(wk(i)))
+                Select Case r
+                    Case 0: s = s & "<td class=""n"">" & modContentMTO.FmtInt(b) & "</td>"
+                    Case 1: s = s & "<td class=""n"">" & modContentMTO.FmtInt(t - b) & "</td>"
+                    Case 2: s = s & modContentZone.PctTd(modContentZone.SafePct(b, t), t > 0#)
+                End Select
+            Next i
+
+            Select Case r
+                Case 0: s = s & "<td class=""n"">" & modContentMTO.FmtInt(sTab) & "</td>"
+                Case 1: s = s & "<td class=""n"">" & modContentMTO.FmtInt(sTot - sTab) & "</td>"
+                Case 2: s = s & modContentZone.PctTd( _
+                    modContentZone.SafePct(sTab, sTot), sTot > 0#)
+            End Select
+            s = s & "</tr>"
+        Next r
+    Next g
+    s = s & "</tbody></table></div>"
+
+    ' Разрыв за окно: положительный - выдачу подписывают с планшета реже приёмки.
+    Dim aT As Double, aB As Double, lT As Double, lB As Double
+    aT = 0#: aB = 0#: lT = 0#: lB = 0#
+    For i = 0 To n - 1
+        aT = aT + modContentZone.DictVal(mALTot, dir & "|A|" & CStr(wk(i)))
+        aB = aB + modContentZone.DictVal(mALTab, dir & "|A|" & CStr(wk(i)))
+        lT = lT + modContentZone.DictVal(mALTot, dir & "|L|" & CStr(wk(i)))
+        lB = lB + modContentZone.DictVal(mALTab, dir & "|L|" & CStr(wk(i)))
+    Next i
+    Dim gap As Double, verdict As String
+    gap = modContentZone.SafePct(aB, aT) - modContentZone.SafePct(lB, lT)
+    If aT = 0# Or lT = 0# Then
+        verdict = "Один из статусов за окно не встречался " & ChrW$(&H2014) & _
+            " сравнивать не с чем."
+    ElseIf Abs(gap) < 1# Then
+        verdict = "Приёмку и выдачу подписывают одинаково, разрыв меньше процентного пункта."
+    ElseIf gap > 0# Then
+        verdict = "Выдачу подписывают с планшета <b>реже</b> приёмки на <b>" & _
+            modContentZone.FmtF(gap, 1) & " п.п.</b> " & ChrW$(&H2014) & " приёмка " & _
+            modContentZone.Pc(modContentZone.SafePct(aB, aT), 1) & ", выдача " & _
+            modContentZone.Pc(modContentZone.SafePct(lB, lT), 1) & _
+            ". Похоже на возврат за ПК после работ; проверять стоит выдачу, не приёмку."
+    Else
+        verdict = "Выдачу подписывают с планшета <b>чаще</b> приёмки на <b>" & _
+            modContentZone.FmtF(-gap, 1) & " п.п.</b> " & ChrW$(&H2014) & " приёмка " & _
+            modContentZone.Pc(modContentZone.SafePct(aB, aT), 1) & ", выдача " & _
+            modContentZone.Pc(modContentZone.SafePct(lB, lT), 1) & "."
+    End If
+
+    s = s & modContentZone.NoteBlk("События подписания дирекции <b>" & _
+        modContentMTO.Esc(dir) & "</b> с <code>arm</code> из {ПК, ПЛАНШЕТ}, разрез по " & _
+        "статусу <code>ready_for</code>; недели " & ChrW$(&H2014) & " по дате статуса " & _
+        "(<code>status_date</code>). ПК = все события минус планшет. «НЕ ПОДПИСАНО» " & _
+        "исключено, поэтому суммы не сходятся с числом нарядов. " & verdict)
+    BuildAccLev = s
 End Function
 
 ' {{BLOCK_POSTS_*}} - площадки за отчётную неделю. Единица счёта - ЗАКАЗ-НАРЯД:
@@ -1217,6 +1356,7 @@ Public Sub FillDiscPlaceholders(ByVal d As Object)
     ' прямо над ней (та же единица счёта, та же ось недель, зоны СТК и ПРК - строками
     ' этой же матрицы). Функция BuildBlock1 оставлена в коде невызываемой.
     d("BLOCK_WEEKS_DENT") = BuildWeeksTable("ДЭНТ")
+    d("BLOCK_ACCLEV_DENT") = BuildAccLev("ДЭНТ")
     d("BLOCK_POSTS_DENT") = BuildPostsTable("ДЭНТ")
     d("BLOCK_PEOPLE_DENT") = BuildPeople("ДЭНТ")
     d("BLOCK_DEPTS_DENT") = BuildDepts("ДЭНТ")
@@ -1225,6 +1365,7 @@ Public Sub FillDiscPlaceholders(ByVal d As Object)
         "Слайд 2 готов: " & Round(Timer - t0, 2) & " c"
 
     d("BLOCK_WEEKS_DGM") = BuildWeeksTable("ДГМ")
+    d("BLOCK_ACCLEV_DGM") = BuildAccLev("ДГМ")
     d("BLOCK_POSTS_DGM") = BuildPostsTable("ДГМ")
     d("BLOCK_PEOPLE_DGM") = BuildPeople("ДГМ")
     d("BLOCK_DEPTS_DGM") = BuildDepts("ДГМ")

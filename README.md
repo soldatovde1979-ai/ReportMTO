@@ -9,7 +9,7 @@
 1. Этот README — карта проекта, сборка, допущения.
 2. `docs\index.md` — карта документации «что где искать».
 3. `docs\data.md` — описание данных: источники, форматы, поля, контракт промпта и шаблона
-   (ревизия 16.09.2026, §3.3 — все 72 плейсхолдера). Парный `docs\spec.md` — спецификация системы.
+   (ревизия 16.09.2026, §3.3 — все 74 плейсхолдера). Парный `docs\spec.md` — спецификация системы.
 4. `docs\plans\MTO_контракт_шаблона_v1.0.md` — контракт шаблона v4.0 (59 плейсхолдеров).
    Устарел по составу блоков: актуальный состав — `docs\data.md` §3.3, раскладка —
    `docs\plans\audit_kod_i_slaidy_v1.0.md` и `docs\plans\tz_raskladka_slaidov_v1.0.md`.
@@ -57,7 +57,7 @@
 | `src\vba\modLog.bas` | `WriteLogEntry` | Core |
 | `src\vba\modContentMTO.bas` | Оркестратор отчёта v8.0: шапка, подвал, промпт DeepSeek, разбор ответа, сборка словаря плейсхолдеров | **Content Spec** |
 | `src\vba\modContentZone.bas` | Слайд 1 и слайды 5–8 («Техника»): 43 плейсхолдера, примитивы разметки и графики | **Content Spec** |
-| `src\vba\modContentDisc.bas` | Слайды 2–4 («Дисциплина»): 16 плейсхолдеров | **Content Spec** |
+| `src\vba\modContentDisc.bas` | Слайды 2–4 («Дисциплина»): 18 плейсхолдеров | **Content Spec** |
 | `src\powerquery\Query-ImportJSON.pq` | Generic ETL-пайплайн | Core |
 | `src\powerquery\fnUpsert.pq` | Generic upsert по столбцу `Key` | Core |
 | `src\powerquery\fnDedupByKey.pq` | Дедупликация строк по `Key` | Core |
@@ -66,9 +66,9 @@
 | `src\powerquery\fnComputeGroupMetrics.pq` | Расчёт `deltaHours` | **Content Spec** |
 | `src\powerquery\qExistingData.pq` | Чтение текущего содержимого `tbDATA` (новый запрос, см. `docs\spec.md` §5.3) | Core |
 | `src\powerquery\qDiagImport.pq` | Диагностика источника JSON, в сборку не входит | — |
-| `tmp_index.html` | Рабочий HTML-шаблон v4.2: плейсхолдеры и навигация по 8 слайдам | **Content Spec** |
+| `tmp_index.html` | Рабочий HTML-шаблон v4.3: плейсхолдеры и навигация по 8 слайдам | **Content Spec** |
 | `examples\reference-example.html` | Визуальный референс для сверки стиля (НЕ рабочий шаблон) | — |
-| `docs\spec.md`, `docs\data.md` | Спецификация системы и данные: поля выгрузки, нормализация, контракт `tbDATA`, промпт, 72 плейсхолдера шаблона | — |
+| `docs\spec.md`, `docs\data.md` | Спецификация системы и данные: поля выгрузки, нормализация, контракт `tbDATA`, промпт, 74 плейсхолдера шаблона | — |
 | `docs\plans\MTO_контракт_шаблона_v1.0.md` | Контракт шаблона v4.0: 59 плейсхолдеров, разметка каждого блока (по составу блоков устарел, см. `docs\data.md` §3.3) | **Content Spec** |
 | `docs\plans\audit_kod_i_slaidy_v1.0.md` | Аудит кода и раскладки от 16.09.2026: дефекты расчёта, дубли блоков, мёртвый код | — |
 | `docs\specs\brief-data-mto.md` | Данные МТО для внешнего аналитика (процесс загрузки намеренно опущен) | — |

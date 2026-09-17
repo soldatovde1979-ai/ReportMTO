@@ -30,6 +30,15 @@ Attribute VB_Name = "modContentZone"
 '   (блоки «возвраты» и «фазы наряда») лежали в середине файла, после процедур -
 '   перенесены в секцию Declarations. В BuildAgeCurve и BuildChronics цикл
 '   For Each k закрывался Next i.
+' Версия 2.7 от 17.09.2026: возвраты в двух окнах.
+'   Слайд 6 показывал только окно 30 суток, а окно 7 суток жило отдельно - в факте
+'   шапки «ПОВТОРНЫЕ» и в плитке слайда 1, и читатель не мог их сопоставить.
+'   Добавлен mFailTot7 - возвраты по отказу с окном 7 суток, ТОТ ЖЕ уровень строгости
+'   и тот же знаменатель, что у 30-суточной плитки. Разница между плитками = возвраты
+'   второй-четвёртой недели после ремонта.
+'   (!) mRetTot7 (окно 7 по ГРУППЕ дефекта, без отбора отказов) не трогался: его
+'   определение задано ТЗ правок шапки, решение N3 от 14.09.2026. С плитками слайда 6
+'   он не сходится, и это теперь написано в пояснении под ними.
 ' Версия 2.6 от 16.09.2026: раскладка слайда 1 по аудиту
 '   docs\plans\audit_kod_i_slaidy_v1.0.md.
 '   - НОВОЕ: BuildZnTypeFlowHang / {{BLOCK_ZNTYPE_FLOW_HANG}} - один блок
@@ -149,6 +158,7 @@ Private mFailNumM As Object, mFailNumW As Object    ' по подкатегор�
 Private mFailDenM As Object, mFailDenW As Object
 Private mRetTot As Long, mStrictTot As Long, mFailTot As Long
 Private mRetTot7 As Long
+Private mFailTot7 As Long   ' возвраты по отказу, окно 7 суток (слайд 6, парная плитка к 30)
 Private mDenAll As Long, mDenFail As Long
 Private mGapMed As Double, mGapHas As Boolean
 Private mNodeNum As Object, mNodeDen As Object      ' «группа|узел» -> счётчик
@@ -183,6 +193,7 @@ Public Sub ResetZone()
     mWeeks = Empty
     mRetReady = False
     Set mRetNumW7 = Nothing
+    mFailTot7 = 0
     mFlowReady = False
     Set mCloseH = Nothing
     Set mStuck = Nothing
@@ -1940,13 +1951,19 @@ Private Sub EnsureRet()
     mStrictTot = RetPairs(1, Nothing, Nothing, Nothing, Nothing, RET_WINDOW)
     mFailTot = RetPairs(2, mFailNumM, mFailNumW, Nothing, mNodeNum, RET_WINDOW)
     mRetTot7 = RetPairs(0, Nothing, mRetNumW7, Nothing, Nothing, 7)
+    ' Окно 7 суток на ТОМ ЖЕ уровне строгости, что основная плитка слайда 6 (mode 2,
+    ' только отказы, по подкатегории). mRetTot7 выше считается по группе дефекта
+    ' (mode 0) - он питает факт шапки «ПОВТОРНЫЕ» и плитку слайда 1, где так и
+    ' задано ТЗ правок шапки (решение N3 от 14.09.2026). Смешивать их нельзя.
+    mFailTot7 = RetPairs(2, Nothing, Nothing, Nothing, Nothing, 7)
     mGapMed = MedianOf(gaps, mGapHas)
 
     mRetReady = True
     modLog.WriteDebug 2, "Техника", "modContentZone.EnsureRet", _
         "Внеплановых " & CStr(mDenAll) & ", возвратов по группе " & CStr(mRetTot) & _
         ", по подкатегории " & CStr(mStrictTot) & ", по отказу " & CStr(mFailTot) & _
-        ", за 7 суток " & CStr(mRetTot7)
+        ", за 7 суток по группе " & CStr(mRetTot7) & _
+        ", за 7 суток по отказу " & CStr(mFailTot7)
 End Sub
 
 ' Граница «окно не закрыто»: у нарядов последних RET_WINDOW суток возврат
@@ -1963,22 +1980,35 @@ Public Function BuildRetKpi() As String
     EnsureRet
     Dim s As String
     s = "<div class=""kpis"">"
-    s = s & KpiTile("Возвратов по отказу", Pc(SafePct(mFailTot, mDenFail), 1), "crit", _
+    ' Два окна рядом, один уровень строгости: 7 суток - «вернулась сразу, ремонт не
+    ' помог», 30 суток - «вернулась в пределах месяца». Разница между плитками и есть
+    ' доля возвратов, случившихся на второй-четвёртой неделе после ремонта.
+    s = s & KpiTile("Возвратов по отказу · 7 суток", Pc(SafePct(mFailTot7, mDenFail), 1), "crit", _
+        modContentMTO.FmtInt(CDbl(mFailTot7)) & " из " & _
+        modContentMTO.FmtInt(CDbl(mDenFail)) & " отказов")
+    s = s & KpiTile("Возвратов по отказу · 30 суток", Pc(SafePct(mFailTot, mDenFail), 1), "crit", _
         modContentMTO.FmtInt(CDbl(mFailTot)) & " из " & _
         modContentMTO.FmtInt(CDbl(mDenFail)) & " отказов")
-    s = s & KpiTile("По подкатегории", Pc(SafePct(mStrictTot, mDenAll), 1), "", _
+    s = s & KpiTile("По подкатегории · 30 суток", Pc(SafePct(mStrictTot, mDenAll), 1), "", _
         "без разделения на отказ и обслуживание")
-    s = s & KpiTile("По группе дефекта", Pc(SafePct(mRetTot, mDenAll), 1), "", _
+    s = s & KpiTile("По группе дефекта · 30 суток", Pc(SafePct(mRetTot, mDenAll), 1), "", _
         "верхняя граница, для сравнения")
     s = s & KpiTile("Медиана интервала", _
         IIf(mGapHas, modContentMTO.FmtInt(mGapMed), Dash()) & " <small>сут</small>", "", _
         "окно " & CStr(RET_WINDOW) & " суток")
-    s = s & NoteBlk("Плитки слайда 6: возвратов по отказу - доля отказов с возвратом " & _
-        "(окно 30 суток от закрытия предыдущего наряда, по подкатегории дефекта); " & _
-        "по подкатегории - доля возвратов среди всех внеплановых нарядов; по группе " & _
-        "дефекта - верхняя граница доли возвратов; медиана интервала - медиана " & _
-        "интервала до возврата, окно 30 суток. Пары возвратов считаются от первого " & _
-        "наряда пары с 01.01.2026 (YTD); знаменатели - внеплановые наряды снимка.")
+    s = s & NoteBlk("Возврат " & ChrW$(&H2014) & " повторный заход машины с тем же " & _
+        "дефектом после закрытия предыдущего наряда. <b>Два окна</b>: 7 суток " & _
+        ChrW$(&H2014) & " вернулась почти сразу, ремонт не помог; 30 суток " & _
+        ChrW$(&H2014) & " вернулась в пределах месяца. Разница между плитками " & _
+        ChrW$(&H2014) & " возвраты второй-четвёртой недели. Обе плитки считаются " & _
+        "одинаково: по подкатегории дефекта, только отказы, знаменатель один.")
+    s = s & NoteBlk("Плитка слайда 1 «Возвратов (7 дн.)» и факт шапки «ПОВТОРНЫЕ» " & _
+        "считаются ИНАЧЕ " & ChrW$(&H2014) & " по группе дефекта и без отбора отказов " & _
+        "(так задано ТЗ правок шапки), поэтому с плитками выше они не сходятся. " & _
+        "«По подкатегории» и «по группе дефекта» " & ChrW$(&H2014) & " более широкие " & _
+        "определения, даны для сравнения. Графики ниже " & ChrW$(&H2014) & " окно 30 " & _
+        "суток. Пары считаются от первого наряда пары с 01.01.2026 (YTD); " & _
+        "знаменатели " & ChrW$(&H2014) & " внеплановые наряды снимка.")
     BuildRetKpi = s & "</div>"
 End Function
 

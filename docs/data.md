@@ -457,7 +457,7 @@ Text.From([number] ?? "") & "|"
 
 ### 3.3 Плейсхолдеры HTML-шаблона (`tmp_index.html`)
 
-Сверено 16.09.2026 с шаблоном v4.2 и кодом v8.3: **72 плейсхолдера**, все заполняются словарём
+Сверено 16.09.2026 с шаблоном v4.3 и кодом v8.3: **74 плейсхолдера**, все заполняются словарём
 `Scripting.Dictionary` из `modContentMTO.BuildPlaceholders` (шапка/подвал/ИИ) +
 `modContentZone.FillZonePlaceholders` (слайды 1, 5–8) + `modContentDisc.FillDiscPlaceholders`
 (слайды 2–4). Механизм подстановки — `modHTMLEngine.RenderTemplate`: `Replace(html, "{{" & key & "}}", ...)`;
@@ -496,6 +496,7 @@ Text.From([number] ?? "") & "|"
 | Плейсхолдер | Назначение | Как получается |
 |---|---|---|
 | `{{BLOCK_WEEKS_DENT}}`, `{{BLOCK_WEEKS_DGM}}` | матрица «% планшета» по ремзонам × 8 недель (события) | `BuildWeeksTable("ДЭНТ"/"ДГМ")` |
+| `{{BLOCK_ACCLEV_DENT}}`, `{{BLOCK_ACCLEV_DGM}}` | приёмка против выдачи: ПЛАНШЕТ / ПК / % планшета раздельно по `ready_for`, окно 8 недель | `BuildAccLev(dir)` |
 | `{{BLOCK_POSTS_DENT}}`, `{{BLOCK_POSTS_DGM}}` | площадки за отчётную неделю (единица — наряд) | `BuildPostsTable(dir)` |
 | `{{BLOCK_PEOPLE_DENT}}`, `{{BLOCK_PEOPLE_DGM}}` | сотрудники: тренд % за 4 недели + объём/время за отчётную (порог `REPORT/MIN_RECORDS`) | `BuildPeople(dir)` |
 | `{{BLOCK_DEPTS_DENT}}`, `{{BLOCK_DEPTS_DGM}}` | подразделения (`emp_dep`), аналог сотрудников | `BuildDepts(dir)` |
@@ -533,7 +534,7 @@ Text.From([number] ?? "") & "|"
 | `{{BLOCK_FLOW_DEFEKT}}` | группы дефекта за отчётную неделю (перенесён со слайда 1) | `BuildFlowDefekt` |
 | `{{BLOCK_PARETO}}` | Парето групп дефекта (топ-8, внеплановые, YTD) | `BuildPareto` |
 | `{{BLOCK_DEFECT_DETAIL}}` | классификатор описаний: характер работы + узел | `BuildDefectDetail` (`EnsureCls`) |
-| `{{BLOCK_RET_KPI}}` | плитки возвратов (по отказу / подкатегории / группе / медиана интервала) | `BuildRetKpi` |
+| `{{BLOCK_RET_KPI}}` (5 плиток: по отказу за 7 и за 30 суток, по подкатегории, по группе, медиана интервала) | плитки возвратов (по отказу / подкатегории / группе / медиана интервала) | `BuildRetKpi` |
 | `{{BLOCK_RET_MONTH}}` | возвраты по месяцам YTD (окно 30 сут) | `BuildRetMonth` |
 | `{{BLOCK_RET_WEEK}}` | возвраты по неделям окна | `BuildRetWeek` |
 | `{{BLOCK_RET_NODE}}` | узлы с ≥ 40 отказами и доля возвратов | `BuildRetNode` |
