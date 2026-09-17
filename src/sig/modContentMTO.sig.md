@@ -1,10 +1,10 @@
 # modContentMTO
 
 Статус: CLEAN
-Обновлено: 16.09.2026
+Обновлено: 17.09.2026
 
 ## Назначение
-CONTENT SPEC направления МТО. Оркестратор отчёта: реализует 4 контрактные функции Core (`BuildPivots`, `BuildPrompt`, `ParseAIResponse`, `BuildPlaceholders`), шапку/подвал, выводы ИИ, сборку словаря плейсхолдеров; содержимое слайдов 1 и 5–8 отдаёт `modContentZone`, слайдов 2–4 — `modContentDisc`. Плюс старые построители блоков 1–9 (v ≤ 7.4), из `BuildPlaceholders` не вызываемые (постановка §8 — не удалять).
+CONTENT SPEC направления МТО. Оркестратор отчёта: реализует 4 контрактные функции Core (`BuildPivots`, `BuildPrompt`, `ParseAIResponse`, `BuildPlaceholders`), шапку/подвал, выводы ИИ, сборку словаря плейсхолдеров; содержимое слайдов 1 и 5–8 отдаёт `modContentZone`, слайдов 2–4 — `modContentDisc`. Плюс старые построители блоков 1–9 (v ≤ 7.4), из `BuildPlaceholders` не вызываемые (постановка §8 — не удалять). Версия 8.4 (17.09.2026): обязательное поле «Период» в шапке отчёта — `BuildPeriodLine` / `{{REPORT_PERIOD}}`.
 
 ## Процедуры / Функции
 
@@ -24,7 +24,7 @@ CONTENT SPEC направления МТО. Оркестратор отчёта:
 - Выход: True, если распознаны все 8 ключей. Побочные эффекты: кэш `mInsights`, журнал DEBUG.
 
 ### BuildPlaceholders(aiSlide3, aiSlide4, aiSlide5) : Object
-- Назначение: собрать словарь `{{ИМЯ}} → HTML` для шаблона: шапка (`REPORT_TITLE/WEEK_LABEL/LEDE`, `FACTS`, `REPORT_FOOTER`), `modContentZone.FillZonePlaceholders` (слайды 1, 5–8), `modContentDisc.FillDiscPlaceholders` (слайды 2–4), выводы ИИ `AI_INSIGHT_SLIDE_1..8` (кэш `mInsights`, fallback на параметры; `DeAlias` псевдонимов → ФИО, `AiList` → `<ul><li>`).
+- Назначение: собрать словарь `{{ИМЯ}} → HTML` для шаблона: шапка (`REPORT_TITLE/WEEK_LABEL/LEDE/PERIOD`, `FACTS`, `REPORT_FOOTER`), `modContentZone.FillZonePlaceholders` (слайды 1, 5–8), `modContentDisc.FillDiscPlaceholders` (слайды 2–4), выводы ИИ `AI_INSIGHT_SLIDE_1..8` (кэш `mInsights`, fallback на параметры; `DeAlias` псевдонимов → ФИО, `AiList` → `<ul><li>`).
 - Вход: три вывода ИИ (для отладочного пути). Выход: Dictionary.
 - Побочные эффекты: вычисление всех блоков; журнал числа/размеров плейсхолдеров.
 
@@ -35,6 +35,11 @@ CONTENT SPEC направления МТО. Оркестратор отчёта:
 ### BuildLede(rw) / BuildFactsRef() / BuildFooter(rw) (private)
 - Назначение: подзаголовок шапки «Отчет о состоянии техники…», шесть чисел шапки (`modContentZone`-счётчики), подвал с версией сборки (`BUILD/VERSION`).
 - Вход: отчётная неделя. Выход: HTML. Побочные эффекты: нет.
+
+### BuildPeriodLine(rw) / Nbsp() (private)
+- Назначение: НОВОЕ v8.4 — обязательное поле «Период» шапки (`{{REPORT_PERIOD}}`): отчётная неделя с диапазоном дат, конец недели, границы «с начала года» (`REPORT/YTD_START` → конец снимка), месяц и дата обрыва выгрузки. Nbsp — неразрывный пробел, чтобы дата и ярлык не переносились по строкам.
+- Вход: отчётная неделя (rw). Выход: HTML-строка div.period-line.
+- Побочные эффекты: чтение `modContentZone` (WeekMonday/WeekRange/YtdStart/SnapshotEnd); нет записи.
 
 ### AiList(t) / DeAlias(text) / AliasOf(employee) / BuildEmployeeAliases() (private)
 - Назначение: вывод ИИ → `<ul><li>`; обратная замена «Сотрудник N» → ФИО (по убыванию N); псевдонимизация (кэш, стабильная нумерация по сортировке ФИО).
