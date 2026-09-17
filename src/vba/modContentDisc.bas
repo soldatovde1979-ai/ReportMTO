@@ -1,6 +1,27 @@
 Attribute VB_Name = "modContentDisc"
 ' modContentDisc - CONTENT-слой части «Дисциплина» (слайды 2-4) отчёта МТО.
 '
+' Версия 1.3 от 17.09.2026: приёмка против выдачи.
+'   Новое: BuildAccLev / {{BLOCK_ACCLEV_DENT}} и {{BLOCK_ACCLEV_DGM}} - события
+'   подписания раздельно по статусу ready_for: ПЛАНШЕТ / ПК / % планшета по неделям
+'   окна. Данные для этого в снимке были всегда (arm + ready_for), но нигде не
+'   сводились: все блоки слайда считали «% планшета» по всем подписям сразу, и разрыв
+'   между приёмкой и выдачей был неотличим от общего отставания дирекции.
+'   Счётчики mALTot/mALTab наполняются в том же проходе EnsureDisc, лишнего прохода
+'   по снимку не добавилось.
+' Версия 1.2 от 16.09.2026: раскладка слайдов 2-4 по аудиту
+'   docs\plans\audit_kod_i_slaidy_v1.0.md.
+'   - ИСПРАВЛЕНО (P0-1 аудита): BuildNoSignSplit не использовал параметр дирекции,
+'     и слайды ДЭНТ и ДГМ получали байт в байт одинаковый HTML. Параметр убран,
+'     блок переехал на слайд 4; заодно снята гистограмма, повторявшая таблицу слева.
+'   - СНЯТО со слайдов 2 и 3: {{BLOCK_TABLE1_*}} (BuildBlock1) - «Таблица 1»
+'     повторяла матрицу BLOCK_WEEKS_*, стоявшую прямо над ней. Функция осталась
+'     в коде невызываемой.
+'   - СНЯТО со слайда 4: {{BLOCK_UNSIGNED_ZNTYPE}} (BuildUnsignedZnType) - та же
+'     выборка и тот же разрез, что у нового {{BLOCK_NOSIGN_TYPE}}, но без процентов.
+'     Функция осталась в коде невызываемой.
+'   - ПОРЯДОК на слайдах 2 и 3: недели -> ремзоны -> люди -> подразделения ->
+'     разбор подписей. Один показатель раскручивается вглубь, без возвратов назад.
 ' Версия 1.1 от 10.09.2026 Модульная переменная mE переименована в mOrd:
 '   VBA не различает регистр, и `mE` - это зарезервированное слово `Me`,
 '   объявление не компилировалось. Линтер дополнен до v1.1, чтобы ловить это.
@@ -59,6 +80,8 @@ Private mDTab As Object
 Private mDAcc As Object          ' «дирекция|подразделение» за отчётную неделю
 Private mDLev As Object
 Private mDPairs As Object        ' «дирекция|подразделение» -> Collection «номер наряда|G/D»
+Private mALTot As Object         ' «дирекция|A/L|неделя» -> событий с известным АРМ
+Private mALTab As Object         ' то же, только планшет. A - «Готов к приемке», L - «Готов к выбытию»
 Private mEvRows As Long
 Private mEvUnsigned As Long
 Private mRw As Long
@@ -80,6 +103,8 @@ Public Sub ResetDisc()
     Set mDAcc = Nothing
     Set mDLev = Nothing
     Set mDPairs = Nothing
+    Set mALTot = Nothing
+    Set mALTab = Nothing
     mRw = 0
 End Sub
 
@@ -105,6 +130,8 @@ Private Sub EnsureDisc()
     Set mDAcc = CreateObject("Scripting.Dictionary")
     Set mDLev = CreateObject("Scripting.Dictionary")
     Set mDPairs = CreateObject("Scripting.Dictionary")
+    Set mALTot = CreateObject("Scripting.Dictionary")
+    Set mALTab = CreateObject("Scripting.Dictionary")
 
     mRw = modContentZone.ZoneReportWeek()
 
@@ -180,6 +207,12 @@ Private Sub EnsureDisc()
                 If zn = "" Then zn = NOPOST
                 modContentZone.AddCnt mZoneTot, dk & "|" & zn & "|" & wS, 1#
                 modContentZone.AddCnt mWeekTot, dk & "|" & wS, 1#
+                ' Приёмка против выдачи: тот же % планшета, но раздельно по статусам.
+                ' Ключ A/L, а не текст статуса - статус в выгрузке пишется через «е».
+                Dim alK As String
+                alK = dk & "|" & IIf(isAcc, "A", "L") & "|" & wS
+                modContentZone.AddCnt mALTot, alK, 1#
+                If tab1 Then modContentZone.AddCnt mALTab, alK, 1#
                 If tab1 Then
                     modContentZone.AddCnt mZoneTab, dk & "|" & zn & "|" & wS, 1#
                     modContentZone.AddCnt mWeekTab, dk & "|" & wS, 1#
@@ -478,6 +511,125 @@ End Function
 ' Подсветка строки «% планшет»: 0-50 % - красный к жёлтому, 50-100 % - жёлтый к зелёному.
 Private Function PctHeat(ByVal p As Double) As String
     PctHeat = modColor.PercentToColor(p / 100#, "#ef4444", "#f59e0b", "#10b981")
+End Function
+
+' {{BLOCK_ACCLEV_*}} - приёмка против выдачи: чем подписывают. Единица счёта -
+' СОБЫТИЕ подписания с известным АРМ (arm из {ПК, ПЛАНШЕТ}), неделя - по дате статуса.
+'
+' Зачем отдельный блок: соседние блоки слайда считают «% планшета» по всем подписям
+' сразу, и разрыв между двумя статусами в них не виден. А он и есть рабочая гипотеза:
+' приёмку инженер подписывает на площадке с планшета, а выдачу - вернувшись за ПК.
+' Пока приёмка и выдача смешаны в одном проценте, этот перекос не отличить от общего
+' отставания дирекции, и меры принимаются не те.
+Public Function BuildAccLev(ByVal dir As String) As String
+    EnsureDisc
+    Dim wk As Variant
+    wk = modContentZone.WeekWindow(8)
+    Dim n As Long, i As Long
+    n = UBound(wk) + 1
+
+    Dim hasAny As Boolean
+    hasAny = False
+    For i = 0 To n - 1
+        If modContentZone.DictVal(mALTot, dir & "|A|" & CStr(wk(i))) > 0# Then hasAny = True
+        If modContentZone.DictVal(mALTot, dir & "|L|" & CStr(wk(i))) > 0# Then hasAny = True
+    Next i
+    If Not hasAny Then BuildAccLev = modContentMTO.EmptyNote(): Exit Function
+
+    Dim s As String
+    s = "<div class=""scroll""><table><thead><tr><th>Статус</th><th>АРМ</th>"
+    For i = 0 To n - 1
+        s = s & "<th class=""n"">" & modContentZone.WLab(CLng(wk(i))) & "</th>"
+    Next i
+    s = s & "<th class=""n"">Всего за окно</th></tr></thead><tbody>"
+
+    Dim g As Long
+    For g = 0 To 1
+        Dim code As String, lab As String
+        If g = 0 Then
+            code = "A": lab = "Готов к приемке"
+        Else
+            code = "L": lab = "Готов к выбытию"
+        End If
+
+        Dim sTot As Double, sTab As Double
+        sTot = 0#: sTab = 0#
+        For i = 0 To n - 1
+            sTot = sTot + modContentZone.DictVal(mALTot, dir & "|" & code & "|" & CStr(wk(i)))
+            sTab = sTab + modContentZone.DictVal(mALTab, dir & "|" & code & "|" & CStr(wk(i)))
+        Next i
+
+        Dim r As Long
+        For r = 0 To 2
+            If r = 0 Then
+                s = s & "<tr" & IIf(g = 1, " class=""total""", "") & _
+                    "><th rowspan=""3"">" & modContentMTO.Esc(lab) & "</th>"
+            Else
+                s = s & "<tr>"
+            End If
+            Select Case r
+                Case 0: s = s & "<td>ПЛАНШЕТ</td>"
+                Case 1: s = s & "<td>ПК</td>"
+                Case 2: s = s & "<td class=""head"">% планшета</td>"
+            End Select
+
+            For i = 0 To n - 1
+                Dim t As Double, b As Double
+                t = modContentZone.DictVal(mALTot, dir & "|" & code & "|" & CStr(wk(i)))
+                b = modContentZone.DictVal(mALTab, dir & "|" & code & "|" & CStr(wk(i)))
+                Select Case r
+                    Case 0: s = s & "<td class=""n"">" & modContentMTO.FmtInt(b) & "</td>"
+                    Case 1: s = s & "<td class=""n"">" & modContentMTO.FmtInt(t - b) & "</td>"
+                    Case 2: s = s & modContentZone.PctTd(modContentZone.SafePct(b, t), t > 0#)
+                End Select
+            Next i
+
+            Select Case r
+                Case 0: s = s & "<td class=""n"">" & modContentMTO.FmtInt(sTab) & "</td>"
+                Case 1: s = s & "<td class=""n"">" & modContentMTO.FmtInt(sTot - sTab) & "</td>"
+                Case 2: s = s & modContentZone.PctTd( _
+                    modContentZone.SafePct(sTab, sTot), sTot > 0#)
+            End Select
+            s = s & "</tr>"
+        Next r
+    Next g
+    s = s & "</tbody></table></div>"
+
+    ' Разрыв за окно: положительный - выдачу подписывают с планшета реже приёмки.
+    Dim aT As Double, aB As Double, lT As Double, lB As Double
+    aT = 0#: aB = 0#: lT = 0#: lB = 0#
+    For i = 0 To n - 1
+        aT = aT + modContentZone.DictVal(mALTot, dir & "|A|" & CStr(wk(i)))
+        aB = aB + modContentZone.DictVal(mALTab, dir & "|A|" & CStr(wk(i)))
+        lT = lT + modContentZone.DictVal(mALTot, dir & "|L|" & CStr(wk(i)))
+        lB = lB + modContentZone.DictVal(mALTab, dir & "|L|" & CStr(wk(i)))
+    Next i
+    Dim gap As Double, verdict As String
+    gap = modContentZone.SafePct(aB, aT) - modContentZone.SafePct(lB, lT)
+    If aT = 0# Or lT = 0# Then
+        verdict = "Один из статусов за окно не встречался " & ChrW$(&H2014) & _
+            " сравнивать не с чем."
+    ElseIf Abs(gap) < 1# Then
+        verdict = "Приёмку и выдачу подписывают одинаково, разрыв меньше процентного пункта."
+    ElseIf gap > 0# Then
+        verdict = "Выдачу подписывают с планшета <b>реже</b> приёмки на <b>" & _
+            modContentZone.FmtF(gap, 1) & " п.п.</b> " & ChrW$(&H2014) & " приёмка " & _
+            modContentZone.Pc(modContentZone.SafePct(aB, aT), 1) & ", выдача " & _
+            modContentZone.Pc(modContentZone.SafePct(lB, lT), 1) & _
+            ". Похоже на возврат за ПК после работ; проверять стоит выдачу, не приёмку."
+    Else
+        verdict = "Выдачу подписывают с планшета <b>чаще</b> приёмки на <b>" & _
+            modContentZone.FmtF(-gap, 1) & " п.п.</b> " & ChrW$(&H2014) & " приёмка " & _
+            modContentZone.Pc(modContentZone.SafePct(aB, aT), 1) & ", выдача " & _
+            modContentZone.Pc(modContentZone.SafePct(lB, lT), 1) & "."
+    End If
+
+    s = s & modContentZone.NoteBlk("События подписания дирекции <b>" & _
+        modContentMTO.Esc(dir) & "</b> с <code>arm</code> из {ПК, ПЛАНШЕТ}, разрез по " & _
+        "статусу <code>ready_for</code>; недели " & ChrW$(&H2014) & " по дате статуса " & _
+        "(<code>status_date</code>). ПК = все события минус планшет. «НЕ ПОДПИСАНО» " & _
+        "исключено, поэтому суммы не сходятся с числом нарядов. " & verdict)
+    BuildAccLev = s
 End Function
 
 ' {{BLOCK_POSTS_*}} - площадки за отчётную неделю. Единица счёта - ЗАКАЗ-НАРЯД:
@@ -980,9 +1132,17 @@ Private Function AgeBucket4(ByVal dser As Double) As Long
 End Function
 
 ' {{BLOCK_NOSIGN_*}} - Таблицы 5/6 (Б9/Б10): наряды без единой подписи
-' (SignedCount = 0, как на слайде 4) в разрезе TekStatusPoDoc / zn_type.
-' Двухколоночная разметка по образцу BuildSignStat: таблица + график справа.
-Public Function BuildNoSignSplit(ByVal sDir As String, ByVal fld As Long, _
+' (SignedCount = 0) в разрезе TekStatusPoDoc / zn_type.
+'
+' v1.2 от 16.09.2026, две правки по аудиту раскладки:
+'   - убран параметр дирекции. Он НЕ ИСПОЛЬЗОВАЛСЯ в теле функции, и слайды
+'     ДЭНТ и ДГМ получали байт в байт одинаковый HTML под разными заголовками.
+'     Отбор и не может зависеть от дирекции: у наряда без единой подписи нет
+'     подписей ни одной. Блок переехал на слайд 4 «Не подписано вообще».
+'   - снята гистограмма справа: она строилась по тем же labs/vals, что таблица
+'     слева, то есть повторяла её числа один в один. Осталась таблица - в ней
+'     есть проценты, которых на полосах не было.
+Public Function BuildNoSignSplit(ByVal fld As Long, _
                                  ByVal emptyLab As String, ByVal colLab As String) As String
     EnsureDisc
     Dim d As Object
@@ -1005,7 +1165,7 @@ Public Function BuildNoSignSplit(ByVal sDir As String, ByVal fld As Long, _
     modContentZone.TopKeys d, 0, labs, vals
 
     Dim s As String, i As Long
-    s = "<div class=""two-col wide-l""><div><table><thead><tr>" & _
+    s = "<table><thead><tr>" & _
         "<th>" & modContentMTO.Esc(colLab) & "</th><th class=""n"">Количество</th>" & _
         "<th class=""n"">Процент</th></tr></thead><tbody>"
     For i = 0 To UBound(labs)
@@ -1013,13 +1173,12 @@ Public Function BuildNoSignSplit(ByVal sDir As String, ByVal fld As Long, _
             modContentMTO.FmtInt(CDbl(vals(i))) & "</td><td class=""n"">" & _
             modContentZone.Pc(modContentZone.SafePct(CDbl(vals(i)), tot), 1) & "</td></tr>"
     Next i
-    s = s & "</tbody></table></div><div>"
-    s = s & modContentZone.MockLabel("Количество нарядов")
-    s = s & modContentZone.HBars(labs, vals, 620, 170, 24) & "</div></div>"
+    s = s & "</tbody></table>"
     s = s & modContentZone.NoteBlk("Наряды без единой подписи (0 из 4 подписей с АРМ " & _
         "ПК/ПЛАНШЕТ), разрез " & modContentMTO.Esc(colLab) & "; процент от числа таких " & _
         "нарядов (" & modContentMTO.FmtInt(tot) & "). Отбор не зависит от дирекции: у " & _
-        "наряда без единой подписи нет подписей ни одной дирекции. Период - " & _
+        "наряда без единой подписи нет подписей ни одной дирекции " & ChrW$(&H2014) & _
+        " поэтому блок стоит здесь, а не на слайдах ДЭНТ и ДГМ. Период - " & _
         "с начала года (01.01.2026).")
     BuildNoSignSplit = s
 End Function
@@ -1191,33 +1350,49 @@ Public Sub FillDiscPlaceholders(ByVal d As Object)
     t0 = Timer
     EnsureDisc
 
-    d("BLOCK_WEEKS_DENT") = BuildWeeksTable("ДЭНТ")
-    d("BLOCK_TABLE1_DENT") = BuildBlock1("ДЭНТ")
-    d("BLOCK_POSTS_DENT") = BuildPostsTable("ДЭНТ")
-    d("BLOCK_PEOPLE_DENT") = BuildPeople("ДЭНТ")
-    d("BLOCK_DEPTS_DENT") = BuildDepts("ДЭНТ")
-    d("BLOCK_SIGNSTAT_DENT") = BuildSignStat("ДЭНТ")
-    d("BLOCK_NOSIGN_STATUS_DENT") = BuildNoSignSplit("ДЭНТ", E_TEK, "(статус не указан)", "Текущий статус заказ-наряда")
-    d("BLOCK_NOSIGN_TYPE_DENT") = BuildNoSignSplit("ДЭНТ", E_TYPE, "(вид не указан)", "Вид ремонта")
+    ' Подписи периода (PeriodCap) - централизованно, как в FillZonePlaceholders.
+    Dim wl As String, w8 As String, w4 As String, ytd As String
+    wl = "отчётная неделя " & modContentZone.WLab(mRw)
+    w8 = "окно 8 недель по дате статуса"
+    w4 = "4 недели по дате статуса; объём и время - отчётная неделя " & _
+        modContentZone.WLab(mRw)
+    ytd = "с начала года (01.01.2026)"
+
+    ' Слайды 2 и 3 раскручивают ОДИН показатель - «% подписаний с планшета» - вглубь:
+    ' недели -> приёмка против выдачи -> ремзоны -> люди -> подразделения -> подписи.
+    ' Снята «Таблица 1» (BuildBlock1): она повторяла матрицу BLOCK_WEEKS_*, стоявшую
+    ' прямо над ней. Функция BuildBlock1 оставлена в коде невызываемой.
+    d("BLOCK_WEEKS_DENT") = modContentZone.PeriodCap(w8) & BuildWeeksTable("ДЭНТ")
+    d("BLOCK_ACCLEV_DENT") = modContentZone.PeriodCap(w8) & BuildAccLev("ДЭНТ")
+    d("BLOCK_POSTS_DENT") = modContentZone.PeriodCap(wl) & BuildPostsTable("ДЭНТ")
+    d("BLOCK_PEOPLE_DENT") = modContentZone.PeriodCap(w4) & BuildPeople("ДЭНТ")
+    d("BLOCK_DEPTS_DENT") = modContentZone.PeriodCap(w4) & BuildDepts("ДЭНТ")
+    d("BLOCK_SIGNSTAT_DENT") = modContentZone.PeriodCap(ytd) & BuildSignStat("ДЭНТ")
     modLog.WriteDebug 1, "Дисциплина", "FillDiscPlaceholders", _
         "Слайд 2 готов: " & Round(Timer - t0, 2) & " c"
 
-    d("BLOCK_WEEKS_DGM") = BuildWeeksTable("ДГМ")
-    d("BLOCK_TABLE1_DGM") = BuildBlock1("ДГМ")
-    d("BLOCK_POSTS_DGM") = BuildPostsTable("ДГМ")
-    d("BLOCK_PEOPLE_DGM") = BuildPeople("ДГМ")
-    d("BLOCK_DEPTS_DGM") = BuildDepts("ДГМ")
-    d("BLOCK_SIGNSTAT_DGM") = BuildSignStat("ДГМ")
-    d("BLOCK_NOSIGN_STATUS_DGM") = BuildNoSignSplit("ДГМ", E_TEK, "(статус не указан)", "Текущий статус заказ-наряда")
-    d("BLOCK_NOSIGN_TYPE_DGM") = BuildNoSignSplit("ДГМ", E_TYPE, "(вид не указан)", "Вид ремонта")
+    d("BLOCK_WEEKS_DGM") = modContentZone.PeriodCap(w8) & BuildWeeksTable("ДГМ")
+    d("BLOCK_ACCLEV_DGM") = modContentZone.PeriodCap(w8) & BuildAccLev("ДГМ")
+    d("BLOCK_POSTS_DGM") = modContentZone.PeriodCap(wl) & BuildPostsTable("ДГМ")
+    d("BLOCK_PEOPLE_DGM") = modContentZone.PeriodCap(w4) & BuildPeople("ДГМ")
+    d("BLOCK_DEPTS_DGM") = modContentZone.PeriodCap(w4) & BuildDepts("ДГМ")
+    d("BLOCK_SIGNSTAT_DGM") = modContentZone.PeriodCap(ytd) & BuildSignStat("ДГМ")
     modLog.WriteDebug 1, "Дисциплина", "FillDiscPlaceholders", _
         "Слайд 3 готов: " & Round(Timer - t0, 2) & " c"
 
-    d("KPI_UNSIGNED") = BuildKpiUnsigned()
-    d("BLOCK_UNSIGNED_AGE") = BuildUnsignedAge()
-    d("BLOCK_UNSIGNED_POST") = BuildUnsignedPost()
-    d("BLOCK_UNSIGNED_OWNER") = BuildUnsignedOwner()
-    d("BLOCK_UNSIGNED_ZNTYPE") = BuildUnsignedZnType()
+    ' Слайд 4. Блоки «НЕ ПОДПИСАН» переехали сюда со слайдов 2 и 3: их выборка
+    ' (наряды без единой подписи) от дирекции не зависит, и на тех слайдах они
+    ' давали две одинаковые копии. Разрез по виду ремонта заменил прежний
+    ' BLOCK_UNSIGNED_ZNTYPE - у них была одна и та же выборка и один и тот же
+    ' разрез, но таблица даёт ещё и проценты. BuildUnsignedZnType остаётся в коде.
+    d("KPI_UNSIGNED") = modContentZone.PeriodCap(ytd) & BuildKpiUnsigned()
+    d("BLOCK_UNSIGNED_AGE") = modContentZone.PeriodCap(ytd) & BuildUnsignedAge()
+    d("BLOCK_UNSIGNED_POST") = modContentZone.PeriodCap(ytd) & BuildUnsignedPost()
+    d("BLOCK_UNSIGNED_OWNER") = modContentZone.PeriodCap(ytd) & BuildUnsignedOwner()
+    d("BLOCK_NOSIGN_TYPE") = modContentZone.PeriodCap(ytd) & _
+        BuildNoSignSplit(E_TYPE, "(вид не указан)", "Вид ремонта")
+    d("BLOCK_NOSIGN_STATUS") = modContentZone.PeriodCap(ytd) & _
+        BuildNoSignSplit(E_TEK, "(статус не указан)", "Текущий статус заказ-наряда")
     modLog.WriteDebug 1, "Дисциплина", "FillDiscPlaceholders", _
         "Слайд 4 готов: " & Round(Timer - t0, 2) & " c"
 End Sub
