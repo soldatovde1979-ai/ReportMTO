@@ -457,10 +457,16 @@ Text.From([number] ?? "") & "|"
 
 ### 3.3 Плейсхолдеры HTML-шаблона (`tmp_index.html`)
 
-Сверено 16.09.2026 с шаблоном v4.4 и кодом v8.3: **75 плейсхолдеров**, все заполняются словарём
+Сверено 16.09.2026 с шаблоном v4.5 и кодом v8.3: **76 плейсхолдеров**, все заполняются словарём
 `Scripting.Dictionary` из `modContentMTO.BuildPlaceholders` (шапка/подвал/ИИ) +
 `modContentZone.FillZonePlaceholders` (слайды 1, 5–8) + `modContentDisc.FillDiscPlaceholders`
-(слайды 2–4). Механизм подстановки — `modHTMLEngine.RenderTemplate`: `Replace(html, "{{" & key & "}}", ...)`;
+(слайды 2–4). Над каждым блоком стоит подпись периода сбора (`modContentZone.PeriodCap`,
+класс `.period-cap`). Подписи ставятся **централизованно** в `FillZonePlaceholders` и
+`FillDiscPlaceholders`, а не внутри построителей: период каждого блока виден в одном
+списке, и новый блок нельзя добавить, промолчав про период. Подпись отвечает «за какой
+период», примечание `calc-note` под блоком — «что именно посчитано»; это разные вещи.
+
+Механизм подстановки — `modHTMLEngine.RenderTemplate`: `Replace(html, "{{" & key & "}}", ...)`;
 все значения проходят `HtmlEscape`; шаблон и результат — UTF-8. Сверка шаблон ↔ словарь —
 `modContentMTO.DebugCheckPlaceholders`.
 
@@ -534,6 +540,7 @@ Text.From([number] ?? "") & "|"
 |---|---|---|
 | `{{BLOCK_CHRONICS}}` | хроники машин: ранги по заездам/часам/деньгам | `BuildChronics` |
 | `{{BLOCK_FLOW_DEFEKT}}` | группы дефекта за отчётную неделю (перенесён со слайда 1) | `BuildFlowDefekt` |
+| `{{BLOCK_FAIL_MONTH_YOY}}` | отказы помесячно: текущий год против предыдущего, сопоставимые месяцы; при отсутствии прошлого года — один ряд с пояснением | `BuildFailMonthYoY` |
 | `{{BLOCK_PARETO}}` | Парето групп дефекта (топ-8, внеплановые, YTD) | `BuildPareto` |
 | `{{BLOCK_DEFECT_DETAIL}}` | классификатор описаний: характер работы + узел | `BuildDefectDetail` (`EnsureCls`) |
 | `{{BLOCK_RET_KPI}}` (5 плиток: по отказу за 7 и за 30 суток, по подкатегории, по группе, медиана интервала) | плитки возвратов (по отказу / подкатегории / группе / медиана интервала) | `BuildRetKpi` |

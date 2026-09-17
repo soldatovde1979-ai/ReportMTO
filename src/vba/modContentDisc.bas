@@ -1350,26 +1350,33 @@ Public Sub FillDiscPlaceholders(ByVal d As Object)
     t0 = Timer
     EnsureDisc
 
+    ' Подписи периода (PeriodCap) - централизованно, как в FillZonePlaceholders.
+    Dim wl As String, w8 As String, w4 As String, ytd As String
+    wl = "отчётная неделя " & modContentZone.WLab(mRw)
+    w8 = "окно 8 недель по дате статуса"
+    w4 = "4 недели по дате статуса; объём и время - отчётная неделя " & _
+        modContentZone.WLab(mRw)
+    ytd = "с начала года (01.01.2026)"
+
     ' Слайды 2 и 3 раскручивают ОДИН показатель - «% подписаний с планшета» - вглубь:
-    ' недели -> ремзоны -> люди -> подразделения -> разбор подписей наряда.
+    ' недели -> приёмка против выдачи -> ремзоны -> люди -> подразделения -> подписи.
     ' Снята «Таблица 1» (BuildBlock1): она повторяла матрицу BLOCK_WEEKS_*, стоявшую
-    ' прямо над ней (та же единица счёта, та же ось недель, зоны СТК и ПРК - строками
-    ' этой же матрицы). Функция BuildBlock1 оставлена в коде невызываемой.
-    d("BLOCK_WEEKS_DENT") = BuildWeeksTable("ДЭНТ")
-    d("BLOCK_ACCLEV_DENT") = BuildAccLev("ДЭНТ")
-    d("BLOCK_POSTS_DENT") = BuildPostsTable("ДЭНТ")
-    d("BLOCK_PEOPLE_DENT") = BuildPeople("ДЭНТ")
-    d("BLOCK_DEPTS_DENT") = BuildDepts("ДЭНТ")
-    d("BLOCK_SIGNSTAT_DENT") = BuildSignStat("ДЭНТ")
+    ' прямо над ней. Функция BuildBlock1 оставлена в коде невызываемой.
+    d("BLOCK_WEEKS_DENT") = modContentZone.PeriodCap(w8) & BuildWeeksTable("ДЭНТ")
+    d("BLOCK_ACCLEV_DENT") = modContentZone.PeriodCap(w8) & BuildAccLev("ДЭНТ")
+    d("BLOCK_POSTS_DENT") = modContentZone.PeriodCap(wl) & BuildPostsTable("ДЭНТ")
+    d("BLOCK_PEOPLE_DENT") = modContentZone.PeriodCap(w4) & BuildPeople("ДЭНТ")
+    d("BLOCK_DEPTS_DENT") = modContentZone.PeriodCap(w4) & BuildDepts("ДЭНТ")
+    d("BLOCK_SIGNSTAT_DENT") = modContentZone.PeriodCap(ytd) & BuildSignStat("ДЭНТ")
     modLog.WriteDebug 1, "Дисциплина", "FillDiscPlaceholders", _
         "Слайд 2 готов: " & Round(Timer - t0, 2) & " c"
 
-    d("BLOCK_WEEKS_DGM") = BuildWeeksTable("ДГМ")
-    d("BLOCK_ACCLEV_DGM") = BuildAccLev("ДГМ")
-    d("BLOCK_POSTS_DGM") = BuildPostsTable("ДГМ")
-    d("BLOCK_PEOPLE_DGM") = BuildPeople("ДГМ")
-    d("BLOCK_DEPTS_DGM") = BuildDepts("ДГМ")
-    d("BLOCK_SIGNSTAT_DGM") = BuildSignStat("ДГМ")
+    d("BLOCK_WEEKS_DGM") = modContentZone.PeriodCap(w8) & BuildWeeksTable("ДГМ")
+    d("BLOCK_ACCLEV_DGM") = modContentZone.PeriodCap(w8) & BuildAccLev("ДГМ")
+    d("BLOCK_POSTS_DGM") = modContentZone.PeriodCap(wl) & BuildPostsTable("ДГМ")
+    d("BLOCK_PEOPLE_DGM") = modContentZone.PeriodCap(w4) & BuildPeople("ДГМ")
+    d("BLOCK_DEPTS_DGM") = modContentZone.PeriodCap(w4) & BuildDepts("ДГМ")
+    d("BLOCK_SIGNSTAT_DGM") = modContentZone.PeriodCap(ytd) & BuildSignStat("ДГМ")
     modLog.WriteDebug 1, "Дисциплина", "FillDiscPlaceholders", _
         "Слайд 3 готов: " & Round(Timer - t0, 2) & " c"
 
@@ -1378,12 +1385,14 @@ Public Sub FillDiscPlaceholders(ByVal d As Object)
     ' давали две одинаковые копии. Разрез по виду ремонта заменил прежний
     ' BLOCK_UNSIGNED_ZNTYPE - у них была одна и та же выборка и один и тот же
     ' разрез, но таблица даёт ещё и проценты. BuildUnsignedZnType остаётся в коде.
-    d("KPI_UNSIGNED") = BuildKpiUnsigned()
-    d("BLOCK_UNSIGNED_AGE") = BuildUnsignedAge()
-    d("BLOCK_UNSIGNED_POST") = BuildUnsignedPost()
-    d("BLOCK_UNSIGNED_OWNER") = BuildUnsignedOwner()
-    d("BLOCK_NOSIGN_TYPE") = BuildNoSignSplit(E_TYPE, "(вид не указан)", "Вид ремонта")
-    d("BLOCK_NOSIGN_STATUS") = BuildNoSignSplit(E_TEK, "(статус не указан)", "Текущий статус заказ-наряда")
+    d("KPI_UNSIGNED") = modContentZone.PeriodCap(ytd) & BuildKpiUnsigned()
+    d("BLOCK_UNSIGNED_AGE") = modContentZone.PeriodCap(ytd) & BuildUnsignedAge()
+    d("BLOCK_UNSIGNED_POST") = modContentZone.PeriodCap(ytd) & BuildUnsignedPost()
+    d("BLOCK_UNSIGNED_OWNER") = modContentZone.PeriodCap(ytd) & BuildUnsignedOwner()
+    d("BLOCK_NOSIGN_TYPE") = modContentZone.PeriodCap(ytd) & _
+        BuildNoSignSplit(E_TYPE, "(вид не указан)", "Вид ремонта")
+    d("BLOCK_NOSIGN_STATUS") = modContentZone.PeriodCap(ytd) & _
+        BuildNoSignSplit(E_TEK, "(статус не указан)", "Текущий статус заказ-наряда")
     modLog.WriteDebug 1, "Дисциплина", "FillDiscPlaceholders", _
         "Слайд 4 готов: " & Round(Timer - t0, 2) & " c"
 End Sub

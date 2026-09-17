@@ -30,6 +30,18 @@ Attribute VB_Name = "modContentZone"
 '   (блоки «возвраты» и «фазы наряда») лежали в середине файла, после процедур -
 '   перенесены в секцию Declarations. В BuildAgeCurve и BuildChronics цикл
 '   For Each k закрывался Next i.
+' Версия 2.9 от 17.09.2026: период сбора над каждым блоком + отказы год к году.
+'   - PeriodCap: подпись периода НАД блоком. Ставится централизованно в
+'     FillZonePlaceholders / FillDiscPlaceholders, а не внутри полусотни построителей:
+'     ни один Build* не тронут, зато период каждого блока виден одним списком, и новый
+'     блок нельзя добавить, промолчав про период. По ходу выяснилось, что у соседних
+'     блоков слайда 6 периоды разные (пары возвратов - YTD, знаменатели - весь снимок),
+'     и в подписи это теперь сказано прямо.
+'   - BuildFailMonthYoY / {{BLOCK_FAIL_MONTH_YOY}}: отказы помесячно, текущий год против
+'     предыдущего. Источник mFailDenM считается по всему снимку без YTD-фильтра, поэтому
+'     прошлый год в нём уже есть, если он есть в выгрузке. Сравниваются только
+'     сопоставимые месяцы (январь - месяц обрыва снимка); нет прошлого года - рисуется
+'     один ряд и это написано, а не показывается ряд нулей.
 ' Версия 2.8 от 17.09.2026: блок двух «нерабочих» статусов возвращён на слайд 1.
 '   BuildHangStatusSpecial переработан: к прежнему срезу на конец отчётной недели
 '   добавлен ПОМЕСЯЧНЫЙ ОСТАТОК по каждому из двух статусов, две серии разного цвета
@@ -1407,6 +1419,15 @@ Public Function NoteBlk(ByVal t As String) As String
     NoteBlk = "<div class=""calc-note"">" & t & "</div>"
 End Function
 
+' Подпись периода сбора НАД блоком. Ставится централизованно в FillZonePlaceholders /
+' FillDiscPlaceholders, а не внутри полусотни построителей: так период у каждого блока
+' виден в одном месте и его нельзя забыть при добавлении нового блока.
+' Под блоком остаётся calc-note с полным определением выборки - это разные вещи:
+' подпись отвечает «за какой период», примечание - «что именно посчитано».
+Public Function PeriodCap(ByVal t As String) As String
+    PeriodCap = "<div class=""period-cap"">Период: " & modContentMTO.Esc(t) & "</div>"
+End Function
+
 Public Function MockLabel(ByVal t As String) As String
     MockLabel = "<div class=""mock-label"">" & modContentMTO.Esc(t) & "</div>"
 End Function
@@ -2023,6 +2044,153 @@ Public Function BuildRetKpi() As String
         "суток. Пары считаются от первого наряда пары с 01.01.2026 (YTD); " & _
         "знаменатели " & ChrW$(&H2014) & " внеплановые наряды снимка.")
     BuildRetKpi = s & "</div>"
+End Function
+
+' Отказы помесячно, текущий год против предыдущего. Единица счёта - наряд-отказ
+' (внеплановый наряд, у которого характер работы классификатора = «Отказ»).
+' Источник - mFailDenM: он считается по ВСЕМУ снимку, без YTD-фильтра, поэтому
+' прошлый год в нём есть, если он есть в выгрузке.
+'
+' Сравниваются только сопоставимые месяцы: с января по месяц, которым обрывается
+' снимок. Иначе январь-сентябрь текущего года сравнивался бы с полным прошлым годом,
+' и падение «год к году» рисовалось бы на пустом месте.
+'
+' Прошлого года в выгрузке может не быть вовсе - тогда рисуется один ряд и об этом
+' пишется прямо, а не показывается ряд нулей, который читается как «отказов не было».
+Public Function BuildFailMonthYoY() As String
+    EnsureRet
+    Dim yCur As Long, yPrev As Long, mTo As Long
+    yCur = Year(CDate(SnapshotEnd()))
+    yPrev = yCur - 1
+    mTo = Month(CDate(SnapshotEnd()))
+    If mTo < 1 Then mTo = 1
+    If mTo > 12 Then mTo = 12
+
+    Dim cur() As Double, prv() As Double, i As Long
+    ReDim cur(0 To mTo - 1)
+    ReDim prv(0 To mTo - 1)
+    Dim sCur As Double, sPrev As Double
+    sCur = 0#: sPrev = 0#
+    For i = 1 To mTo
+        cur(i - 1) = DictVal(mFailDenM, CStr(yCur * 100 + i))
+        prv(i - 1) = DictVal(mFailDenM, CStr(yPrev * 100 + i))
+        sCur = sCur + cur(i - 1)
+        sPrev = sPrev + prv(i - 1)
+    Next i
+    If sCur = 0# And sPrev = 0# Then BuildFailMonthYoY = modContentMTO.EmptyNote(): Exit Function
+
+    Dim mn As Variant
+    mn = Array("янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
+    Dim labs() As Variant, vCur() As Variant, vPrev() As Variant
+    ReDim labs(0 To mTo - 1)
+    ReDim vCur(0 To mTo - 1)
+    ReDim vPrev(0 To mTo - 1)
+    For i = 0 To mTo - 1
+        labs(i) = CStr(mn(i))
+        vCur(i) = cur(i)
+        vPrev(i) = prv(i)
+    Next i
+
+    Dim hasPrev As Boolean
+    hasPrev = (sPrev > 0#)
+
+    Dim s As String
+    s = "<figure>"
+    If hasPrev Then
+        ' Порядок серий: прошлый год первым (var(--s2)), текущий вторым (var(--s7)) -
+        ' читается слева направо как «было -> стало».
+        s = s & GroupBars(labs, vPrev, vCur, 940, 260)
+        s = s & "<figcaption>Отказов за месяц: " & CStr(yPrev) & " против " & _
+            CStr(yCur) & ". Сравниваются январь" & ChrW$(&H2013) & CStr(mn(mTo - 1)) & _
+            " обоих лет.</figcaption></figure>"
+        s = s & "<div class=""legend""><span><i style=""background:var(--s2)""></i>" & _
+            CStr(yPrev) & "</span><span><i style=""background:var(--s7)""></i>" & _
+            CStr(yCur) & "</span></div>"
+    Else
+        s = s & Cols(labs, vCur, 940, 240)
+        s = s & "<figcaption>Отказов за месяц, " & CStr(yCur) & _
+            ". Данных за " & CStr(yPrev) & " год в выгрузке нет.</figcaption></figure>"
+    End If
+
+    ' Таблица под графиком: абсолюты обоих лет и изменение год к году по месяцам.
+    s = s & "<div class=""scroll""><table><thead><tr><th>Год</th>"
+    For i = 0 To mTo - 1
+        s = s & "<th class=""n"">" & modContentMTO.Esc(CStr(labs(i))) & "</th>"
+    Next i
+    s = s & "<th class=""n"">Всего</th></tr></thead><tbody>"
+
+    If hasPrev Then
+        s = s & "<tr><td class=""head"">" & CStr(yPrev) & "</td>"
+        For i = 0 To mTo - 1
+            s = s & "<td class=""n"">" & modContentMTO.FmtInt(prv(i)) & "</td>"
+        Next i
+        s = s & "<td class=""n"">" & modContentMTO.FmtInt(sPrev) & "</td></tr>"
+    End If
+
+    s = s & "<tr class=""total""><td class=""head"">" & CStr(yCur) & "</td>"
+    For i = 0 To mTo - 1
+        s = s & "<td class=""n"">" & modContentMTO.FmtInt(cur(i)) & "</td>"
+    Next i
+    s = s & "<td class=""n"">" & modContentMTO.FmtInt(sCur) & "</td></tr>"
+
+    If hasPrev Then
+        s = s & "<tr><td class=""head"">Изменение</td>"
+        For i = 0 To mTo - 1
+            s = s & "<td class=""n"">" & YoYCell(cur(i), prv(i)) & "</td>"
+        Next i
+        s = s & "<td class=""n"">" & YoYCell(sCur, sPrev) & "</td></tr>"
+    End If
+    s = s & "</tbody></table></div>"
+
+    Dim verdict As String
+    If hasPrev Then
+        Dim dv As Double
+        dv = SafePct(sCur - sPrev, sPrev)
+        If sCur > sPrev Then
+            verdict = " За январь" & ChrW$(&H2013) & CStr(mn(mTo - 1)) & " отказов " & _
+                "<b>больше</b> прошлогоднего на " & modContentMTO.FmtInt(sCur - sPrev) & _
+                " (" & Pc(dv, 1) & ")."
+        ElseIf sCur < sPrev Then
+            verdict = " За январь" & ChrW$(&H2013) & CStr(mn(mTo - 1)) & " отказов " & _
+                "<b>меньше</b> прошлогоднего на " & modContentMTO.FmtInt(sPrev - sCur) & _
+                " (" & Pc(-dv, 1) & ")."
+        Else
+            verdict = " За январь" & ChrW$(&H2013) & CStr(mn(mTo - 1)) & _
+                " отказов столько же, сколько годом раньше."
+        End If
+    Else
+        verdict = " Сравнивать не с чем: выгрузка начинается позже " & CStr(yPrev) & _
+            " года. Появится прошлый год в данных " & ChrW$(&H2014) & _
+            " график станет сравнительным сам, править код не нужно."
+    End If
+
+    s = s & NoteBlk("Отказ " & ChrW$(&H2014) & " внеплановый наряд, у которого характер " & _
+        "работы по классификатору описаний = «Отказ»; плановое ТО и работы без отказа " & _
+        "(слив конденсата, подкачка колёс) не считаются. Месяц " & ChrW$(&H2014) & _
+        " по дате создания наряда. Показаны только сопоставимые месяцы: январь" & _
+        ChrW$(&H2013) & CStr(mn(mTo - 1)) & " обоих лет, иначе неполный год сравнивался " & _
+        "бы с полным. <b>Последний месяц неполный</b> " & ChrW$(&H2014) & " снимок " & _
+        "обрывается " & Format$(CDate(SnapshotEnd()), "dd.mm.yyyy") & "." & verdict)
+    BuildFailMonthYoY = s
+End Function
+
+' Ячейка изменения год к году: знак, абсолют и цвет. Рост отказов - это плохо,
+' поэтому вверх красим «crit», вниз - «good» (обратная шкала к объёмным метрикам).
+Private Function YoYCell(ByVal cur As Double, ByVal prev As Double) As String
+    If prev <= 0# And cur <= 0# Then YoYCell = Dash(): Exit Function
+    If prev <= 0# Then
+        YoYCell = "<span class=""delta up"">+" & modContentMTO.FmtInt(cur) & "</span>"
+        Exit Function
+    End If
+    Dim dv As Double
+    dv = cur - prev
+    If Abs(dv) < 0.5 Then YoYCell = "<span class=""delta flat"">0</span>": Exit Function
+    If dv > 0# Then
+        YoYCell = "<span class=""delta up"">+" & modContentMTO.FmtInt(dv) & "</span>"
+    Else
+        YoYCell = "<span class=""delta dn"">" & ChrW$(&H2212) & _
+            modContentMTO.FmtInt(-dv) & "</span>"
+    End If
 End Function
 
 Public Function BuildRetMonth() As String
@@ -3593,64 +3761,80 @@ Public Sub FillZonePlaceholders(ByVal d As Object)
     Dim t0 As Single
     t0 = Timer
 
-    d("KPI_OVERVIEW") = BuildKpiOverview()
-    d("BLOCK_ZNTYPE_FLOW_HANG") = BuildZnTypeFlowHang()
-    d("BLOCK_HANG_STATUS_SPECIAL") = BuildHangStatusSpecial()
-    d("BLOCK_HANG_STATUS") = BuildHangByStatus()
-    d("BLOCK_NOZONE_ZNTYPE") = BuildNoZoneZnType()
-    d("BLOCK_NOZONE_STATUS") = BuildNoZoneStatus()
-    d("BLOCK_NOPOST_WEEKLY") = BuildNoPostWeekly()
+    ' Подпись периода у каждого блока (PeriodCap) ставится здесь, а не внутри
+    ' построителей: один список - видно, что у соседних блоков периоды разные,
+    ' и новый блок нельзя добавить, промолчав про период.
+    Dim wl As String, w8 As String, ytd As String, snap As String
+    wl = "отчётная неделя " & WLab(ZoneReportWeek())
+    w8 = "окно 8 недель по дате создания наряда"
+    ytd = "с начала года (01.01.2026)"
+    snap = "весь снимок"
+
+    d("KPI_OVERVIEW") = PeriodCap(wl & "; спарклайны и дельта - " & w8) & BuildKpiOverview()
+    d("BLOCK_ZNTYPE_FLOW_HANG") = PeriodCap(ytd & " до конца недели " & _
+        WLab(ZoneReportWeek()) & "; колонка «за неделю» - " & wl) & BuildZnTypeFlowHang()
+    d("BLOCK_HANG_STATUS_SPECIAL") = PeriodCap("срез на конец недели " & _
+        WLab(ZoneReportWeek()) & "; график - остаток по месяцам " & ytd) & BuildHangStatusSpecial()
+    d("BLOCK_HANG_STATUS") = PeriodCap("накопление к концу недели " & _
+        WLab(ZoneReportWeek())) & BuildHangByStatus()
+    d("BLOCK_NOZONE_ZNTYPE") = PeriodCap(ytd) & BuildNoZoneZnType()
+    d("BLOCK_NOZONE_STATUS") = PeriodCap(ytd) & BuildNoZoneStatus()
+    d("BLOCK_NOPOST_WEEKLY") = PeriodCap(w8) & BuildNoPostWeekly()
     modLog.WriteDebug 1, "Техника", "FillZonePlaceholders", _
         "Слайд 1 готов: " & Round(Timer - t0, 2) & " c"
 
-    d("KPI_FLEET") = BuildKpiFleet()
-    d("BLOCK_POSTS_WEEK") = BuildPostsWeek()
-    d("BLOCK_AGE_CURVE") = BuildAgeCurve()
-    d("BLOCK_AGE_MATRIX") = BuildAgeMatrix()
-    d("BLOCK_AGING") = BuildAging()
-    d("BLOCK_PACK") = BuildPack()
+    d("KPI_FLEET") = PeriodCap(snap & "; заезды за неделю - " & wl) & BuildKpiFleet()
+    d("BLOCK_POSTS_WEEK") = PeriodCap(wl) & BuildPostsWeek()
+    d("BLOCK_AGE_CURVE") = PeriodCap(snap) & BuildAgeCurve()
+    d("BLOCK_AGE_MATRIX") = PeriodCap(snap) & BuildAgeMatrix()
+    d("BLOCK_AGING") = PeriodCap(snap) & BuildAging()
+    d("BLOCK_PACK") = PeriodCap(snap) & BuildPack()
     modLog.WriteDebug 1, "Техника", "FillZonePlaceholders", _
         "Слайд 5 готов: " & Round(Timer - t0, 2) & " c"
 
-    d("BLOCK_CHRONICS") = BuildChronics()
+    d("BLOCK_CHRONICS") = PeriodCap(ytd & "; заезды - " & snap) & BuildChronics()
     ' Перенесён со слайда 1: дефекты - тема этого слайда. Недельный срез стоит
     ' перед годовым Парето: «что ломалось на неделе» против «что ломается всегда».
-    d("BLOCK_FLOW_DEFEKT") = BuildFlowDefekt()
-    d("BLOCK_PARETO") = BuildPareto()
-    d("BLOCK_DEFECT_DETAIL") = BuildDefectDetail()
-    d("BLOCK_RET_KPI") = BuildRetKpi()
-    d("BLOCK_RET_MONTH") = BuildRetMonth()
-    d("BLOCK_RET_WEEK") = BuildRetWeek()
-    d("BLOCK_RET_NODE") = BuildRetNode()
-    d("BLOCK_REPEATS") = BuildRepeats()
+    d("BLOCK_FLOW_DEFEKT") = PeriodCap(wl) & BuildFlowDefekt()
+    d("BLOCK_FAIL_MONTH_YOY") = PeriodCap("помесячно " & ytd & " против того же периода " & _
+        "прошлого года, если он есть в выгрузке") & BuildFailMonthYoY()
+    d("BLOCK_PARETO") = PeriodCap(ytd) & BuildPareto()
+    d("BLOCK_DEFECT_DETAIL") = PeriodCap(ytd) & BuildDefectDetail()
+    d("BLOCK_RET_KPI") = PeriodCap("пары возвратов - " & ytd & "; знаменатели - " & _
+        snap) & BuildRetKpi()
+    d("BLOCK_RET_MONTH") = PeriodCap("помесячно " & ytd) & BuildRetMonth()
+    d("BLOCK_RET_WEEK") = PeriodCap("окно 8 недель") & BuildRetWeek()
+    d("BLOCK_RET_NODE") = PeriodCap("знаменатели - " & snap & "; пары возвратов - " & _
+        ytd) & BuildRetNode()
+    d("BLOCK_REPEATS") = PeriodCap(ytd) & BuildRepeats()
     modLog.WriteDebug 1, "Техника", "FillZonePlaceholders", _
         "Слайд 6 готов: " & Round(Timer - t0, 2) & " c"
 
-    d("BLOCK_PHASES") = BuildPhases()
-    d("BLOCK_REPEAT_TOP_VEH_YTD") = BuildRepeatTopVeh(False)
-    d("BLOCK_REPEAT_TOP_VEH_WK") = BuildRepeatTopVeh(True)
-    d("BLOCK_REPEAT_TOP_DEF_YTD") = BuildRepeatTopDef(False)
-    d("BLOCK_REPEAT_TOP_DEF_WK") = BuildRepeatTopDef(True)
-    d("BLOCK_DOWN_VS_HOURS_YTD") = BuildDownVsHours(False)
-    d("BLOCK_DOWN_VS_HOURS_WK") = BuildDownVsHours(True)
-    d("BLOCK_CREATE_TO_ACC_YTD") = BuildCreateToAcc(False)
-    d("BLOCK_CREATE_TO_ACC_WK") = BuildCreateToAcc(True)
-    d("BLOCK_RETURN_KPI") = BuildReturnKpi()
-    d("BLOCK_RETURN_HIST") = BuildReturnHist()
-    d("BLOCK_RETURN_STUCK") = BuildReturnStuck()
-    d("BLOCK_RETURN_HANG") = BuildReturnHang()
-    d("BLOCK_TAIL_AGE") = BuildTailAge()
-    d("BLOCK_TAIL_WHY") = BuildTailWhy()
-    d("BLOCK_TAIL_ROWS") = BuildTailRows()
-    d("BLOCK_LIMITS") = BuildLimits()
+    d("BLOCK_PHASES") = PeriodCap("окно 8 недель по дате создания наряда") & BuildPhases()
+    d("BLOCK_REPEAT_TOP_VEH_YTD") = PeriodCap(ytd) & BuildRepeatTopVeh(False)
+    d("BLOCK_REPEAT_TOP_VEH_WK") = PeriodCap(wl) & BuildRepeatTopVeh(True)
+    d("BLOCK_REPEAT_TOP_DEF_YTD") = PeriodCap(ytd) & BuildRepeatTopDef(False)
+    d("BLOCK_REPEAT_TOP_DEF_WK") = PeriodCap(wl) & BuildRepeatTopDef(True)
+    d("BLOCK_DOWN_VS_HOURS_YTD") = PeriodCap(ytd) & BuildDownVsHours(False)
+    d("BLOCK_DOWN_VS_HOURS_WK") = PeriodCap(wl) & BuildDownVsHours(True)
+    d("BLOCK_CREATE_TO_ACC_YTD") = PeriodCap(ytd) & BuildCreateToAcc(False)
+    d("BLOCK_CREATE_TO_ACC_WK") = PeriodCap(wl) & BuildCreateToAcc(True)
+    d("BLOCK_RETURN_KPI") = PeriodCap(ytd) & BuildReturnKpi()
+    d("BLOCK_RETURN_HIST") = PeriodCap(ytd) & BuildReturnHist()
+    d("BLOCK_RETURN_STUCK") = PeriodCap(ytd) & BuildReturnStuck()
+    d("BLOCK_RETURN_HANG") = PeriodCap(ytd) & BuildReturnHang()
+    d("BLOCK_TAIL_AGE") = PeriodCap(ytd) & BuildTailAge()
+    d("BLOCK_TAIL_WHY") = PeriodCap(ytd) & BuildTailWhy()
+    d("BLOCK_TAIL_ROWS") = PeriodCap(ytd) & BuildTailRows()
+    d("BLOCK_LIMITS") = PeriodCap("не зависит от периода: перечень ограничений выгрузки") & BuildLimits()
     modLog.WriteDebug 1, "Техника", "FillZonePlaceholders", _
         "Слайд 7 готов: " & Round(Timer - t0, 2) & " c"
 
-    d("KPI_PARTS") = BuildKpiParts()
-    d("BLOCK_ABC") = BuildAbc()
-    d("BLOCK_MONEY_DEFEKT") = BuildMoneyDefekt()
-    d("BLOCK_QUALITY") = BuildQuality()
-    d("BLOCK_REQUEST") = BuildRequest()
+    d("KPI_PARTS") = PeriodCap(ytd) & BuildKpiParts()
+    d("BLOCK_ABC") = PeriodCap(ytd) & BuildAbc()
+    d("BLOCK_MONEY_DEFEKT") = PeriodCap(ytd) & BuildMoneyDefekt()
+    d("BLOCK_QUALITY") = PeriodCap(snap) & BuildQuality()
+    d("BLOCK_REQUEST") = PeriodCap("не зависит от периода: заявка на доработку выгрузки") & BuildRequest()
     modLog.WriteDebug 1, "Техника", "FillZonePlaceholders", _
         "Слайд 8 готов: " & Round(Timer - t0, 2) & " c"
 End Sub
