@@ -457,7 +457,7 @@ Text.From([number] ?? "") & "|"
 
 ### 3.3 Плейсхолдеры HTML-шаблона (`tmp_index.html`)
 
-Сверено 16.09.2026 с шаблоном v4.5 и кодом v8.3: **76 плейсхолдеров**, все заполняются словарём
+Сверено 16.09.2026 с шаблоном v4.6 и кодом v8.3: **78 плейсхолдеров**, все заполняются словарём
 `Scripting.Dictionary` из `modContentMTO.BuildPlaceholders` (шапка/подвал/ИИ) +
 `modContentZone.FillZonePlaceholders` (слайды 1, 5–8) + `modContentDisc.FillDiscPlaceholders`
 (слайды 2–4). Над каждым блоком стоит подпись периода сбора (`modContentZone.PeriodCap`,
@@ -530,6 +530,7 @@ Text.From([number] ?? "") & "|"
 | `{{KPI_FLEET}}` | плитки: машин, заездов за неделю, заездов пакетом, возраст парка | `BuildKpiFleet` (`mVeh`, порог заезда 12 ч) |
 | `{{BLOCK_POSTS_WEEK}}` | наряды отчётной недели по ремзонам | `BuildPostsWeek` |
 | `{{BLOCK_AGE_CURVE}}` | парк по годам выпуска + внеплановые наряды на машину | `BuildAgeCurve` |
+| `{{BLOCK_WEAR_METER}}` | износ по счётчику: корзины наработки (квинтили) → машин, внеплановых нарядов, отказов, возвратов и материалов на машину; пробег и моточасы раздельными таблицами | `BuildWearByMeter` |
 | `{{BLOCK_AGE_MATRIX}}` | когорты × топ-5 групп дефекта | `BuildAgeMatrix` |
 | `{{BLOCK_AGING}}` | заезды/материалы/часы на машину по когортам | `BuildAging` |
 | `{{BLOCK_PACK}}` | распределение заездов по числу нарядов + чувствительность к порогу | `BuildPack` |
@@ -565,6 +566,7 @@ Text.From([number] ?? "") & "|"
 | `{{BLOCK_TAIL_AGE}}` | возраст нарядов без `zn_closed` | `BuildTailAge` |
 | `{{BLOCK_TAIL_WHY}}` | хвост в разрезе `TekStatusPoDoc` | `BuildTailWhy` |
 | `{{BLOCK_TAIL_ROWS}}` | 8 старейших без `zn_closed` (> 14 сут), последнее событие | `BuildTailRows` |
+| `{{BLOCK_PLAN_FACT}}` | план (`hourdlit`) против факта (`cost_Trudozatrat`) по видам работ, сортировка по отклонению | `BuildPlanFact` |
 | `{{BLOCK_LIMITS}}` | снятые с публикации отчёты и что нужно от 1С | `BuildLimits` |
 
 #### Слайд 8 — материалы и качество учёта

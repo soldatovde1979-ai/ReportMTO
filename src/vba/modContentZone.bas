@@ -30,6 +30,22 @@ Attribute VB_Name = "modContentZone"
 '   (блоки «возвраты» и «фазы наряда») лежали в середине файла, после процедур -
 '   перенесены в секцию Declarations. В BuildAgeCurve и BuildChronics цикл
 '   For Each k закрывался Next i.
+' Версия 2.11 от 17.09.2026: износ по счётчику, план против факта, минус два дубля.
+'   - BuildWearByMeter / {{BLOCK_WEAR_METER}}: вторая ось износа рядом с возрастом парка.
+'     Корзины - квинтили по самим данным: масштаб пробега и моточасов разный, круглые
+'     пороги схлопнули бы парк в одну корзину. Пробег и моточасы РАЗНЫМИ таблицами -
+'     поля взаимоисключающи, складывать километры с часами нельзя. В снимок добавлены
+'     mVehOdo / mVehEng (максимум по машине: по контракту это срез последних и внутри
+'     машины значение обязано быть константой, но фактически меняется - docs/data.md).
+'     «Отказов на 10 000 км» здесь нет и быть не может: нужна наработка ЗА ПЕРИОД.
+'   - BuildPlanFact / {{BLOCK_PLAN_FACT}}: hourdlit против cost_Trudozatrat по видам
+'     работ. Оба поля лежали в снимке и использовались только в топе десяти машин.
+'     В расчёт идут наряды, где заполнены ОБА поля, иначе вид с пустым планом выглядел
+'     бы как бесконечное превышение. Сортировка по отклонению, а не по объёму.
+'   - Сняты два графика-дубля: HBars в BuildPareto рисовал те же labs/vals, что колонка
+'     «Нарядов» его же таблицы; HBars в BuildDownVsHours рисовал колонку «Стояла, ч»
+'     и печатался дважды на слайде (YTD и неделя). Медиана простоя из подписи к графику
+'     перенесена в примечание, чтобы число не потерялось.
 ' Версия 2.10 от 17.09.2026: средняя фаза суток разложена на возвраты и остальное.
 '   BuildPhases: под прежним графиком трёх фаз - таблица, где фаза «ремзона»
 '   (приёмка -> выбытие) считается отдельно по нарядам-ВОЗВРАТАМ и отдельно по всем
@@ -177,6 +193,8 @@ Private mArmNone As Long         ' событий «НЕ ПОДПИСАНО»
 Private mNoCounter As Long       ' событий, где odometer и engine_hours пусты
 Private mNoBounds As Long        ' событий с in_bounds = ложь
 Private mSnapEnd As Double
+Private mVehOdo As Object        ' машина -> максимальный пробег из снимка
+Private mVehEng As Object        ' машина -> максимальная наработка (моточасы)
 Private mYtdStart As Double      ' кэш границы фильтра «с начала года» (REPORT/YTD_START)
 Private mKindRules As Collection
 Private mNodeRules As Object     ' группа -> Collection(Array(имя, «|ключ|ключ|»))
@@ -226,6 +244,8 @@ Public Sub ResetZone()
     Set mKindRules = Nothing
     Set mSignTot = Nothing
     Set mSignTab = Nothing
+    Set mVehOdo = Nothing
+    Set mVehEng = Nothing
     mBadClosed = 0
     mSnapEnd = 0#
     mYtdStart = 0#
@@ -252,6 +272,8 @@ Private Sub EnsureZn()
     Set mZn = CreateObject("Scripting.Dictionary")
     Set mSignTot = CreateObject("Scripting.Dictionary")
     Set mSignTab = CreateObject("Scripting.Dictionary")
+    Set mVehOdo = CreateObject("Scripting.Dictionary")
+    Set mVehEng = CreateObject("Scripting.Dictionary")
 
     Dim hasVeh As Boolean, hasParts As Boolean, hasClosed As Boolean
     Dim hasTrud As Boolean, hasPlan As Boolean
@@ -344,10 +366,24 @@ Private Sub EnsureZn()
                 mArmNone = mArmNone + 1
             End If
 
-            If hasOdo And hasEng Then
-                If ToNum(modAggregate.CellRaw(r, "odometer")) = 0# _
-                   And ToNum(modAggregate.CellRaw(r, "engine_hours")) = 0# Then
-                    mNoCounter = mNoCounter + 1
+            If hasOdo Or hasEng Then
+                Dim odV As Double, ehV As Double
+                odV = 0#: ehV = 0#
+                If hasOdo Then odV = ToNum(modAggregate.CellRaw(r, "odometer"))
+                If hasEng Then ehV = ToNum(modAggregate.CellRaw(r, "engine_hours"))
+                If hasOdo And hasEng Then
+                    If odV = 0# And ehV = 0# Then mNoCounter = mNoCounter + 1
+                End If
+                ' Наработка по машине. Берём МАКСИМУМ, а не последнее значение:
+                ' по контракту выгрузки это срез последних и внутри машины значение
+                ' обязано быть константой, но фактически меняется (data.md §поля,
+                ' 105 машин по пробегу и 161 по моточасам). Максимум - единственная
+                ' устойчивая трактовка «сколько машина прошла к моменту выгрузки».
+                Dim vnC As String
+                vnC = Trim$(CStr(z(Z_VEH)))
+                If Len(vnC) > 0 Then
+                    If odV > DictVal(mVehOdo, vnC) Then mVehOdo(vnC) = odV
+                    If ehV > DictVal(mVehEng, vnC) Then mVehEng(vnC) = ehV
                 End If
             End If
             If hasBounds Then
@@ -1647,6 +1683,187 @@ Public Function ShortGrp(ByVal s As String) As String
     If p > 0 Then ShortGrp = Left$(s, p - 1) Else ShortGrp = s
 End Function
 
+' Наработка машины: строка таблицы «износ по счётчику». Возвращает число машин.
+' meter = 0 - пробег (odometer), 1 - моточасы (engine_hours).
+Private Function WearRows(ByVal meter As Long, ByVal unit As String) As String
+    EnsureVeh
+    EnsureRet
+    EnsureCls
+    Dim src As Object
+    If meter = 0 Then Set src = mVehOdo Else Set src = mVehEng
+
+    ' Машины, у которых счётчик этого типа заполнен. Поля взаимоисключающи
+    ' (колёсная техника пишет пробег, тягачи и погрузчики - моточасы), поэтому
+    ' две таблицы, а не одна: смешивать километры с часами нельзя.
+    Dim vals() As Double, names() As String, n As Long, k As Variant
+    n = 0
+    ReDim vals(0 To 0)
+    ReDim names(0 To 0)
+    For Each k In src.Keys
+        If DictVal(src, CStr(k)) > 0# Then n = n + 1
+    Next k
+    If n = 0 Then WearRows = "": Exit Function
+    ReDim vals(0 To n - 1)
+    ReDim names(0 To n - 1)
+    Dim i As Long
+    i = 0
+    For Each k In src.Keys
+        If DictVal(src, CStr(k)) > 0# Then
+            vals(i) = DictVal(src, CStr(k))
+            names(i) = CStr(k)
+            i = i + 1
+        End If
+    Next k
+
+    ' Границы корзин - квинтили по самим данным, а не круглые числа: масштаб
+    ' пробега и моточасов разный, и фиксированные пороги на одном из них схлопнули
+    ' бы весь парк в одну корзину.
+    Dim srt() As Double
+    ReDim srt(0 To n - 1)
+    For i = 0 To n - 1
+        srt(i) = vals(i)
+    Next i
+    QSortD srt, 0, n - 1
+    Dim b(0 To 3) As Double, q As Long
+    For q = 0 To 3
+        b(q) = srt(CLng((n - 1) * (q + 1) / 5#))
+    Next q
+
+    ' Агрегаты по машине за YTD: внеплановые наряды, отказы, возвраты, материалы.
+    Dim un As Object, fl As Object, rt As Object, pt As Object
+    Set un = CreateObject("Scripting.Dictionary")
+    Set fl = CreateObject("Scripting.Dictionary")
+    Set rt = CreateObject("Scripting.Dictionary")
+    Set pt = CreateObject("Scripting.Dictionary")
+    Dim z As Variant, vn As String
+    For Each k In mZn.Keys
+        z = mZn(k)
+        vn = Trim$(CStr(z(Z_VEH)))
+        If Len(vn) > 0 And InYtd(z) Then
+            AddCnt pt, vn, CDbl(z(Z_PARTS))
+            If Not IsPlanned(CStr(z(Z_TYPE))) Then
+                AddCnt un, vn, 1#
+                If CStr(z(Z_KIND)) = "Отказ" Then AddCnt fl, vn, 1#
+                If IsRetOrder(CStr(k)) Then AddCnt rt, vn, 1#
+            End If
+        End If
+    Next k
+
+    Dim cnt(0 To 4) As Double, sU(0 To 4) As Double, sF(0 To 4) As Double
+    Dim sR(0 To 4) As Double, sP(0 To 4) As Double
+    For i = 0 To n - 1
+        Dim g As Long
+        g = 4
+        For q = 0 To 3
+            If vals(i) <= b(q) Then
+                g = q
+                Exit For
+            End If
+        Next q
+        cnt(g) = cnt(g) + 1#
+        sU(g) = sU(g) + DictVal(un, names(i))
+        sF(g) = sF(g) + DictVal(fl, names(i))
+        sR(g) = sR(g) + DictVal(rt, names(i))
+        sP(g) = sP(g) + DictVal(pt, names(i))
+    Next i
+
+    Dim lab(0 To 4) As String
+    lab(0) = "до " & FmtF(b(0) / 1000#, 0) & " тыс. " & unit
+    For q = 1 To 3
+        lab(q) = FmtF(b(q - 1) / 1000#, 0) & ChrW$(&H2013) & _
+            FmtF(b(q) / 1000#, 0) & " тыс. " & unit
+    Next q
+    lab(4) = "больше " & FmtF(b(3) / 1000#, 0) & " тыс. " & unit
+
+    Dim s As String
+    s = "<table><thead><tr><th>Наработка</th><th class=""n"">Машин</th>" & _
+        "<th class=""n"">Внеплановых нарядов</th><th class=""n"">На машину</th>" & _
+        "<th class=""n"">Отказов на машину</th><th class=""n"">Возвратов на машину</th>" & _
+        "<th class=""n"">Материалы на машину</th></tr></thead><tbody>"
+    For q = 0 To 4
+        s = s & "<tr><td>" & modContentMTO.Esc(lab(q)) & "</td>"
+        s = s & "<td class=""n"">" & modContentMTO.FmtInt(cnt(q)) & "</td>"
+        s = s & "<td class=""n"">" & modContentMTO.FmtInt(sU(q)) & "</td>"
+        s = s & "<td class=""n"">" & FmtF(SafeDiv(sU(q), cnt(q)), 1) & "</td>"
+        s = s & "<td class=""n"">" & FmtF(SafeDiv(sF(q), cnt(q)), 1) & "</td>"
+        s = s & "<td class=""n"">" & FmtF(SafeDiv(sR(q), cnt(q)), 2) & "</td>"
+        s = s & "<td class=""n"">" & Rub(SafeDiv(sP(q), cnt(q))) & "</td></tr>"
+    Next q
+    s = s & "</tbody></table>"
+
+    ' График - одна ключевая колонка формой: растёт ли число ремонтов с наработкой.
+    Dim gl() As Variant, gv() As Variant
+    ReDim gl(0 To 4)
+    ReDim gv(0 To 4)
+    For q = 0 To 4
+        gl(q) = FmtF(b(IIf(q > 3, 3, q)) / 1000#, 0)
+        If q = 4 Then gl(q) = FmtF(b(3) / 1000#, 0) & "+"
+        gv(q) = SafeDiv(sU(q), cnt(q))
+    Next q
+    s = s & "<figure>" & Cols(gl, gv, 620, 190) & _
+        "<figcaption>Внеплановых нарядов на машину по корзинам наработки, тыс. " & _
+        modContentMTO.Esc(unit) & "</figcaption></figure>"
+    WearRows = s
+End Function
+
+Private Function SafeDiv(ByVal a As Double, ByVal b As Double) As Double
+    If b = 0# Then SafeDiv = 0# Else SafeDiv = a / b
+End Function
+
+' Износ по счётчику: две таблицы, пробег и моточасы. Вторая ось износа рядом с
+' возрастом парка: машина 2015 года с 80 тыс. км и та же с 600 тыс. - разные машины,
+' а по году выпуска они в одной когорте.
+Public Function BuildWearByMeter() As String
+    EnsureZn
+    Dim a As String, b As String
+    a = WearRows(0, "км")
+    b = WearRows(1, "мч")
+    If a = "" And b = "" Then BuildWearByMeter = modContentMTO.EmptyNote(): Exit Function
+
+    Dim s As String
+    s = "<div class=""two-col"">"
+    s = s & "<div>" & MockLabel("Колёсная техника " & ChrW$(&HB7) & " пробег")
+    If a <> "" Then s = s & a Else s = s & modContentMTO.EmptyNote()
+    s = s & "</div><div>" & MockLabel("Тягачи и спецтехника " & ChrW$(&HB7) & " моточасы")
+    If b <> "" Then s = s & b Else s = s & modContentMTO.EmptyNote()
+    s = s & "</div></div>"
+
+    Dim covO As Long, covE As Long
+    covO = 0: covE = 0
+    Dim k As Variant
+    If Not mVehOdo Is Nothing Then
+        For Each k In mVehOdo.Keys
+            If DictVal(mVehOdo, CStr(k)) > 0# Then covO = covO + 1
+        Next k
+    End If
+    If Not mVehEng Is Nothing Then
+        For Each k In mVehEng.Keys
+            If DictVal(mVehEng, CStr(k)) > 0# Then covE = covE + 1
+        Next k
+    End If
+
+    s = s & NoteBlk("Вторая ось износа, рядом с возрастом парка: по году выпуска машина " & _
+        "с 80 тыс. км и машина с 600 тыс. попадают в одну когорту, хотя это разные " & _
+        "машины. Корзины " & ChrW$(&H2014) & " квинтили по самим данным, а не круглые " & _
+        "числа: масштаб пробега и моточасов разный. Счётчики <b>взаимоисключающи</b> " & _
+        "(колёсная техника пишет пробег, тягачи и погрузчики " & ChrW$(&H2014) & _
+        " моточасы), поэтому таблицы две, а не одна: складывать километры с часами " & _
+        "нельзя. Покрытие: пробег заполнен у " & modContentMTO.FmtInt(CDbl(covO)) & _
+        " машин, моточасы у " & modContentMTO.FmtInt(CDbl(covE)) & " из " & _
+        modContentMTO.FmtInt(CDbl(mVeh.Count)) & " парка. Наряды, отказы, возвраты и " & _
+        "материалы " & ChrW$(&H2014) & " с начала года.")
+    s = s & NoteBlk("<b>Чего этот блок НЕ показывает.</b> Это наработка НА МОМЕНТ " & _
+        "ВЫГРУЗКИ, а не пробег между ремонтами: по контракту <code>odometer</code> и " & _
+        "<code>engine_hours</code> " & ChrW$(&H2014) & " срез последних, и внутри машины " & _
+        "значение обязано быть постоянным, но фактически меняется (105 машин по пробегу " & _
+        "и 161 по моточасам, см. docs/data.md). Взят максимум по машине " & ChrW$(&H2014) & _
+        " единственная устойчивая трактовка. Поэтому «отказов на 10 000 км» здесь нет и " & _
+        "быть не может: для этого нужна наработка ЗА ПЕРИОД, а её в выгрузке нет. " & _
+        "Блок отвечает на вопрос «больше ли ремонтируют то, что больше прошло», а не " & _
+        "«какова частота отказов на километр».")
+    BuildWearByMeter = s
+End Function
+
 Public Function BuildAgeMatrix() As String
     EnsureVeh
     Dim labs As Variant
@@ -2512,7 +2729,10 @@ Public Function BuildPareto() As String
     TopKeys d, 8, labs, vals
 
     Dim s As String, i As Long, acc As Double, top3 As Double
-    s = "<div class=""two-col wide-l""><div>" & HBars(labs, vals, 520, 230, 24) & "</div><div>"
+    ' 17.09.2026: снят HBars слева - он рисовал те же labs/vals, что колонка
+    ' «Нарядов» таблицы справа, и не добавлял ни одного числа. Накопленный
+    ' процент, ради которого блок и существует, на полосах не показывался.
+    s = ""
     s = s & "<table><thead><tr><th>Группа дефекта</th><th class=""n"">Нарядов</th>" & _
         "<th class=""n"">%</th><th class=""n"">Накоп.</th></tr></thead><tbody>"
     acc = 0#: top3 = 0#
@@ -2524,7 +2744,7 @@ Public Function BuildPareto() As String
             FmtF(SafePct(CDbl(vals(i)), tot), 1) & "</td><td class=""n"">" & _
             FmtF(SafePct(acc, tot), 1) & "</td></tr>"
     Next i
-    s = s & "</tbody></table></div></div>"
+    s = s & "</tbody></table>"
     s = s & NoteBlk("Топ-8 групп дефекта по внеплановым нарядам, накопленный процент. " & _
         "Три верхние группы дают <b>" & Pc(SafePct(top3, tot), 1) & "</b> потока. " & _
         "Плановое ТО исключено: у планового наряда дефекта нет. " & _
@@ -3282,6 +3502,121 @@ End Function
 
 ' Отчёты, снятые с публикации: пока строка открыта, отчёт не показывается
 ' с оговоркой мелким шрифтом, а не публикуется.
+' План против факта по видам работ. Единственное место в отчёте, где сравниваются
+' hourdlit (плановая длительность ремонта) и cost_Trudozatrat (фактически списанные
+' часы). Оба поля лежали в снимке (Z_PLAN, Z_TRUD) и использовались только в топе
+' машин слайда 7 - то есть по десяти строкам, а не по всему парку.
+'
+' Смысл: вид работ, где факт систематически выше плана, - это не «плохие слесари»,
+' а неверный норматив. Он ломает планирование загрузки постов на входе.
+Public Function BuildPlanFact() As String
+    EnsureZn
+    Dim dP As Object, dF As Object, dN As Object
+    Set dP = CreateObject("Scripting.Dictionary")
+    Set dF = CreateObject("Scripting.Dictionary")
+    Set dN = CreateObject("Scripting.Dictionary")
+
+    Dim k As Variant, z As Variant, t As String
+    Dim sumP As Double, sumF As Double, sumN As Double
+    For Each k In mZn.Keys
+        z = mZn(k)
+        If InYtd(z) Then
+            ' В расчёт идут только наряды, где ЕСТЬ и план, и факт: иначе вид работ
+            ' с пустым планом выглядел бы как «факт превысил план в бесконечность раз».
+            If CDbl(z(Z_PLAN)) > 0# And CDbl(z(Z_TRUD)) > 0# Then
+                t = Trim$(CStr(z(Z_TYPE)))
+                If t = "" Then t = "(вид не указан)"
+                AddCnt dP, t, CDbl(z(Z_PLAN))
+                AddCnt dF, t, CDbl(z(Z_TRUD))
+                AddCnt dN, t, 1#
+                sumP = sumP + CDbl(z(Z_PLAN))
+                sumF = sumF + CDbl(z(Z_TRUD))
+                sumN = sumN + 1#
+            End If
+        End If
+    Next k
+    If sumN = 0# Then BuildPlanFact = modContentMTO.EmptyNote(): Exit Function
+
+    ' Сортировка - по отклонению факта от плана, а не по объёму: интересен вид,
+    ' где норматив мимо, а не вид, которого просто много.
+    Dim rank As Object
+    Set rank = CreateObject("Scripting.Dictionary")
+    For Each k In dN.Keys
+        If DictVal(dN, CStr(k)) >= 5# Then
+            rank(CStr(k)) = SafePct(DictVal(dF, CStr(k)) - DictVal(dP, CStr(k)), _
+                DictVal(dP, CStr(k)))
+        Else
+            rank(CStr(k)) = -100000# + DictVal(dN, CStr(k))
+        End If
+    Next k
+
+    Dim labs As Variant, vals As Variant, i As Long
+    TopKeys rank, 0, labs, vals
+
+    Dim s As String, thin As Boolean
+    thin = False
+    s = "<div class=""scroll""><table><thead><tr><th>Вид работ</th>" & _
+        "<th class=""n"">Нарядов</th><th class=""n"">План, ч</th>" & _
+        "<th class=""n"">Факт, ч</th><th class=""n"">План на наряд</th>" & _
+        "<th class=""n"">Факт на наряд</th><th class=""n"">Отклонение</th>" & _
+        "</tr></thead><tbody>"
+    s = s & "<tr class=""total""><td class=""head"">Все виды</td><td class=""n"">" & _
+        modContentMTO.FmtInt(sumN) & "</td><td class=""n"">" & FmtF(sumP, 0) & _
+        "</td><td class=""n"">" & FmtF(sumF, 0) & "</td><td class=""n"">" & _
+        FmtF(SafeDiv(sumP, sumN), 1) & "</td><td class=""n"">" & _
+        FmtF(SafeDiv(sumF, sumN), 1) & "</td><td class=""n"">" & _
+        PlanDelta(sumF, sumP) & "</td></tr>"
+
+    For i = 0 To UBound(labs)
+        Dim lab As String, nn As Double, pp As Double, ff As Double
+        lab = CStr(labs(i))
+        nn = DictVal(dN, lab): pp = DictVal(dP, lab): ff = DictVal(dF, lab)
+        If nn < 5# And Not thin Then
+            thin = True
+            s = s & "<tr><td colspan=""7"" style=""color:var(--muted)"">" & _
+                "Виды, где меньше пяти нарядов с обоими полями " & ChrW$(&H2014) & _
+                " отклонение недостоверно</td></tr>"
+        End If
+        s = s & "<tr><td>" & modContentMTO.Esc(lab) & "</td>"
+        s = s & "<td class=""n"">" & modContentMTO.FmtInt(nn) & "</td>"
+        s = s & "<td class=""n"">" & FmtF(pp, 0) & "</td>"
+        s = s & "<td class=""n"">" & FmtF(ff, 0) & "</td>"
+        s = s & "<td class=""n"">" & FmtF(SafeDiv(pp, nn), 1) & "</td>"
+        s = s & "<td class=""n"">" & FmtF(SafeDiv(ff, nn), 1) & "</td>"
+        s = s & "<td class=""n"">" & PlanDelta(ff, pp) & "</td></tr>"
+    Next i
+    s = s & "</tbody></table></div>"
+
+    s = s & NoteBlk("План " & ChrW$(&H2014) & " <code>hourdlit</code>, плановая " & _
+        "длительность ремонта в часах. Факт " & ChrW$(&H2014) & " " & _
+        "<code>cost_Trudozatrat</code>: несмотря на имя, это <b>часы трудозатрат</b>, " & _
+        "а не рубли (docs/data.md, поле проверено). В расчёт идут только наряды, где " & _
+        "заполнены ОБА поля " & ChrW$(&H2014) & " " & modContentMTO.FmtInt(sumN) & _
+        " из всех за период; иначе вид работ с пустым планом выглядел бы как " & _
+        "бесконечное превышение. Сортировка " & ChrW$(&H2014) & " по отклонению, а не " & _
+        "по объёму: интересен вид, где норматив мимо, а не вид, которого много. " & _
+        "Период " & ChrW$(&H2014) & " с начала года.")
+    s = s & NoteBlk("<b>Что это НЕ измеряет.</b> Факт " & ChrW$(&H2014) & " списанные " & _
+        "трудозатраты, а не время, которое машина простояла: простой считается по парам " & _
+        "подписей и лежит отдельным блоком. Систематическое превышение читается как " & _
+        "неверный норматив, а не как оценка людей: разделить «норматив занижен» и " & _
+        "«работа заняла больше» этой выгрузкой нельзя.")
+    BuildPlanFact = s
+End Function
+
+' Отклонение факта от плана: вверх - перерасход (красный), вниз - недобор (зелёный).
+Private Function PlanDelta(ByVal fact As Double, ByVal plan As Double) As String
+    If plan <= 0# Then PlanDelta = Dash(): Exit Function
+    Dim d As Double
+    d = SafePct(fact - plan, plan)
+    If Abs(d) < 0.5 Then PlanDelta = "<span class=""delta flat"">0" & Nb() & "%</span>": Exit Function
+    If d > 0# Then
+        PlanDelta = "<span class=""delta up"">+" & FmtF(d, 0) & Nb() & "%</span>"
+    Else
+        PlanDelta = "<span class=""delta dn"">" & ChrW$(&H2212) & FmtF(-d, 0) & Nb() & "%</span>"
+    End If
+End Function
+
 Public Function BuildLimits() As String
     EnsureFlow
     Dim s As String
@@ -3802,12 +4137,13 @@ Public Function BuildDownVsHours(ByVal byWeek As Boolean) As String
             "<td class=""n"">" & FmtF(DictVal(plan, CStr(labs(j))), 1) & "</td></tr>"
     Next j
     s = s & "</tbody></table></div>"
-    s = s & "<figure>" & HBars(labs, dv, 680, 200, 25)
-    s = s & "<figcaption>Медиана простоя " & Hh(med) & " по машинам выборки</figcaption></figure>"
+    ' 17.09.2026: снят HBars - он рисовал колонку «Стояла, ч» той же таблицы
+    ' и печатался дважды на слайде (YTD и неделя). Медиана простоя, которая
+    ' была в подписи к графику, перенесена в примечание ниже.
     s = s & NoteBlk("Топ машин по суммарному простою. Стояла - сумма пар «Готов к приемке» -> " & _
         "«Готов к выбытию» по нарядам машины (пара считается по каждой дирекции отдельно, " & _
         "возможен двойной счёт дирекций). Списано - cost_Trudozatrat (фактические часы), " & _
-        "план - hourdlit (плановая длительность). Период - " & PerLabel(byWeek) & ".")
+        "план - hourdlit (плановая длительность). Медиана простоя по машинам выборки - " & Hh(med) & ". Период - " & PerLabel(byWeek) & ".")
     BuildDownVsHours = s
 End Function
 
@@ -3944,6 +4280,7 @@ Public Sub FillZonePlaceholders(ByVal d As Object)
     d("KPI_FLEET") = PeriodCap(snap & "; заезды за неделю - " & wl) & BuildKpiFleet()
     d("BLOCK_POSTS_WEEK") = PeriodCap(wl) & BuildPostsWeek()
     d("BLOCK_AGE_CURVE") = PeriodCap(snap) & BuildAgeCurve()
+    d("BLOCK_WEAR_METER") = PeriodCap("счётчики - на момент выгрузки; наряды, отказы, возвраты и материалы - " & ytd) & BuildWearByMeter()
     d("BLOCK_AGE_MATRIX") = PeriodCap(snap) & BuildAgeMatrix()
     d("BLOCK_AGING") = PeriodCap(snap) & BuildAging()
     d("BLOCK_PACK") = PeriodCap(snap) & BuildPack()
@@ -3984,6 +4321,7 @@ Public Sub FillZonePlaceholders(ByVal d As Object)
     d("BLOCK_TAIL_AGE") = PeriodCap(ytd) & BuildTailAge()
     d("BLOCK_TAIL_WHY") = PeriodCap(ytd) & BuildTailWhy()
     d("BLOCK_TAIL_ROWS") = PeriodCap(ytd) & BuildTailRows()
+    d("BLOCK_PLAN_FACT") = PeriodCap(ytd) & BuildPlanFact()
     d("BLOCK_LIMITS") = PeriodCap("не зависит от периода: перечень ограничений выгрузки") & BuildLimits()
     modLog.WriteDebug 1, "Техника", "FillZonePlaceholders", _
         "Слайд 7 готов: " & Round(Timer - t0, 2) & " c"
