@@ -1,13 +1,13 @@
 # Служебный файл install\install.ps1 - состояние последнего успешного релиза.
 # Руками не править: отсюда берётся ответ на вопрос «менялись ли исходники».
-version 8.1.11
-digest 00548b31dfa176c6543935bf1670ee63
+version 8.1.12
+digest a45f3bf82e2d220338e9770dd852e536
 file src/vba/modAggregate.bas 6E701973B32F50F176EB23F9F075AA3F
 file src/vba/modAIGateway.bas 326ACCDCC53035229FE4922FDDB88F58
 file src/vba/modColor.bas 35CB06FF36A3AE0ED0F0B286ABB7828F
-file src/vba/modContentDisc.bas 0A3D271279910225244F63141EA9F382
+file src/vba/modContentDisc.bas B38DC4812593C395E8C0A2E027945446
 file src/vba/modContentMTO.bas 4FC4FA7D9C24DB6E6933652A4CEB7594
-file src/vba/modContentZone.bas 79D3F4C1C6ADEFB3118075493DA940DF
+file src/vba/modContentZone.bas 0C02A2EA354F913E307A93BB1A1E9E49
 file src/vba/modHTMLEngine.bas 3E618D3701239AC0DBA87706A8903DA5
 file src/vba/modLog.bas D48B98B276747EC709897EF7CE88C7AA
 file src/vba/modMain.bas 8BCBB00A245B7DF89B0A4AD7BD4D2BC2
@@ -29,8 +29,8 @@ file src/powerquery/qProf5_Dedup.pq CA064C89D5E5D7FDB43F6AFE41DF993B
 file src/powerquery/qProf6_Groups.pq 238FE2A049014A7350279A6A7983C703
 file src/powerquery/qProf7_Retention.pq 74826B85C168B04B82924652FE43A88B
 file src/powerquery/Query-ImportJSON.pq B8E5A47500BE4C11E2E6F9EA68BF61BE
-file tmp_index.html 031BA82BCC4EEC6A620E18512A1060E2
-file README.md 12BD0D5971A4F1459A763D1A3C7516B4
+file tmp_index.html 60DFBF6BD4D2DA70E229E9088146525A
+file README.md 5AA45334888BDF13257967FB8E82A2CB
 file docs/archive/ft_Report v1.2.md 723D2916E12460C25ED5723CF183B80B
 file docs/archive/git-sync-v1.0.md 97F577E68147DE68698152D4442A2990
 file docs/archive/logs.md B9B75E3147BD140811E2BB605E55E2E7
@@ -45,14 +45,16 @@ file docs/archive/tz_pq_optimizations_and_e2e_v1.0.md 5EDA5FBBDE061FA6067425AC2E
 file docs/archive/tz_pq_profile_optimize_v1.0.md A3F846AD7E8C9E9EB14FA89D290C5943
 file docs/archive/tz_Report v1.2.md 063C8153D3C7FDEA75B54181F4194E00
 file docs/archive/tz_Reports2.md 7774DE065C6BAB61214091ADFB674344
-file docs/data.md B188E583FCBEA57B8D69E0BE30F97E4B
-file docs/index.md 9F0593655CA0C5D70E68EB83F3D986C0
+file docs/data.md 168AB7004A080F02C3DD16A86D8962AF
+file docs/index.md F4D93EF962BC419D55737398B19E1D30
 file docs/plans/analysis_loadpackage_hang_v1.0.md 0BF80EDC0F56C0512506DFFB530E33F8
+file docs/plans/audit_kod_i_slaidy_v1.0.md 73EB91292D069A9BF6FAC1972246E852
 file docs/plans/MTO_контракт_шаблона_v1.0.md 1DF8F9F6DBE31E3BFBA7E9E96A8E32BF
 file docs/plans/MTO_ТЗ_правки_шапки_и_слайда1_v1.0.md 2A9716368E862D38D506C0F0940C7053
 file docs/plans/plan_fix_loadpackage_a-c_v1.0.md 7ABF70DB29B77E8F90255167BD30136C
 file docs/plans/task-rep-v2-постановка-разработчику.md 4087E377F6377743EE66EAC872C1CCCC
 file docs/plans/task-rep-v2-часть3-постановка-разработчику.md C293536E4E510AD5F88A393E027D8379
+file docs/plans/tz_raskladka_slaidov_v1.0.md E111D0EAC7423B45683A51EF15DC5C6E
 file docs/plans/tz_Remzona_Part3_v1.0.md 6F370B4C4B6EF1D4FA4CBF4BADBC78A2
 file docs/presentations/MTO_Презентация_и_блоки_данных_v2.5.md 186077F1E4EB2BCB3D73DBA5A426BC45
 file docs/presentations/Презентация и блоки данных (Трек Б) v1.0.md 3D33C698C7F4450586F611F100B98CA1
@@ -62,6 +64,7 @@ file docs/spec.md 5B157C06DB75D764219FC626D498A741
 file docs/specs/brief-data-mto.md 0E7DFD726A8FFB5ACAF553E96BA0CADE
 file docs/specs/pri-json-findings-v1.md BB90964325B0E051E5B85FD8B990A5BA
 file docs/task-rep-v2.md 8AB8F6891F776B3B5FFF45A35D8FD0F1
+file docs/task-rep-v3.md 3479416E1A25678E87A081148FCD95A3
 file docs/tasks.md 108750AC7DF3815791A280868270072B
 file docs/version-guide.md 31B0E756E274EFFF2755F164905E6D20
 file install/install-v7.1.md 5029B74F81DC07B69D6DD9895385AA43
