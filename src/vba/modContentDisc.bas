@@ -1,6 +1,11 @@
 Attribute VB_Name = "modContentDisc"
 ' modContentDisc - CONTENT-слой части «Дисциплина» (слайды 2-4) отчёта МТО.
 '
+' Версия 1.6 от 17.09.2026: BLOCK_ACCLEV_* снят со слайдов 2 и 3.
+'   Владелец: «у меня на слайде уже перебор такой инфы». Тот же вопрос -
+'   влияет ли способ подписи на результат - разобран на слайде 6 блоками
+'   «возвраты по подписи ДЭНТ на выбытии», и там он доведён до ответа,
+'   а не до процента. BuildAccLev оставлена в коде невызываемой.
 ' Версия 1.5 от 17.09.2026: конкретные даты в подписях периода слайдов 2-4,
 '   как в modContentZone v2.12.
 ' Версия 1.3 от 17.09.2026: приёмка против выдачи.
@@ -1375,7 +1380,6 @@ Public Sub FillDiscPlaceholders(ByVal d As Object)
     ' Снята «Таблица 1» (BuildBlock1): она повторяла матрицу BLOCK_WEEKS_*, стоявшую
     ' прямо над ней. Функция BuildBlock1 оставлена в коде невызываемой.
     d("BLOCK_WEEKS_DENT") = modContentZone.PeriodCap(w8) & BuildWeeksTable("ДЭНТ")
-    d("BLOCK_ACCLEV_DENT") = modContentZone.PeriodCap(w8) & BuildAccLev("ДЭНТ")
     d("BLOCK_POSTS_DENT") = modContentZone.PeriodCap(wl) & BuildPostsTable("ДЭНТ")
     d("BLOCK_PEOPLE_DENT") = modContentZone.PeriodCap(w4) & BuildPeople("ДЭНТ")
     d("BLOCK_DEPTS_DENT") = modContentZone.PeriodCap(w4) & BuildDepts("ДЭНТ")
@@ -1384,7 +1388,6 @@ Public Sub FillDiscPlaceholders(ByVal d As Object)
         "Слайд 2 готов: " & Round(Timer - t0, 2) & " c"
 
     d("BLOCK_WEEKS_DGM") = modContentZone.PeriodCap(w8) & BuildWeeksTable("ДГМ")
-    d("BLOCK_ACCLEV_DGM") = modContentZone.PeriodCap(w8) & BuildAccLev("ДГМ")
     d("BLOCK_POSTS_DGM") = modContentZone.PeriodCap(wl) & BuildPostsTable("ДГМ")
     d("BLOCK_PEOPLE_DGM") = modContentZone.PeriodCap(w4) & BuildPeople("ДГМ")
     d("BLOCK_DEPTS_DGM") = modContentZone.PeriodCap(w4) & BuildDepts("ДГМ")
