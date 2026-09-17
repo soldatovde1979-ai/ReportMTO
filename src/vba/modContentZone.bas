@@ -30,6 +30,18 @@ Attribute VB_Name = "modContentZone"
 '   (блоки «возвраты» и «фазы наряда») лежали в середине файла, после процедур -
 '   перенесены в секцию Declarations. В BuildAgeCurve и BuildChronics цикл
 '   For Each k закрывался Next i.
+' Версия 2.10 от 17.09.2026: средняя фаза суток разложена на возвраты и остальное.
+'   BuildPhases: под прежним графиком трёх фаз - таблица, где фаза «ремзона»
+'   (приёмка -> выбытие) считается отдельно по нарядам-ВОЗВРАТАМ и отдельно по всем
+'   остальным, по неделям окна, с числом нарядов в каждой группе. Под таблицей -
+'   сравнение медиан за всё окно и вывод, считает ли возврат ремзону дольше.
+'   Признак возврата - новый словарь mRetOrd: он наполняется РОВНО на одном вызове
+'   RetPairs (mode 2, окно 30) и помечает ВТОРОЙ наряд пары - тот, что приехал
+'   повторно. Счётчики периода в RetPairs ведутся по первому наряду, это разные вещи.
+'   На остальных вызовах RetPairs словарь = Nothing, иначе возвратом считался бы
+'   наряд по самому широкому определению (mode 0) и разделение фазы поехало бы.
+'   Медиана за окно считается по всем нарядам окна, а не как среднее недельных медиан:
+'   иначе неделя с тремя нарядами весила бы столько же, сколько неделя с тремя сотнями.
 ' Версия 2.9 от 17.09.2026: период сбора над каждым блоком + отказы год к году.
 '   - PeriodCap: подпись периода НАД блоком. Ставится централизованно в
 '     FillZonePlaceholders / FillDiscPlaceholders, а не внутри полусотни построителей:
@@ -187,6 +199,9 @@ Private mFailTot7 As Long   ' возвраты по отказу, окно 7 с�
 Private mDenAll As Long, mDenFail As Long
 Private mGapMed As Double, mGapHas As Boolean
 Private mNodeNum As Object, mNodeDen As Object      ' «группа|узел» -> счётчик
+Private mRetOrd As Object    ' номер наряда -> True, если наряд ЯВЛЯЕТСЯ возвратом
+                             ' (второй в паре). Нужен, чтобы разделить фазу «ремзона»
+                             ' на время возвратов и остальное (слайд 7).
 
 ' Счётчики блока «Фазы наряда, возврат, хвост незакрытого» (слайд 7).
 Private mFlowReady As Boolean
@@ -218,6 +233,7 @@ Public Sub ResetZone()
     mWeeks = Empty
     mRetReady = False
     Set mRetNumW7 = Nothing
+    Set mRetOrd = Nothing
     mFailTot7 = 0
     mFlowReady = False
     Set mCloseH = Nothing
@@ -1930,6 +1946,10 @@ Private Function RetPairs(ByVal mode As Long, ByVal numM As Object, ByVal numW A
                         ' базой из прошлого года - следствие требования «с начала года».
                         If InYtd(mZn(ns(i))) Then
                             total = total + 1
+                            ' Возвратом является ВТОРОЙ наряд пары, ns(j): это он
+                            ' приехал повторно. Счётчики периода ведутся по первому
+                            ' (ns(i)) - там проверяли ремонт, который не помог.
+                            If Not mRetOrd Is Nothing Then mRetOrd(CStr(ns(j))) = True
                             If Not numM Is Nothing Then AddCnt numM, CStr(za(Z_MONTH)), 1#
                             If Not numW Is Nothing Then AddCnt numW, CStr(za(Z_WEEK)), 1#
                             If Not gaps Is Nothing Then gaps.Add gp
@@ -1983,7 +2003,16 @@ Private Sub EnsureRet()
     Set gaps = New Collection
     mRetTot = RetPairs(0, mRetNumM, mRetNumW, gaps, Nothing, RET_WINDOW)
     mStrictTot = RetPairs(1, Nothing, Nothing, Nothing, Nothing, RET_WINDOW)
+    ' mRetOrd наполняется РОВНО на этом вызове: определение возврата для разбора
+    ' фазы «ремзона» должно совпадать с главной плиткой слайда 6 - по отказу,
+    ' по подкатегории, окно 30 суток. На остальных вызовах словарь = Nothing,
+    ' и отметки не ставятся: иначе возвратом считался бы наряд по самому широкому
+    ' определению (mode 0), и разделение фазы поехало бы.
+    Set mRetOrd = CreateObject("Scripting.Dictionary")
     mFailTot = RetPairs(2, mFailNumM, mFailNumW, Nothing, mNodeNum, RET_WINDOW)
+    Dim retOrdKeep As Object
+    Set retOrdKeep = mRetOrd
+    Set mRetOrd = Nothing
     mRetTot7 = RetPairs(0, Nothing, mRetNumW7, Nothing, Nothing, 7)
     ' Окно 7 суток на ТОМ ЖЕ уровне строгости, что основная плитка слайда 6 (mode 2,
     ' только отказы, по подкатегории). mRetTot7 выше считается по группе дефекта
@@ -1992,6 +2021,7 @@ Private Sub EnsureRet()
     mFailTot7 = RetPairs(2, Nothing, Nothing, Nothing, Nothing, 7)
     mGapMed = MedianOf(gaps, mGapHas)
 
+    Set mRetOrd = retOrdKeep
     mRetReady = True
     modLog.WriteDebug 2, "Техника", "modContentZone.EnsureRet", _
         "Внеплановых " & CStr(mDenAll) & ", возвратов по группе " & CStr(mRetTot) & _
@@ -2781,6 +2811,7 @@ End Function
 
 Public Function BuildPhases() As String
     EnsureZn
+    EnsureRet
     Dim wk As Variant
     wk = WeekWindow(8)
     Dim a1() As Variant, a2() As Variant, a3() As Variant, i As Long
@@ -2788,18 +2819,33 @@ Public Function BuildPhases() As String
     ReDim a2(0 To UBound(wk))
     ReDim a3(0 To UBound(wk))
 
+    ' Средняя фаза дополнительно делится на два ряда: наряды-возвраты и все остальные.
+    ' Возврат - тот же наряд, что считает главная плитка слайда 6 (mRetOrd).
+    Dim r2() As Variant, o2() As Variant, nR() As Variant, nO() As Variant
+    ReDim r2(0 To UBound(wk))
+    ReDim o2(0 To UBound(wk))
+    ReDim nR(0 To UBound(wk))
+    ReDim nO(0 To UBound(wk))
+
     Dim c1 As Collection, c2 As Collection, c3 As Collection
+    Dim cR As Collection, cO As Collection
     Dim k As Variant, z As Variant, hasV As Boolean
     Dim s1 As Double, s2 As Double, s3 As Double
     For i = 0 To UBound(wk)
         Set c1 = New Collection: Set c2 = New Collection: Set c3 = New Collection
+        Set cR = New Collection: Set cO = New Collection
         For Each k In mZn.Keys
             z = mZn(k)
             If CLng(z(Z_WEEK)) = CLng(wk(i)) Then
                 Dim ac As Double, lv As Double, cl As Double
                 ac = ZAcc(z): lv = ZLev(z): cl = CDbl(z(Z_CLOSED))
                 If ac > 0# And ac >= CDbl(z(Z_DATE)) Then c1.Add (ac - CDbl(z(Z_DATE))) * 24#
-                If ac > 0# And lv > 0# And lv >= ac Then c2.Add (lv - ac) * 24#
+                If ac > 0# And lv > 0# And lv >= ac Then
+                    Dim hMid As Double
+                    hMid = (lv - ac) * 24#
+                    c2.Add hMid
+                    If IsRetOrder(CStr(k)) Then cR.Add hMid Else cO.Add hMid
+                End If
                 If lv > 0# And cl > 0# Then
                     Dim hh2 As Double
                     hh2 = (cl - lv) * 24#
@@ -2810,6 +2856,10 @@ Public Function BuildPhases() As String
         a1(i) = MedianOf(c1, hasV)
         a2(i) = MedianOf(c2, hasV)
         a3(i) = MedianOf(c3, hasV)
+        r2(i) = MedianOf(cR, hasV)
+        o2(i) = MedianOf(cO, hasV)
+        nR(i) = CDbl(cR.Count)
+        nO(i) = CDbl(cO.Count)
         If i = UBound(wk) Then
             s1 = CDbl(a1(i)): s2 = CDbl(a2(i)): s3 = CDbl(a3(i))
         End If
@@ -2827,7 +2877,115 @@ Public Function BuildPhases() As String
         "по видам техники - в блоке ниже. " & _
         "Медианы недели " & WLab(CLng(wk(UBound(wk)))) & ": постановка " & Hh(s1) & _
         ", ремзона " & Hh(s2) & ", закрытие " & Hh(s3) & ".")
+
+    ' --- Средняя фаза в разрезе «возврат / не возврат» ---
+    Dim cntRet As Double, cntOth As Double, i2 As Long
+    cntRet = 0#: cntOth = 0#
+    For i2 = 0 To UBound(wk)
+        cntRet = cntRet + CDbl(nR(i2))
+        cntOth = cntOth + CDbl(nO(i2))
+    Next i2
+    If cntRet = 0# And cntOth = 0# Then BuildPhases = s: Exit Function
+
+    s = s & MockLabel("Средняя фаза «ремзона» отдельно: возвраты и всё остальное")
+    s = s & "<div class=""scroll""><table><thead><tr><th>Наряды</th>"
+    For i2 = 0 To UBound(wk)
+        s = s & "<th class=""n"">" & WLab(CLng(wk(i2))) & "</th>"
+    Next i2
+    s = s & "</tr></thead><tbody>"
+
+    s = s & "<tr class=""total""><td class=""head"">Возвраты " & ChrW$(&H2014) & _
+        " медиана</td>"
+    For i2 = 0 To UBound(wk)
+        If CDbl(nR(i2)) > 0# Then
+            s = s & "<td class=""n"">" & Hh(CDbl(r2(i2))) & "</td>"
+        Else
+            s = s & "<td class=""n"" style=""color:var(--muted)"">" & Dash() & "</td>"
+        End If
+    Next i2
+    s = s & "</tr><tr><td>Возвраты " & ChrW$(&H2014) & " нарядов</td>"
+    For i2 = 0 To UBound(wk)
+        s = s & "<td class=""n"">" & modContentMTO.FmtInt(CDbl(nR(i2))) & "</td>"
+    Next i2
+    s = s & "</tr><tr><td class=""head"">Остальные " & ChrW$(&H2014) & " медиана</td>"
+    For i2 = 0 To UBound(wk)
+        If CDbl(nO(i2)) > 0# Then
+            s = s & "<td class=""n"">" & Hh(CDbl(o2(i2))) & "</td>"
+        Else
+            s = s & "<td class=""n"" style=""color:var(--muted)"">" & Dash() & "</td>"
+        End If
+    Next i2
+    s = s & "</tr><tr><td>Остальные " & ChrW$(&H2014) & " нарядов</td>"
+    For i2 = 0 To UBound(wk)
+        s = s & "<td class=""n"">" & modContentMTO.FmtInt(CDbl(nO(i2))) & "</td>"
+    Next i2
+    s = s & "</tr></tbody></table></div>"
+
+    ' Сводка за окно: медиана по всем нарядам окна, а не среднее недельных медиан -
+    ' иначе неделя с тремя нарядами весила бы столько же, сколько неделя с тремя сотнями.
+    Dim allR As Collection, allO As Collection
+    Set allR = New Collection: Set allO = New Collection
+    For Each k In mZn.Keys
+        z = mZn(k)
+        Dim inW As Boolean
+        inW = False
+        For i2 = 0 To UBound(wk)
+            If CLng(z(Z_WEEK)) = CLng(wk(i2)) Then inW = True: Exit For
+        Next i2
+        If inW Then
+            Dim ac2 As Double, lv2 As Double
+            ac2 = ZAcc(z): lv2 = ZLev(z)
+            If ac2 > 0# And lv2 > 0# And lv2 >= ac2 Then
+                If IsRetOrder(CStr(k)) Then
+                    allR.Add (lv2 - ac2) * 24#
+                Else
+                    allO.Add (lv2 - ac2) * 24#
+                End If
+            End If
+        End If
+    Next k
+    Dim hasR As Boolean, hasO As Boolean, mR As Double, mO As Double
+    mR = MedianOf(allR, hasR)
+    mO = MedianOf(allO, hasO)
+
+    Dim verdict As String
+    If Not hasR Then
+        verdict = "За окно ни один наряд не попал в возвраты " & ChrW$(&H2014) & _
+            " сравнивать не с чем."
+    ElseIf Not hasO Then
+        verdict = "За окно все наряды с обеими подписями оказались возвратами."
+    ElseIf mR > mO Then
+        verdict = "За окно возврат держит машину в ремзоне <b>дольше</b>: медиана " & _
+            Hh(mR) & " против " & Hh(mO) & " у остальных, разница " & _
+            Hh(mR - mO) & ". Возврат забирает не только качество, но и пропускную " & _
+            "способность ремзоны."
+    ElseIf mR < mO Then
+        verdict = "За окно возврат проходит <b>быстрее</b> обычного наряда: медиана " & _
+            Hh(mR) & " против " & Hh(mO) & ". Обычно так выглядит повторный ремонт " & _
+            "по уже известной причине."
+    Else
+        verdict = "За окно возвраты и остальные наряды идут одинаково: медиана " & Hh(mR) & "."
+    End If
+
+    s = s & NoteBlk("Та же фаза «ремзона» (приёмка " & ChrW$(&H2192) & " выбытие), что " & _
+        "средняя полоса выше, но разложенная на два ряда: наряды-<b>возвраты</b> и все " & _
+        "остальные. Возврат " & ChrW$(&H2014) & " повторный заход машины по той же " & _
+        "подкатегории дефекта в течение 30 суток после закрытия предыдущего наряда, " & _
+        "только отказы: то же определение, что у главной плитки слайда 6, чтобы числа " & _
+        "сходились. Неделя " & ChrW$(&H2014) & " по дате создания наряда. " & _
+        "В строках «нарядов» " & ChrW$(&H2014) & " сколько нарядов попало в медиану: " & _
+        "на одном-двух нарядах медиана ничего не значит. За окно всего " & _
+        modContentMTO.FmtInt(cntRet) & " возвратов и " & modContentMTO.FmtInt(cntOth) & _
+        " остальных. " & verdict)
     BuildPhases = s
+End Function
+
+' Наряд является возвратом по главному определению слайда 6 (отказ, подкатегория,
+' окно 30 суток). До EnsureRet словаря нет - тогда False, а не ошибка.
+Private Function IsRetOrder(ByVal num As String) As Boolean
+    IsRetOrder = False
+    If mRetOrd Is Nothing Then Exit Function
+    IsRetOrder = mRetOrd.Exists(num)
 End Function
 
 Public Function BuildReturnKpi() As String

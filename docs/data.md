@@ -553,7 +553,7 @@ Text.From([number] ?? "") & "|"
 
 | Плейсхолдер | Назначение | Как получается |
 |---|---|---|
-| `{{BLOCK_PHASES}}` | фазы наряда (постановка/ремзона/закрытие) по неделям | `BuildPhases` |
+| `{{BLOCK_PHASES}}` | медианы трёх фаз наряда по неделям окна + разбор средней фазы «ремзона» на наряды-возвраты и остальные | `BuildPhases` |
 | `{{BLOCK_REPEAT_TOP_VEH_YTD}}`, `{{BLOCK_REPEAT_TOP_VEH_WK}}` | топ машин по повторным парам (YTD / неделя) | `BuildRepeatTopVeh(False/True)` |
 | `{{BLOCK_REPEAT_TOP_DEF_YTD}}`, `{{BLOCK_REPEAT_TOP_DEF_WK}}` | топ групп дефекта по повторным парам | `BuildRepeatTopDef(False/True)` |
 | `{{BLOCK_DOWN_VS_HOURS_YTD}}`, `{{BLOCK_DOWN_VS_HOURS_WK}}` | простой против списанных/плановых часов | `BuildDownVsHours(False/True)` |
