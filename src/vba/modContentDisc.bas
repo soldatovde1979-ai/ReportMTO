@@ -759,12 +759,13 @@ End Function
 
 ' {{BLOCK_PEOPLE_*}} - сотрудники дирекции. На каждую метрику пара колонок:
 ' широкая - отчётная неделя, узкая - три предыдущие недели стопкой (ПН-1 сверху,
-' ПН-3 снизу). Прежняя раскладка в четыре равные колонки с шапкой «лесенкой»
-' не выделяла отчётную неделю: она выглядела как три архивные.
+' ПН-3 снизу). Стрелка стоит у КАЖДОЙ недели, слева от числа: динамика нужна
+' в каждой строке стопки, а не только у отчётной недели. Поэтому окно - пять
+' недель, а не четыре: самой нижней строке стопки (ПН-3) нужна ПН-4 для сравнения.
 Public Function BuildPeople(ByVal dir As String) As String
     EnsureDisc
     Dim wk As Variant
-    wk = modContentZone.WeekWindow(4)
+    wk = modContentZone.WeekWindow(5)     ' 0 = ПН-4 ... 4 = отчётная неделя
     Dim minRec As Double
     minRec = modContentZone.ToNum(modMain.GetVariableDef("REPORT/MIN_RECORDS", "10"))
     If minRec <= 0# Then minRec = 10#
@@ -791,35 +792,34 @@ Public Function BuildPeople(ByVal dir As String) As String
     Dim pl As Variant, pv As Variant
     modContentZone.TopKeys pick, 0, pl, pv
 
-    ' Шапка недель стопки одна на все три метрики: ПН-1, ПН-2, ПН-3 сверху вниз.
+    ' Шапка стопки одна на все три метрики: ПН-1, ПН-2, ПН-3 сверху вниз.
     Dim hd As String
     hd = "<th class=""stack-h"">" & _
+        "<div class=""wk"">" & modContentZone.WLab(CLng(wk(3))) & "</div>" & _
         "<div class=""wk"">" & modContentZone.WLab(CLng(wk(2))) & "</div>" & _
-        "<div class=""wk"">" & modContentZone.WLab(CLng(wk(1))) & "</div>" & _
-        "<div class=""wk"">" & modContentZone.WLab(CLng(wk(0))) & "</div></th>"
-    Dim cur As String
+        "<div class=""wk"">" & modContentZone.WLab(CLng(wk(1))) & "</div></th>"
+    Dim cur As String, curS As String
     cur = "<th class=""n"">" & modContentZone.WLab(mRw) & "</th>"
+    curS = "<th class=""n sep-l"">" & modContentZone.WLab(mRw) & "</th>"
 
     Dim s As String, i As Long
-    s = "<table><thead><tr><th rowspan=""2"">Сотрудник</th>" & _
+    s = "<table class=""wk-stack""><thead><tr><th rowspan=""2"">Сотрудник</th>" & _
         "<th class=""grp"" colspan=""2"">% планшета</th>" & _
         "<th class=""grp sep-l"" colspan=""2"">Всего подписей</th>" & _
         "<th class=""grp sep-l"" colspan=""2"">Из них планшет</th>" & _
         "<th class=""n sep-l"" rowspan=""2"">Приёмка</th>" & _
         "<th class=""n"" rowspan=""2"">Выбытие</th>" & _
         "<th class=""n"" rowspan=""2"">Ср. время</th></tr>"
-    s = s & "<tr>" & cur & hd & _
-        Replace$(cur, "class=""n""", "class=""n sep-l""") & hd & _
-        Replace$(cur, "class=""n""", "class=""n sep-l""") & hd & "</tr></thead><tbody>"
+    s = s & "<tr>" & cur & hd & curS & hd & curS & hd & "</tr></thead><tbody>"
 
     For i = 0 To UBound(pl)
         Dim emp As String
         emp = CStr(pl(i))
         s = s & "<tr><td class=""head"">" & modContentMTO.Esc(emp) & "</td>"
         Dim j As Long
-        Dim pj(0 To 3) As Double, hj(0 To 3) As Boolean
-        Dim tj(0 To 3) As Double, bj(0 To 3) As Double
-        For j = 0 To 3
+        Dim pj(0 To 4) As Double, hj(0 To 4) As Boolean
+        Dim tj(0 To 4) As Double, bj(0 To 4) As Double
+        For j = 0 To 4
             Dim key As String
             key = dir & "|" & emp & "|" & CStr(wk(j))
             tj(j) = modContentZone.DictVal(mPTot, key)
@@ -828,23 +828,27 @@ Public Function BuildPeople(ByVal dir As String) As String
             hj(j) = (tj(j) > 0#)
         Next j
 
-        ' % планшета: отчётная неделя со стрелкой к ПН-1, рядом стопка ПН-1..ПН-3.
-        s = s & PctArrowTd(pj(3), hj(3), pj(2), hj(2))
-        s = s & StackCell(WkDiv(modContentZone.Pc(pj(2), 0), hj(2)), _
-                          WkDiv(modContentZone.Pc(pj(1), 0), hj(1)), _
-                          WkDiv(modContentZone.Pc(pj(0), 0), hj(0)))
+        ' % планшета: отчётная неделя со стрелкой к ПН-1, рядом стопка ПН-1..ПН-3,
+        ' у каждой строки стопки своя стрелка к её предыдущей неделе.
+        s = s & PctArrowTd(pj(4), hj(4), pj(3), hj(3))
+        s = s & StackCell( _
+            WkDiv(modContentZone.Pc(pj(3), 0), hj(3), pj(3), hj(3), pj(2), hj(2)), _
+            WkDiv(modContentZone.Pc(pj(2), 0), hj(2), pj(2), hj(2), pj(1), hj(1)), _
+            WkDiv(modContentZone.Pc(pj(1), 0), hj(1), pj(1), hj(1), pj(0), hj(0)))
 
         ' Всего подписей.
-        s = s & "<td class=""n sep-l"">" & modContentMTO.FmtInt(tj(3)) & "</td>"
-        s = s & StackCell(WkDiv(modContentMTO.FmtInt(tj(2)), hj(2)), _
-                          WkDiv(modContentMTO.FmtInt(tj(1)), hj(1)), _
-                          WkDiv(modContentMTO.FmtInt(tj(0)), hj(0)))
+        s = s & NumArrowTd(tj(4), hj(4), tj(3), hj(3), True)
+        s = s & StackCell( _
+            WkDiv(modContentMTO.FmtInt(tj(3)), hj(3), tj(3), hj(3), tj(2), hj(2)), _
+            WkDiv(modContentMTO.FmtInt(tj(2)), hj(2), tj(2), hj(2), tj(1), hj(1)), _
+            WkDiv(modContentMTO.FmtInt(tj(1)), hj(1), tj(1), hj(1), tj(0), hj(0)))
 
         ' Из них планшет.
-        s = s & "<td class=""n sep-l"">" & modContentMTO.FmtInt(bj(3)) & "</td>"
-        s = s & StackCell(WkDiv(modContentMTO.FmtInt(bj(2)), hj(2)), _
-                          WkDiv(modContentMTO.FmtInt(bj(1)), hj(1)), _
-                          WkDiv(modContentMTO.FmtInt(bj(0)), hj(0)))
+        s = s & NumArrowTd(bj(4), hj(4), bj(3), hj(3), True)
+        s = s & StackCell( _
+            WkDiv(modContentMTO.FmtInt(bj(3)), hj(3), bj(3), hj(3), bj(2), hj(2)), _
+            WkDiv(modContentMTO.FmtInt(bj(2)), hj(2), bj(2), hj(2), bj(1), hj(1)), _
+            WkDiv(modContentMTO.FmtInt(bj(1)), hj(1), bj(1), hj(1), bj(0), hj(0)))
 
         s = s & "<td class=""n sep-l"">" & modContentMTO.FmtInt( _
             modContentZone.DictVal(mPAcc, dir & "|" & emp)) & "</td>"
@@ -854,19 +858,22 @@ Public Function BuildPeople(ByVal dir As String) As String
     Next i
     s = s & "</tbody></table>"
 
-    s = s & modContentZone.NoteBlk( _
-        "Широкая колонка - отчётная неделя " & modContentZone.WLab(mRw) & " (" & _
+    Dim note As String
+    note = "Широкая колонка - отчётная неделя " & modContentZone.WLab(mRw) & " (" & _
         modContentZone.WeekRange(mRw) & "), узкая - " & _
-        modContentZone.WLab(CLng(wk(2))) & ", " & modContentZone.WLab(CLng(wk(1))) & _
-        ", " & modContentZone.WLab(CLng(wk(0))) & " сверху вниз. Неделя - по дате " & _
-        "статуса. Стрелка " & ChrW$(&H2191) & " / " & ChrW$(&H2193) & _
-        " - рост / падение процента к " & modContentZone.WLab(CLng(wk(2))) & ". " & _
-        "Неделя без событий показана прочерком, а не нулём: ноль процентов и " & _
-        "отсутствие работы читаются одинаково, а значат разное. " & _
+        modContentZone.WLab(CLng(wk(3))) & ", " & modContentZone.WLab(CLng(wk(2))) & _
+        ", " & modContentZone.WLab(CLng(wk(1))) & " сверху вниз. Неделя - по дате "
+    note = note & "статуса. Стрелка " & ChrW$(&H2191) & " / " & ChrW$(&H2193) & _
+        " слева от числа - рост / падение к предыдущей неделе того же сотрудника; " & _
+        "для нижней строки стопки сравнение идёт с " & _
+        modContentZone.WLab(CLng(wk(0))) & ". "
+    note = note & "Неделя без событий показана прочерком, а не нулём: ноль " & _
+        "процентов и отсутствие работы читаются одинаково, а значат разное. " & _
         "Порог включения - не менее " & modContentMTO.FmtInt(minRec) & " событий за " & _
         "отчётную неделю; в списке " & modContentMTO.FmtInt(CDbl(pick.Count)) & _
         " человек, отсечено " & modContentMTO.FmtInt(CDbl(skipped)) & ". " & _
-        "ФИО во внешнюю модель не уходят.")
+        "ФИО во внешнюю модель не уходят."
+    s = s & modContentZone.NoteBlk(note)
     BuildPeople = s
 End Function
 
@@ -876,13 +883,48 @@ Private Function StackCell(ByVal a As String, ByVal b As String, _
     StackCell = "<td class=""stack"">" & a & b & c & "</td>"
 End Function
 
-' Строка внутри стопки. Нет событий за неделю - прочерк, а не ноль.
-Private Function WkDiv(ByVal txt As String, ByVal hasValue As Boolean) As String
+' Строка внутри стопки: стрелка слева, число справа. Слот стрелки занимает место
+' всегда - иначе числа в стопке разъезжаются по горизонтали.
+' Нет событий за неделю - прочерк, а не ноль.
+Private Function WkDiv(ByVal txt As String, ByVal hasValue As Boolean, _
+                       ByVal v As Double, ByVal hasV As Boolean, _
+                       ByVal prev As Double, ByVal hasPrev As Boolean) As String
     If hasValue Then
-        WkDiv = "<div class=""wk"">" & txt & "</div>"
+        WkDiv = "<div class=""wk"">" & DeltaSpan(v, hasV, prev, hasPrev) & _
+            "<span class=""v"">" & txt & "</span></div>"
     Else
-        WkDiv = "<div class=""wk empty"">" & modContentZone.Dash() & "</div>"
+        WkDiv = "<div class=""wk empty"">" & DeltaSpan(0#, False, 0#, False) & _
+            "<span class=""v"">" & modContentZone.Dash() & "</span></div>"
     End If
+End Function
+
+' Стрелка динамики. Пустой слот тоже выводится: он держит ширину колонки.
+Private Function DeltaSpan(ByVal v As Double, ByVal hasV As Boolean, _
+                           ByVal prev As Double, ByVal hasPrev As Boolean) As String
+    DeltaSpan = "<span class=""delta flat""></span>"
+    If Not hasV Then Exit Function
+    If Not hasPrev Then Exit Function
+    If Abs(v - prev) < 0.000000001 Then Exit Function
+    If v > prev Then
+        DeltaSpan = "<span class=""delta up"">" & ChrW$(&H2191) & "</span>"
+    Else
+        DeltaSpan = "<span class=""delta dn"">" & ChrW$(&H2193) & "</span>"
+    End If
+End Function
+
+' Числовая ячейка отчётной недели со стрелкой к предыдущей неделе.
+Private Function NumArrowTd(ByVal v As Double, ByVal hasV As Boolean, _
+                            ByVal prev As Double, ByVal hasPrev As Boolean, _
+                            ByVal sepLeft As Boolean) As String
+    Dim cls As String
+    cls = "n"
+    If sepLeft Then cls = "n sep-l"
+    If Not hasV Then
+        NumArrowTd = "<td class=""" & cls & """>" & modContentZone.Dash() & "</td>"
+        Exit Function
+    End If
+    NumArrowTd = "<td class=""" & cls & """>" & modContentMTO.FmtInt(v) & " " & _
+        DeltaSpan(v, hasV, prev, hasPrev) & "</td>"
 End Function
 
 ' Ячейка процента со стрелкой к предыдущей неделе (Б7): вверх - рост, вниз - падение.
