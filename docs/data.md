@@ -457,7 +457,7 @@ Text.From([number] ?? "") & "|"
 
 ### 3.3 Плейсхолдеры HTML-шаблона (`tmp_index.html`)
 
-Сверено 16.09.2026 с шаблоном v4.7 и кодом v8.3: **79 плейсхолдеров**, все заполняются словарём
+Сверено 16.09.2026 с шаблоном v4.8 и кодом v8.3: **81 плейсхолдер**, все заполняются словарём
 `Scripting.Dictionary` из `modContentMTO.BuildPlaceholders` (шапка/подвал/ИИ) +
 `modContentZone.FillZonePlaceholders` (слайды 1, 5–8) + `modContentDisc.FillDiscPlaceholders`
 (слайды 2–4). Над каждым блоком стоит подпись периода сбора (`modContentZone.PeriodCap`,
@@ -506,7 +506,6 @@ Text.From([number] ?? "") & "|"
 | Плейсхолдер | Назначение | Как получается |
 |---|---|---|
 | `{{BLOCK_WEEKS_DENT}}`, `{{BLOCK_WEEKS_DGM}}` | матрица «% планшета» по ремзонам × 8 недель (события) | `BuildWeeksTable("ДЭНТ"/"ДГМ")` |
-| `{{BLOCK_ACCLEV_DENT}}`, `{{BLOCK_ACCLEV_DGM}}` | приёмка против выдачи: ПЛАНШЕТ / ПК / % планшета раздельно по `ready_for`, окно 8 недель | `BuildAccLev(dir)` |
 | `{{BLOCK_POSTS_DENT}}`, `{{BLOCK_POSTS_DGM}}` | площадки за отчётную неделю (единица — наряд) | `BuildPostsTable(dir)` |
 | `{{BLOCK_PEOPLE_DENT}}`, `{{BLOCK_PEOPLE_DGM}}` | сотрудники: тренд % за 4 недели + объём/время за отчётную (порог `REPORT/MIN_RECORDS`) | `BuildPeople(dir)` |
 | `{{BLOCK_DEPTS_DENT}}`, `{{BLOCK_DEPTS_DGM}}` | подразделения (`emp_dep`), аналог сотрудников | `BuildDepts(dir)` |
@@ -532,7 +531,7 @@ Text.From([number] ?? "") & "|"
 | `{{KPI_FLEET}}` | плитки: машин, заездов за неделю, заездов пакетом, возраст парка | `BuildKpiFleet` (`mVeh`, порог заезда 12 ч) |
 | `{{BLOCK_POSTS_WEEK}}` | наряды отчётной недели по ремзонам | `BuildPostsWeek` |
 | `{{BLOCK_AGE_CURVE}}` | парк по годам выпуска + внеплановые наряды на машину | `BuildAgeCurve` |
-| `{{BLOCK_WEAR_METER}}` | износ по счётчику: корзины наработки (квинтили) → машин, внеплановых нарядов, отказов, возвратов и материалов на машину; пробег и моточасы раздельными таблицами | `BuildWearByMeter` |
+| `{{BLOCK_WEAR_METER}}` | какие машины ломаются не по наработке: корзина наработки задаёт норму отказов, ниже — поимённый список машин, превысивших норму своей корзины; пробег и моточасы раздельно | `BuildWearByMeter` |
 | `{{BLOCK_AGE_MATRIX}}` | когорты × топ-5 групп дефекта | `BuildAgeMatrix` |
 | `{{BLOCK_AGING}}` | заезды/материалы/часы на машину по когортам | `BuildAging` |
 | `{{BLOCK_PACK}}` | распределение заездов по числу нарядов + чувствительность к порогу | `BuildPack` |
@@ -547,6 +546,8 @@ Text.From([number] ?? "") & "|"
 | `{{BLOCK_PARETO}}` | Парето групп дефекта (топ-8, внеплановые, YTD) | `BuildPareto` |
 | `{{BLOCK_DEFECT_DETAIL}}` | классификатор описаний: характер работы + узел | `BuildDefectDetail` (`EnsureCls`) |
 | `{{BLOCK_RET_KPI}}` (5 плиток: по отказу за 7 и за 30 суток, по подкатегории, по группе, медиана интервала) | плитки возвратов (по отказу / подкатегории / группе / медиана интервала) | `BuildRetKpi` |
+| `{{BLOCK_RET_ARM}}` | возвраты по подписи ДЭНТ на «Готов к выбытию»: с планшета / с ПК / подписи нет | `BuildRetArm` |
+| `{{BLOCK_RET_ARM_AGE}}`, `{{BLOCK_RET_ARM_VEH}}`, `{{BLOCK_RET_ARM_DEF}}` | то же внутри разрезов: возраст техники, группа техники, группа дефекта | `BuildRetArmCut(cut, …)` |
 | `{{BLOCK_RET_MONTH}}` | возвраты по месяцам YTD (окно 30 сут) | `BuildRetMonth` |
 | `{{BLOCK_RET_WEEK}}` | возвраты по неделям окна | `BuildRetWeek` |
 | `{{BLOCK_RET_NODE}}` | узлы с ≥ 40 отказами и доля возвратов | `BuildRetNode` |

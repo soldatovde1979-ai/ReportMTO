@@ -30,6 +30,25 @@ Attribute VB_Name = "modContentZone"
 '   (блоки «возвраты» и «фазы наряда») лежали в середине файла, после процедур -
 '   перенесены в секцию Declarations. В BuildAgeCurve и BuildChronics цикл
 '   For Each k закрывался Next i.
+' Версия 2.13 от 17.09.2026: возвраты по подписи ДЭНТ и переделка блока наработки.
+'   - BuildRetArm / BuildRetArmCut, четыре плейсхолдера на слайде 6: помогает ли приёмка
+'     ДЭНТ. Смотрим подпись ДЭНТ на «Готов к выбытию», а не ДГМ: из ремонта машину
+'     ПРИНИМАЕТ ДЭНТ. Три группы покрывают базу без остатка - подпись с планшета,
+'     подпись с ПК, подписи нет. Главное сравнение: с планшета против «нет подписи».
+'     Разрезы: возраст техники, группа техники, группа дефекта - проверяют, держится
+'     ли разрыв внутри однородных групп или он про то, что чинили.
+'     Отсечение по незакрытому окну обязательно: у наряда, закрытого вчера, возврат
+'     не успел случиться, а свежих нарядов больше там, где планшет внедряют, - без
+'     отсечения блок «доказал» бы то, чего не проверял.
+'   - Новые поля снимка Z_ALEVG / Z_ALEVD (АРМ подписи выбытия) и словарь mRetSrc
+'     (наряд, ПОСЛЕ которого случился возврат; mRetOrd помечает наоборот, второй
+'     наряд пары). Без них разрез был невозможен: АРМ жил только в modContentDisc.
+'   - BuildWearByMeter переписан. Первая версия выводила средние по корзинам и не
+'     вела ни к какому действию - владелец отверг её справедливо. Теперь блок отвечает
+'     на вопрос «какие машины ломаются не по наработке»: корзина задаёт норму, а ниже
+'     идёт поимённый список машин, превысивших норму СВОЕЙ корзины вдвое. Норма по
+'     корзине, а не по парку: иначе список забили бы старые машины, у которых отказов
+'     много законно.
 ' Версия 2.12 от 17.09.2026: знак % и конкретные даты в подписях периода.
 '   - PctTd печатал голое число под заголовком «%», и ещё 12 ячеек таблиц выводили
 '     FmtF(SafePct(...)) без знака. Все переведены на Pc() - процент теперь виден
@@ -165,7 +184,9 @@ Private Const Z_MONTH As Long = 20      ' год*100 + месяц по date
 Private Const Z_ZONE As Long = 21       ' postN - нормализованная ремзона (блоки «без ремзоны»)
 Private Const Z_TRUD As Long = 22       ' cost_Trudozatrat, фактические часы (уровень наряда)
 Private Const Z_PLAN As Long = 23       ' hourdlit, плановая длительность ремонта, часы
-Private Const Z_FIELDS As Long = 24
+Private Const Z_ALEVG As Long = 24      ' АРМ подписи «Готов к выбытию», ДГМ (ПК/ПЛАНШЕТ)
+Private Const Z_ALEVD As Long = 25      ' АРМ подписи «Готов к выбытию», ДЭНТ
+Private Const Z_FIELDS As Long = 26
 
 ' Поля записи машины (mVeh: vehicle_number -> Variant-массив)
 Private Const V_ZN As Long = 0
@@ -185,6 +206,15 @@ Private Const NOSECT As String = "(раздел не указан)"
 ' Порог достоверности доли для блока «вид воздействия» (слайд 1): на трёх нарядах
 ' доля висящих - шум, такие виды уходят в хвост таблицы отдельной группой.
 Private Const ZNTYPE_MIN_ROWS As Long = 10
+
+' Порог достоверности для разреза возвратов по АРМ выбытия: на пяти нарядах
+' доля возвратов - шум, разрыв между группами в такой строке не показывается.
+Private Const RETARM_MIN As Long = 20
+
+' Поиск машин, выбивающихся из нормы своей корзины наработки (слайд 5):
+' во сколько раз надо превысить норму и сколько отказов иметь, чтобы попасть в список.
+Private Const WEAR_RATIO As Double = 2#
+Private Const WEAR_MIN_FAILS As Double = 3#
 
 ' Два «нерабочих» статуса: наряд в них не движется ни к закрытию, ни к отмене.
 Private Const S_CANCEL As String = "Отменен, требует повторного планирования"
@@ -226,6 +256,10 @@ Private mDenAll As Long, mDenFail As Long
 Private mGapMed As Double, mGapHas As Boolean
 Private mNodeNum As Object, mNodeDen As Object      ' «группа|узел» -> счётчик
 Private mRetOrd As Object    ' номер наряда -> True, если наряд ЯВЛЯЕТСЯ возвратом
+Private mRetSrc As Object    ' номер наряда -> True, если ПОСЛЕ него случился возврат.
+                             ' Обратный к mRetOrd: там второй наряд пары, здесь первый.
+                             ' Нужен для разреза «возвраты по АРМ выбытия»: АРМ берётся
+                             ' у наряда, который закрывали, а не у того, что приехал.
                              ' (второй в паре). Нужен, чтобы разделить фазу «ремзона»
                              ' на время возвратов и остальное (слайд 7).
 
@@ -262,6 +296,7 @@ Public Sub ResetZone()
     mRetReady = False
     Set mRetNumW7 = Nothing
     Set mRetOrd = Nothing
+    Set mRetSrc = Nothing
     mFailTot7 = 0
     mFlowReady = False
     Set mCloseH = Nothing
@@ -327,6 +362,7 @@ Private Sub EnsureZn()
                 z(Z_DEFEKT) = modAggregate.CellText(r, "defekt_type")
                 z(Z_POST) = modAggregate.CellText(r, "post")
                 z(Z_ACCG) = 0#: z(Z_ACCD) = 0#: z(Z_LEVG) = 0#: z(Z_LEVD) = 0#
+                z(Z_ALEVG) = "": z(Z_ALEVD) = ""
                 z(Z_SIGNED) = 0#
                 z(Z_KIND) = "": z(Z_NODE) = ""
                 If hasDesc Then z(Z_DESC) = modAggregate.CellText(r, "defect_desc") Else z(Z_DESC) = ""
@@ -357,6 +393,20 @@ Private Sub EnsureZn()
                 End If
                 If fld >= 0 Then
                     If CDbl(z(fld)) = 0# Or sd < CDbl(z(fld)) Then z(fld) = sd
+                    ' АРМ подписи «Готов к выбытию» - для разреза возвратов по АРМ.
+                    ' Побеждает ПЛАНШЕТ: если у дирекции две записи статуса и хотя бы
+                    ' одна с планшета, наряд считается подписанным с планшета. Иначе
+                    ' исход решал бы порядок строк в выгрузке.
+                    If fld = Z_LEVG Or fld = Z_LEVD Then
+                        Dim armL As String, fA As Long
+                        armL = modAggregate.CellText(r, "arm")
+                        fA = IIf(fld = Z_LEVG, Z_ALEVG, Z_ALEVD)
+                        If armL = "ПЛАНШЕТ" Then
+                            z(fA) = "ПЛАНШЕТ"
+                        ElseIf armL = "ПК" And CStr(z(fA)) = "" Then
+                            z(fA) = "ПК"
+                        End If
+                    End If
                 End If
             End If
 
@@ -1691,126 +1741,188 @@ Public Function ShortGrp(ByVal s As String) As String
     If p > 0 Then ShortGrp = Left$(s, p - 1) Else ShortGrp = s
 End Function
 
-' Наработка машины: строка таблицы «износ по счётчику». Возвращает число машин.
-' meter = 0 - пробег (odometer), 1 - моточасы (engine_hours).
+' =====================================================================================
+' Износ по счётчику (слайд 5): какие машины ломаются не по наработке
+' =====================================================================================
+' Первая версия этого блока просто выводила средние по корзинам наработки. Владелец
+' отверг её справедливо: «просто вывел итоговые данные, какую проблему решают - хер
+' знает». Таблица описывала состояние и не вела ни к какому действию.
+'
+' Переписано под вопрос, на который есть действие: КАКИЕ МАШИНЫ ЛОМАЮТСЯ ЧАЩЕ, ЧЕМ
+' ПОЛОЖЕНО ИХ НАРАБОТКЕ. Машина с 600 тыс. км и десятью отказами - это износ, с ней
+' всё понятно. Машина со 120 тыс. км и теми же десятью отказами - это не износ, это
+' эксплуатация, водитель или скрытый дефект, и туда надо идти разбираться.
+'
+' Метод: корзины наработки (квинтили) задают НОРМУ - среднее число отказов на машину
+' внутри корзины. Дальше показываются машины, превысившие норму своей корзины больше
+' чем вдвое. Норма берётся по корзине, а не по всему парку: иначе список забили бы
+' старые машины, у которых много отказов законно.
+
+' Наработка машины -> индекс корзины и её подпись. Возвращает False, если счётчика нет.
+Private Function MeterBucket(ByVal vn As String, ByVal meter As Long, ByRef b() As Double, _
+                             ByRef idx As Long) As Boolean
+    MeterBucket = False
+    Dim src As Object
+    If meter = 0 Then Set src = mVehOdo Else Set src = mVehEng
+    Dim v As Double
+    v = DictVal(src, vn)
+    If v <= 0# Then Exit Function
+    idx = 4
+    Dim q As Long
+    For q = 0 To 3
+        If v <= b(q) Then
+            idx = q
+            Exit For
+        End If
+    Next q
+    MeterBucket = True
+End Function
+
+' Границы квинтилей по значениям счётчика. Возвращает число машин со счётчиком.
+Private Function MeterBounds(ByVal meter As Long, ByRef b() As Double) As Long
+    Dim src As Object
+    If meter = 0 Then Set src = mVehOdo Else Set src = mVehEng
+    Dim n As Long, k As Variant
+    n = 0
+    For Each k In src.Keys
+        If DictVal(src, CStr(k)) > 0# Then n = n + 1
+    Next k
+    MeterBounds = n
+    If n = 0 Then Exit Function
+    Dim a() As Double, i As Long
+    ReDim a(0 To n - 1)
+    i = 0
+    For Each k In src.Keys
+        If DictVal(src, CStr(k)) > 0# Then
+            a(i) = DictVal(src, CStr(k))
+            i = i + 1
+        End If
+    Next k
+    QSortD a, 0, n - 1
+    Dim q As Long
+    For q = 0 To 3
+        b(q) = a(CLng((n - 1) * (q + 1) / 5#))
+    Next q
+End Function
+
+' Одна половина блока: норма по корзинам + список машин, выбивающихся из своей нормы.
 Private Function WearRows(ByVal meter As Long, ByVal unit As String) As String
     EnsureVeh
     EnsureRet
     EnsureCls
-    Dim src As Object
-    If meter = 0 Then Set src = mVehOdo Else Set src = mVehEng
+    Dim b(0 To 3) As Double, nCars As Long
+    nCars = MeterBounds(meter, b)
+    If nCars = 0 Then WearRows = "": Exit Function
 
-    ' Машины, у которых счётчик этого типа заполнен. Поля взаимоисключающи
-    ' (колёсная техника пишет пробег, тягачи и погрузчики - моточасы), поэтому
-    ' две таблицы, а не одна: смешивать километры с часами нельзя.
-    Dim vals() As Double, names() As String, n As Long, k As Variant
-    n = 0
-    ReDim vals(0 To 0)
-    ReDim names(0 To 0)
-    For Each k In src.Keys
-        If DictVal(src, CStr(k)) > 0# Then n = n + 1
-    Next k
-    If n = 0 Then WearRows = "": Exit Function
-    ReDim vals(0 To n - 1)
-    ReDim names(0 To n - 1)
-    Dim i As Long
-    i = 0
-    For Each k In src.Keys
-        If DictVal(src, CStr(k)) > 0# Then
-            vals(i) = DictVal(src, CStr(k))
-            names(i) = CStr(k)
-            i = i + 1
-        End If
-    Next k
-
-    ' Границы корзин - квинтили по самим данным, а не круглые числа: масштаб
-    ' пробега и моточасов разный, и фиксированные пороги на одном из них схлопнули
-    ' бы весь парк в одну корзину.
-    Dim srt() As Double
-    ReDim srt(0 To n - 1)
-    For i = 0 To n - 1
-        srt(i) = vals(i)
-    Next i
-    QSortD srt, 0, n - 1
-    Dim b(0 To 3) As Double, q As Long
-    For q = 0 To 3
-        b(q) = srt(CLng((n - 1) * (q + 1) / 5#))
-    Next q
-
-    ' Агрегаты по машине за YTD: внеплановые наряды, отказы, возвраты, материалы.
-    Dim un As Object, fl As Object, rt As Object, pt As Object
-    Set un = CreateObject("Scripting.Dictionary")
+    ' Отказы и возвраты по машине за YTD.
+    Dim fl As Object, rt As Object
     Set fl = CreateObject("Scripting.Dictionary")
     Set rt = CreateObject("Scripting.Dictionary")
-    Set pt = CreateObject("Scripting.Dictionary")
-    Dim z As Variant, vn As String
+    Dim k As Variant, z As Variant, vn As String
     For Each k In mZn.Keys
         z = mZn(k)
         vn = Trim$(CStr(z(Z_VEH)))
-        If Len(vn) > 0 And InYtd(z) Then
-            AddCnt pt, vn, CDbl(z(Z_PARTS))
-            If Not IsPlanned(CStr(z(Z_TYPE))) Then
-                AddCnt un, vn, 1#
-                If CStr(z(Z_KIND)) = "Отказ" Then AddCnt fl, vn, 1#
-                If IsRetOrder(CStr(k)) Then AddCnt rt, vn, 1#
+        If Len(vn) > 0 And InYtd(z) And Not IsPlanned(CStr(z(Z_TYPE))) Then
+            If CStr(z(Z_KIND)) = "Отказ" Then
+                AddCnt fl, vn, 1#
+                If mRetSrc.Exists(CStr(k)) Then AddCnt rt, vn, 1#
             End If
         End If
     Next k
 
-    Dim cnt(0 To 4) As Double, sU(0 To 4) As Double, sF(0 To 4) As Double
-    Dim sR(0 To 4) As Double, sP(0 To 4) As Double
-    For i = 0 To n - 1
-        Dim g As Long
-        g = 4
-        For q = 0 To 3
-            If vals(i) <= b(q) Then
-                g = q
-                Exit For
-            End If
-        Next q
-        cnt(g) = cnt(g) + 1#
-        sU(g) = sU(g) + DictVal(un, names(i))
-        sF(g) = sF(g) + DictVal(fl, names(i))
-        sR(g) = sR(g) + DictVal(rt, names(i))
-        sP(g) = sP(g) + DictVal(pt, names(i))
-    Next i
+    ' Норма корзины - среднее число отказов на машину внутри неё.
+    Dim cnt(0 To 4) As Double, sumF(0 To 4) As Double
+    Dim src As Object
+    If meter = 0 Then Set src = mVehOdo Else Set src = mVehEng
+    Dim idx As Long
+    For Each k In src.Keys
+        If MeterBucket(CStr(k), meter, b, idx) Then
+            cnt(idx) = cnt(idx) + 1#
+            sumF(idx) = sumF(idx) + DictVal(fl, CStr(k))
+        End If
+    Next k
 
-    Dim lab(0 To 4) As String
-    lab(0) = "до " & FmtF(b(0) / 1000#, 0) & " тыс. " & unit
+    Dim lab(0 To 4) As String, q As Long
+    lab(0) = "до " & FmtF(b(0) / 1000#, 0)
     For q = 1 To 3
-        lab(q) = FmtF(b(q - 1) / 1000#, 0) & ChrW$(&H2013) & _
-            FmtF(b(q) / 1000#, 0) & " тыс. " & unit
+        lab(q) = FmtF(b(q - 1) / 1000#, 0) & ChrW$(&H2013) & FmtF(b(q) / 1000#, 0)
     Next q
-    lab(4) = "больше " & FmtF(b(3) / 1000#, 0) & " тыс. " & unit
+    lab(4) = FmtF(b(3) / 1000#, 0) & "+"
 
     Dim s As String
-    s = "<table><thead><tr><th>Наработка</th><th class=""n"">Машин</th>" & _
-        "<th class=""n"">Внеплановых нарядов</th><th class=""n"">На машину</th>" & _
-        "<th class=""n"">Отказов на машину</th><th class=""n"">Возвратов на машину</th>" & _
-        "<th class=""n"">Материалы на машину</th></tr></thead><tbody>"
+    s = "<table><thead><tr><th>Наработка, тыс. " & modContentMTO.Esc(unit) & "</th>" & _
+        "<th class=""n"">Машин</th><th class=""n"">Отказов</th>" & _
+        "<th class=""n"">Норма: отказов на машину</th></tr></thead><tbody>"
     For q = 0 To 4
-        s = s & "<tr><td>" & modContentMTO.Esc(lab(q)) & "</td>"
-        s = s & "<td class=""n"">" & modContentMTO.FmtInt(cnt(q)) & "</td>"
-        s = s & "<td class=""n"">" & modContentMTO.FmtInt(sU(q)) & "</td>"
-        s = s & "<td class=""n"">" & FmtF(SafeDiv(sU(q), cnt(q)), 1) & "</td>"
-        s = s & "<td class=""n"">" & FmtF(SafeDiv(sF(q), cnt(q)), 1) & "</td>"
-        s = s & "<td class=""n"">" & FmtF(SafeDiv(sR(q), cnt(q)), 2) & "</td>"
-        s = s & "<td class=""n"">" & Rub(SafeDiv(sP(q), cnt(q))) & "</td></tr>"
+        s = s & "<tr><td>" & modContentMTO.Esc(lab(q)) & "</td><td class=""n"">" & _
+            modContentMTO.FmtInt(cnt(q)) & "</td><td class=""n"">" & _
+            modContentMTO.FmtInt(sumF(q)) & "</td><td class=""n"">" & _
+            FmtF(SafeDiv(sumF(q), cnt(q)), 1) & "</td></tr>"
     Next q
     s = s & "</tbody></table>"
 
-    ' График - одна ключевая колонка формой: растёт ли число ремонтов с наработкой.
-    Dim gl() As Variant, gv() As Variant
-    ReDim gl(0 To 4)
-    ReDim gv(0 To 4)
-    For q = 0 To 4
-        gl(q) = FmtF(b(IIf(q > 3, 3, q)) / 1000#, 0)
-        If q = 4 Then gl(q) = FmtF(b(3) / 1000#, 0) & "+"
-        gv(q) = SafeDiv(sU(q), cnt(q))
-    Next q
-    s = s & "<figure>" & Cols(gl, gv, 620, 190) & _
-        "<figcaption>Внеплановых нарядов на машину по корзинам наработки, тыс. " & _
-        modContentMTO.Esc(unit) & "</figcaption></figure>"
+    ' Машины, превысившие норму своей корзины больше чем вдвое.
+    Dim names() As String, ratio() As Double, m As Long
+    ReDim names(0 To nCars - 1)
+    ReDim ratio(0 To nCars - 1)
+    m = 0
+    For Each k In src.Keys
+        If MeterBucket(CStr(k), meter, b, idx) Then
+            Dim norm As Double, f As Double
+            norm = SafeDiv(sumF(idx), cnt(idx))
+            f = DictVal(fl, CStr(k))
+            If norm > 0# And f >= WEAR_MIN_FAILS Then
+                If f / norm >= WEAR_RATIO Then
+                    names(m) = CStr(k)
+                    ratio(m) = -(f / norm)
+                    m = m + 1
+                End If
+            End If
+        End If
+    Next k
+
+    If m = 0 Then
+        s = s & NoteBlk("Машин, выбивающихся из нормы своей корзины больше чем в " & _
+            FmtF(WEAR_RATIO, 1) & " раза, нет: отказы распределены по наработке ровно.")
+        WearRows = s
+        Exit Function
+    End If
+
+    Dim rr() As Double, nn() As String, i As Long
+    ReDim rr(0 To m - 1)
+    ReDim nn(0 To m - 1)
+    For i = 0 To m - 1
+        rr(i) = ratio(i): nn(i) = names(i)
+    Next i
+    QSortPair rr, nn, 0, m - 1
+
+    s = s & MockLabel("Ломаются чаще, чем положено их наработке")
+    s = s & "<table><thead><tr><th>Машина</th><th class=""n"">Наработка, тыс.</th>" & _
+        "<th class=""n"">Отказов</th><th class=""n"">Норма корзины</th>" & _
+        "<th class=""n"">Во сколько раз выше</th><th class=""n"">Возвратов</th>" & _
+        "</tr></thead><tbody>"
+    Dim shown As Long
+    shown = 0
+    For i = 0 To m - 1
+        If MeterBucket(nn(i), meter, b, idx) Then
+            s = s & "<tr><td class=""mono"">" & modContentMTO.Esc(nn(i)) & "</td>"
+            s = s & "<td class=""n"">" & FmtF(DictVal(src, nn(i)) / 1000#, 0) & "</td>"
+            s = s & "<td class=""n"">" & modContentMTO.FmtInt(DictVal(fl, nn(i))) & "</td>"
+            s = s & "<td class=""n"">" & FmtF(SafeDiv(sumF(idx), cnt(idx)), 1) & "</td>"
+            s = s & "<td class=""n""><span class=""delta up"">" & FmtF(-rr(i), 1) & _
+                ChrW$(&HD7) & "</span></td>"
+            s = s & "<td class=""n"">" & modContentMTO.FmtInt(DictVal(rt, nn(i))) & "</td></tr>"
+            shown = shown + 1
+            If shown >= 15 Then Exit For
+        End If
+    Next i
+    s = s & "</tbody></table>"
+    s = s & NoteBlk("Машин выше нормы своей корзины: " & modContentMTO.FmtInt(CDbl(m)) & _
+        ", показаны " & CStr(shown) & " с наибольшим превышением. Порог включения: " & _
+        "не меньше " & CStr(WEAR_MIN_FAILS) & " отказов и превышение нормы в " & _
+        FmtF(WEAR_RATIO, 1) & " раза. Норма " & ChrW$(&H2014) & " среднее число отказов " & _
+        "на машину ВНУТРИ корзины наработки, а не по всему парку: иначе список забили бы " & _
+        "старые машины, у которых отказов много законно.")
     WearRows = s
 End Function
 
@@ -1818,9 +1930,9 @@ Private Function SafeDiv(ByVal a As Double, ByVal b As Double) As Double
     If b = 0# Then SafeDiv = 0# Else SafeDiv = a / b
 End Function
 
-' Износ по счётчику: две таблицы, пробег и моточасы. Вторая ось износа рядом с
-' возрастом парка: машина 2015 года с 80 тыс. км и та же с 600 тыс. - разные машины,
-' а по году выпуска они в одной когорте.
+' Износ по счётчику: две половины, пробег и моточасы. Поля взаимоисключающи
+' (колёсная техника пишет пробег, тягачи и погрузчики - моточасы), поэтому
+' складывать километры с часами нельзя, и таблицы раздельные.
 Public Function BuildWearByMeter() As String
     EnsureZn
     Dim a As String, b As String
@@ -1836,39 +1948,21 @@ Public Function BuildWearByMeter() As String
     If b <> "" Then s = s & b Else s = s & modContentMTO.EmptyNote()
     s = s & "</div></div>"
 
-    Dim covO As Long, covE As Long
-    covO = 0: covE = 0
-    Dim k As Variant
-    If Not mVehOdo Is Nothing Then
-        For Each k In mVehOdo.Keys
-            If DictVal(mVehOdo, CStr(k)) > 0# Then covO = covO + 1
-        Next k
-    End If
-    If Not mVehEng Is Nothing Then
-        For Each k In mVehEng.Keys
-            If DictVal(mVehEng, CStr(k)) > 0# Then covE = covE + 1
-        Next k
-    End If
-
-    s = s & NoteBlk("Вторая ось износа, рядом с возрастом парка: по году выпуска машина " & _
-        "с 80 тыс. км и машина с 600 тыс. попадают в одну когорту, хотя это разные " & _
-        "машины. Корзины " & ChrW$(&H2014) & " квинтили по самим данным, а не круглые " & _
-        "числа: масштаб пробега и моточасов разный. Счётчики <b>взаимоисключающи</b> " & _
-        "(колёсная техника пишет пробег, тягачи и погрузчики " & ChrW$(&H2014) & _
-        " моточасы), поэтому таблицы две, а не одна: складывать километры с часами " & _
-        "нельзя. Покрытие: пробег заполнен у " & modContentMTO.FmtInt(CDbl(covO)) & _
-        " машин, моточасы у " & modContentMTO.FmtInt(CDbl(covE)) & " из " & _
-        modContentMTO.FmtInt(CDbl(mVeh.Count)) & " парка. Наряды, отказы, возвраты и " & _
-        "материалы " & ChrW$(&H2014) & " с начала года.")
-    s = s & NoteBlk("<b>Чего этот блок НЕ показывает.</b> Это наработка НА МОМЕНТ " & _
-        "ВЫГРУЗКИ, а не пробег между ремонтами: по контракту <code>odometer</code> и " & _
-        "<code>engine_hours</code> " & ChrW$(&H2014) & " срез последних, и внутри машины " & _
+    s = s & NoteBlk("Вопрос блока: <b>какие машины ломаются не по наработке</b>. Машина " & _
+        "с большим пробегом и множеством отказов " & ChrW$(&H2014) & " это износ, с ней " & _
+        "всё понятно. Машина с малым пробегом и теми же отказами " & ChrW$(&H2014) & _
+        " это уже не износ: эксплуатация, водитель или скрытый дефект, и туда надо идти " & _
+        "разбираться. Верхняя таблица задаёт норму по корзинам наработки, нижняя " & _
+        ChrW$(&H2014) & " поимённый список тех, кто из своей нормы выбился. Корзины " & _
+        ChrW$(&H2014) & " квинтили по самим данным: масштаб пробега и моточасов разный, " & _
+        "круглые пороги схлопнули бы парк в одну корзину.")
+    s = s & NoteBlk("<b>Ограничение выгрузки.</b> <code>odometer</code> и " & _
+        "<code>engine_hours</code> " & ChrW$(&H2014) & " наработка на момент выгрузки, " & _
+        "а не пробег между ремонтами: по контракту это срез последних, и внутри машины " & _
         "значение обязано быть постоянным, но фактически меняется (105 машин по пробегу " & _
-        "и 161 по моточасам, см. docs/data.md). Взят максимум по машине " & ChrW$(&H2014) & _
-        " единственная устойчивая трактовка. Поэтому «отказов на 10 000 км» здесь нет и " & _
-        "быть не может: для этого нужна наработка ЗА ПЕРИОД, а её в выгрузке нет. " & _
-        "Блок отвечает на вопрос «больше ли ремонтируют то, что больше прошло», а не " & _
-        "«какова частота отказов на километр».")
+        "и 161 по моточасам, docs/data.md). Взят максимум по машине. Поэтому «отказов на " & _
+        "10 000 км» здесь нет и быть не может: для этого нужна наработка ЗА ПЕРИОД. " & _
+        "Отказы и возвраты " & ChrW$(&H2014) & " с начала года.")
     BuildWearByMeter = s
 End Function
 
@@ -2175,6 +2269,7 @@ Private Function RetPairs(ByVal mode As Long, ByVal numM As Object, ByVal numW A
                             ' приехал повторно. Счётчики периода ведутся по первому
                             ' (ns(i)) - там проверяли ремонт, который не помог.
                             If Not mRetOrd Is Nothing Then mRetOrd(CStr(ns(j))) = True
+                            If Not mRetSrc Is Nothing Then mRetSrc(CStr(ns(i))) = True
                             If Not numM Is Nothing Then AddCnt numM, CStr(za(Z_MONTH)), 1#
                             If Not numW Is Nothing Then AddCnt numW, CStr(za(Z_WEEK)), 1#
                             If Not gaps Is Nothing Then gaps.Add gp
@@ -2234,10 +2329,13 @@ Private Sub EnsureRet()
     ' и отметки не ставятся: иначе возвратом считался бы наряд по самому широкому
     ' определению (mode 0), и разделение фазы поехало бы.
     Set mRetOrd = CreateObject("Scripting.Dictionary")
+    Set mRetSrc = CreateObject("Scripting.Dictionary")
     mFailTot = RetPairs(2, mFailNumM, mFailNumW, Nothing, mNodeNum, RET_WINDOW)
-    Dim retOrdKeep As Object
+    Dim retOrdKeep As Object, retSrcKeep As Object
     Set retOrdKeep = mRetOrd
+    Set retSrcKeep = mRetSrc
     Set mRetOrd = Nothing
+    Set mRetSrc = Nothing
     mRetTot7 = RetPairs(0, Nothing, mRetNumW7, Nothing, Nothing, 7)
     ' Окно 7 суток на ТОМ ЖЕ уровне строгости, что основная плитка слайда 6 (mode 2,
     ' только отказы, по подкатегории). mRetTot7 выше считается по группе дефекта
@@ -2247,6 +2345,7 @@ Private Sub EnsureRet()
     mGapMed = MedianOf(gaps, mGapHas)
 
     Set mRetOrd = retOrdKeep
+    Set mRetSrc = retSrcKeep
     mRetReady = True
     modLog.WriteDebug 2, "Техника", "modContentZone.EnsureRet", _
         "Внеплановых " & CStr(mDenAll) & ", возвратов по группе " & CStr(mRetTot) & _
@@ -2446,6 +2545,248 @@ Private Function YoYCell(ByVal cur As Double, ByVal prev As Double) As String
         YoYCell = "<span class=""delta dn"">" & ChrW$(&H2212) & _
             modContentMTO.FmtInt(-dv) & "</span>"
     End If
+End Function
+
+' =====================================================================================
+' Возвраты в разрезе АРМ подписи «Готов к выбытию» (слайд 6)
+' =====================================================================================
+' Вопрос, на который отвечают эти четыре блока: снижает ли планшет число возвратов.
+'
+' Смотрим подпись ДЭНТ, а не ДГМ и не «обе дирекции»: из ремонта машину ПРИНИМАЕТ ДЭНТ,
+' и качество приёмки работ определяет именно их подпись. Подпись ДГМ - это «сдал», а не
+' «принял», и к возвратам отношения не имеет.
+'
+' Единица счёта - ЗАКАЗ-НАРЯД. Группы две: выбытие подписано с планшета или с ПК.
+' Наряды без подписи ДЭНТ на выбытии в расчёт не идут: их не к чему отнести.
+
+' Разрез для сравнения групп: 0 - без разреза, 1 - когорта по году выпуска,
+' 2 - группа техники, 3 - группа дефекта.
+Private Function RetCutKey(ByVal z As Variant, ByVal cut As Long) As String
+    Select Case cut
+        Case 1
+            Dim ay As Double
+            ay = AgeYears(CDbl(z(Z_MADE)))
+            If ay < 0# Then RetCutKey = "(год выпуска не указан)" Else RetCutKey = CohortLabels()(CohortOf(ay))
+        Case 2
+            RetCutKey = Trim$(CStr(z(Z_VGROUP)))
+            If RetCutKey = "" Then RetCutKey = "(группа не указана)"
+        Case 3
+            RetCutKey = Trim$(CStr(z(Z_DEFEKT)))
+            If RetCutKey = "" Then RetCutKey = NOSECT
+        Case Else
+            RetCutKey = "Все наряды"
+    End Select
+End Function
+
+' Общий сборщик. Три группы, вместе покрывающие всю базу без остатка:
+'   T - ДЭНТ подписал выбытие с планшета;
+'   P - ДЭНТ подписал выбытие с ПК;
+'   N - подписи ДЭНТ на выбытии НЕТ (машину из ремонта фактически не приняли).
+' Главное сравнение - T против N: подписали на месте или не подписали вовсе.
+' T против P показывает, важен ли способ подписи при том, что подпись есть.
+' Возвращает число нарядов базы; cutOpen - сколько отсечено по незакрытому окну.
+Private Function RetArmCollect(ByVal cut As Long, ByVal nT As Object, ByVal rT As Object, _
+                               ByVal nP As Object, ByVal rP As Object, _
+                               ByVal nN As Object, ByVal rN As Object, _
+                               ByRef cutOpen As Double) As Double
+    EnsureRet
+    Dim k As Variant, z As Variant, tot As Double
+    Dim edge As Double
+    ' Граница «окно возврата истекло»: у наряда, закрытого позже неё, возврат физически
+    ' не успел случиться. Без этого отсечения группа с более свежими нарядами получает
+    ' заниженную долю - а свежих нарядов больше там, где планшет внедряют.
+    edge = SnapshotEnd() - RET_WINDOW
+    tot = 0#: cutOpen = 0#
+    For Each k In mZn.Keys
+        z = mZn(k)
+        If Not IsPlanned(CStr(z(Z_TYPE))) And CStr(z(Z_KIND)) = "Отказ" And InYtd(z) Then
+            Dim cl As Double
+            cl = CDbl(z(Z_CLOSED))
+            If cl > 0# Then
+                If cl > edge Then
+                    cutOpen = cutOpen + 1#
+                Else
+                    Dim ck As String, arm As String, isRet As Boolean
+                    ck = RetCutKey(z, cut)
+                    arm = Trim$(CStr(z(Z_ALEVD)))
+                    isRet = mRetSrc.Exists(CStr(k))
+                    If arm = "ПЛАНШЕТ" Then
+                        AddCnt nT, ck, 1#
+                        If isRet Then AddCnt rT, ck, 1#
+                    ElseIf arm = "ПК" Then
+                        AddCnt nP, ck, 1#
+                        If isRet Then AddCnt rP, ck, 1#
+                    Else
+                        AddCnt nN, ck, 1#
+                        If isRet Then AddCnt rN, ck, 1#
+                    End If
+                    tot = tot + 1#
+                End If
+            End If
+        End If
+    Next k
+    RetArmCollect = tot
+End Function
+
+' Ячейка разрыва в процентных пунктах. Отрицательный разрыв - у первой группы
+' возвратов меньше, это в её пользу, поэтому зелёный.
+Private Function GapCell(ByVal pctA As Double, ByVal pctB As Double, _
+                         ByVal ok As Boolean) As String
+    If Not ok Then GapCell = "<td class=""n"" style=""color:var(--muted)"">" & Dash() & "</td>": Exit Function
+    Dim d As Double
+    d = pctA - pctB
+    If Abs(d) < 0.05 Then
+        GapCell = "<td class=""n""><span class=""delta flat"">0" & Nb() & "п.п.</span></td>"
+    ElseIf d < 0# Then
+        GapCell = "<td class=""n""><span class=""delta dn"">" & ChrW$(&H2212) & _
+            FmtF(-d, 1) & Nb() & "п.п.</span></td>"
+    Else
+        GapCell = "<td class=""n""><span class=""delta up"">+" & FmtF(d, 1) & Nb() & "п.п.</span></td>"
+    End If
+End Function
+
+' Строка таблицы без разреза.
+Private Function ArmRow(ByVal lab As String, ByVal n As Double, ByVal r As Double, _
+                        ByVal cls As String) As String
+    ArmRow = "<tr" & cls & "><td class=""head"">" & modContentMTO.Esc(lab) & _
+        "</td><td class=""n"">" & modContentMTO.FmtInt(n) & "</td><td class=""n"">" & _
+        modContentMTO.FmtInt(r) & "</td>" & PctTd(SafePct(r, n), n > 0#) & "</tr>"
+End Function
+
+' Блок 1: три группы без разрезов. Главный вопрос отчёта.
+Public Function BuildRetArm() As String
+    Dim nT As Object, rT As Object, nP As Object, rP As Object, nN As Object, rN As Object
+    Set nT = CreateObject("Scripting.Dictionary"): Set rT = CreateObject("Scripting.Dictionary")
+    Set nP = CreateObject("Scripting.Dictionary"): Set rP = CreateObject("Scripting.Dictionary")
+    Set nN = CreateObject("Scripting.Dictionary"): Set rN = CreateObject("Scripting.Dictionary")
+    Dim cutOpen As Double, tot As Double
+    tot = RetArmCollect(0, nT, rT, nP, rP, nN, rN, cutOpen)
+    If tot = 0# Then BuildRetArm = modContentMTO.EmptyNote(): Exit Function
+
+    Const ALL As String = "Все наряды"
+    Dim a1 As Double, b1 As Double, a2 As Double, b2 As Double, a3 As Double, b3 As Double
+    a1 = DictVal(nT, ALL): b1 = DictVal(rT, ALL)
+    a2 = DictVal(nP, ALL): b2 = DictVal(rP, ALL)
+    a3 = DictVal(nN, ALL): b3 = DictVal(rN, ALL)
+
+    Dim s As String
+    s = "<table><thead><tr><th>Подпись ДЭНТ на «Готов к выбытию»</th><th class=""n"">Нарядов</th>" & _
+        "<th class=""n"">Из них вернулись</th><th class=""n"">Доля возвратов</th>" & _
+        "</tr></thead><tbody>"
+    s = s & ArmRow("Есть, с планшета", a1, b1, "")
+    s = s & ArmRow("Есть, с ПК", a2, b2, "")
+    s = s & ArmRow("Подписи нет", a3, b3, "")
+    s = s & ArmRow("Всего", tot, b1 + b2 + b3, " class=""total""")
+    s = s & "</tbody></table>"
+
+    Dim verdict As String
+    If a1 < RETARM_MIN Or a3 < RETARM_MIN Then
+        verdict = "<b>Для вывода мало данных:</b> с планшета " & modContentMTO.FmtInt(a1) & _
+            " нарядов, без подписи ДЭНТ " & modContentMTO.FmtInt(a3) & "; порог " & _
+            CStr(RETARM_MIN) & "."
+    Else
+        Dim p1 As Double, p3 As Double
+        p1 = SafePct(b1, a1): p3 = SafePct(b3, a3)
+        If p3 > p1 Then
+            verdict = "Наряды, где подписи ДЭНТ на выбытии <b>нет</b>, возвращаются чаще: " & _
+                Pc(p3, 1) & " против " & Pc(p1, 1) & " у подписанных с планшета. Разрыв " & _
+                FmtF(p3 - p1, 1) & Nb() & "п.п."
+        ElseIf p1 > p3 Then
+            verdict = "Наряды, подписанные ДЭНТ <b>с планшета</b>, возвращаются чаще, чем " & _
+                "неподписанные: " & Pc(p1, 1) & " против " & Pc(p3, 1) & ". Гипотеза " & _
+                "«приёмка с планшета снижает возвраты» на этих данных не подтверждается."
+        Else
+            verdict = "Разницы нет: " & Pc(p1, 1) & " в обеих группах."
+        End If
+    End If
+
+    s = s & NoteBlk("Смотрим подпись <b>ДЭНТ</b>, а не ДГМ: из ремонта машину принимает " & _
+        "ДЭНТ, и качество приёмки работ определяет их подпись. Подпись ДГМ " & _
+        ChrW$(&H2014) & " это «сдал», а не «принял». Три группы покрывают базу без " & _
+        "остатка: подпись есть с планшета, подпись есть с ПК, подписи нет вовсе. " & _
+        "База: внеплановые наряды с характером работы «Отказ», закрытые, с начала года " & _
+        ChrW$(&H2014) & " то же определение, что у плиток возвратов выше. Возврат " & _
+        ChrW$(&H2014) & " машина вернулась с той же подкатегорией дефекта в течение " & _
+        CStr(RET_WINDOW) & " суток после закрытия. " & verdict)
+    s = s & NoteBlk("<b>Исключено " & modContentMTO.FmtInt(cutOpen) & " нарядов</b>, " & _
+        "закрытых в последние " & CStr(RET_WINDOW) & " суток снимка: у них окно возврата " & _
+        "ещё не истекло. Без этого отсечения группа с более свежими нарядами получила бы " & _
+        "заниженную долю, а свежих нарядов больше там, где планшет внедряют " & _
+        ChrW$(&H2014) & " и блок «доказал» бы то, чего не проверял. Поэтому числа здесь " & _
+        "меньше, чем в плитках возвратов выше.")
+    s = s & NoteBlk("<b>Это связь, а не причина.</b> Наряды не распределялись по группам " & _
+        "случайно: планшетом пользуются определённые люди в определённых ремзонах, и на " & _
+        "долю возвратов влияет ещё и то, что именно чинили и на какой технике. Три блока " & _
+        "ниже проверяют, держится ли разрыв внутри однородных групп: по возрасту техники, " & _
+        "по группе техники и по группе дефекта.")
+    BuildRetArm = s
+End Function
+
+' Блоки 2-4: тот же вопрос внутри разреза. cut: 1 - возраст, 2 - техника, 3 - дефект.
+Public Function BuildRetArmCut(ByVal cut As Long, ByVal colTitle As String, _
+                               ByVal topN As Long) As String
+    Dim nT As Object, rT As Object, nP As Object, rP As Object, nN As Object, rN As Object
+    Set nT = CreateObject("Scripting.Dictionary"): Set rT = CreateObject("Scripting.Dictionary")
+    Set nP = CreateObject("Scripting.Dictionary"): Set rP = CreateObject("Scripting.Dictionary")
+    Set nN = CreateObject("Scripting.Dictionary"): Set rN = CreateObject("Scripting.Dictionary")
+    Dim cutOpen As Double, tot As Double
+    tot = RetArmCollect(cut, nT, rT, nP, rP, nN, rN, cutOpen)
+    If tot = 0# Then BuildRetArmCut = modContentMTO.EmptyNote(): Exit Function
+
+    ' Порядок строк - по объёму базы: сначала то, где данных больше.
+    Dim allK As Object
+    Set allK = CreateObject("Scripting.Dictionary")
+    Dim k As Variant, src As Variant
+    For Each src In Array(nT, nP, nN)
+        For Each k In src.Keys
+            AddCnt allK, CStr(k), DictVal(src, CStr(k))
+        Next k
+    Next src
+    Dim labs As Variant, vals As Variant, i As Long
+    TopKeys allK, topN, labs, vals
+
+    Dim s As String, shown As Long
+    shown = 0
+    s = "<div class=""scroll""><table><thead><tr><th rowspan=""2"">" & _
+        modContentMTO.Esc(colTitle) & "</th>" & _
+        "<th class=""grp"" colspan=""2"">Подпись с планшета</th>" & _
+        "<th class=""grp sep-l"" colspan=""2"">Подпись с ПК</th>" & _
+        "<th class=""grp sep-l"" colspan=""2"">Подписи нет</th>" & _
+        "<th class=""n sep-l"" rowspan=""2"">Разрыв<br>планшет " & ChrW$(&H2212) & _
+        " без подписи</th></tr>" & _
+        "<tr><th class=""n"">Нарядов</th><th class=""n"">Доля возвратов</th>" & _
+        "<th class=""n sep-l"">Нарядов</th><th class=""n"">Доля возвратов</th>" & _
+        "<th class=""n sep-l"">Нарядов</th><th class=""n"">Доля возвратов</th>" & _
+        "</tr></thead><tbody>"
+    For i = 0 To UBound(labs)
+        Dim lab As String, a1 As Double, b1 As Double
+        Dim a2 As Double, b2 As Double, a3 As Double, b3 As Double
+        lab = CStr(labs(i))
+        a1 = DictVal(nT, lab): b1 = DictVal(rT, lab)
+        a2 = DictVal(nP, lab): b2 = DictVal(rP, lab)
+        a3 = DictVal(nN, lab): b3 = DictVal(rN, lab)
+        s = s & "<tr><td>" & modContentMTO.Esc(lab) & "</td>"
+        s = s & "<td class=""n"">" & modContentMTO.FmtInt(a1) & "</td>" & PctTd(SafePct(b1, a1), a1 > 0#)
+        s = s & "<td class=""n sep-l"">" & modContentMTO.FmtInt(a2) & "</td>" & PctTd(SafePct(b2, a2), a2 > 0#)
+        s = s & "<td class=""n sep-l"">" & modContentMTO.FmtInt(a3) & "</td>" & PctTd(SafePct(b3, a3), a3 > 0#)
+        s = s & GapCell(SafePct(b1, a1), SafePct(b3, a3), a1 >= RETARM_MIN And a3 >= RETARM_MIN)
+        s = s & "</tr>"
+        shown = shown + 1
+    Next i
+    s = s & "</tbody></table></div>"
+
+    s = s & NoteBlk("Тот же вопрос, что в блоке выше, но внутри однородных групп: если " & _
+        "разрыв держится в большинстве строк, дело действительно в приёмке, а если он " & _
+        "есть в одной строке и пропадает в остальных " & ChrW$(&H2014) & " дело в том, " & _
+        "что чинили и на чём, а не в подписи. <b>Разрыв</b> = доля возвратов при подписи " & _
+        "с планшета минус доля там, где подписи нет; отрицательный (зелёный) " & _
+        ChrW$(&H2014) & " у подписанных с планшета возвратов меньше, то есть в пользу " & _
+        "приёмки на месте. Разрыв показывается, только если в обеих сравниваемых группах " & _
+        "не меньше " & CStr(RETARM_MIN) & " нарядов " & ChrW$(&H2014) & " иначе это шум. " & _
+        "Строк " & CStr(shown) & ", порядок " & ChrW$(&H2014) & " по объёму базы. " & _
+        "База и отсечение по незакрытому окну " & ChrW$(&H2014) & " как в блоке выше " & _
+        "(исключено " & modContentMTO.FmtInt(cutOpen) & " нарядов).")
+    BuildRetArmCut = s
 End Function
 
 Public Function BuildRetMonth() As String
@@ -4318,6 +4659,11 @@ Public Sub FillZonePlaceholders(ByVal d As Object)
     d("BLOCK_DEFECT_DETAIL") = PeriodCap(ytd) & BuildDefectDetail()
     d("BLOCK_RET_KPI") = PeriodCap("пары возвратов - " & ytd & "; знаменатели - " & _
         snap) & BuildRetKpi()
+    d("BLOCK_RET_ARM") = PeriodCap(ytd & "; наряды последних " & CStr(RET_WINDOW) & _
+        " суток исключены - окно возврата не истекло") & BuildRetArm()
+    d("BLOCK_RET_ARM_AGE") = PeriodCap(ytd) & BuildRetArmCut(1, "Возраст техники", 0)
+    d("BLOCK_RET_ARM_VEH") = PeriodCap(ytd) & BuildRetArmCut(2, "Группа техники", 10)
+    d("BLOCK_RET_ARM_DEF") = PeriodCap(ytd) & BuildRetArmCut(3, "Группа дефекта", 10)
     d("BLOCK_RET_MONTH") = PeriodCap("по месяцам, " & ytd) & BuildRetMonth()
     d("BLOCK_RET_WEEK") = PeriodCap(w8) & BuildRetWeek()
     d("BLOCK_RET_NODE") = PeriodCap("знаменатели - " & snap & "; пары возвратов - " & _
