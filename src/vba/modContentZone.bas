@@ -2263,13 +2263,15 @@ Private Function RetPairs(ByVal mode As Long, ByVal numM As Object, ByVal numW A
                         ' пары создан не раньше 01.01.2026 (REPORT/YTD_START). Недельный
                         ' график BLOCK_RET_WEEK в первые недели января теряет пары с
                         ' базой из прошлого года - следствие требования «с начала года».
+                        ' Признаки наряда - БЕЗ фильтра периода: это свойство самого
+                        ' наряда, а не счётчик. Блокам сравнения двух лет нужны пары
+                        ' и за прошлый год. Возвратом является ВТОРОЙ наряд пары,
+                        ' ns(j): это он приехал повторно; mRetSrc помечает ПЕРВЫЙ -
+                        ' тот, чей ремонт не помог. Счётчики ниже остаются под YTD.
+                        If Not mRetOrd Is Nothing Then mRetOrd(CStr(ns(j))) = True
+                        If Not mRetSrc Is Nothing Then mRetSrc(CStr(ns(i))) = True
                         If InYtd(mZn(ns(i))) Then
                             total = total + 1
-                            ' Возвратом является ВТОРОЙ наряд пары, ns(j): это он
-                            ' приехал повторно. Счётчики периода ведутся по первому
-                            ' (ns(i)) - там проверяли ремонт, который не помог.
-                            If Not mRetOrd Is Nothing Then mRetOrd(CStr(ns(j))) = True
-                            If Not mRetSrc Is Nothing Then mRetSrc(CStr(ns(i))) = True
                             If Not numM Is Nothing Then AddCnt numM, CStr(za(Z_MONTH)), 1#
                             If Not numW Is Nothing Then AddCnt numW, CStr(za(Z_WEEK)), 1#
                             If Not gaps Is Nothing Then gaps.Add gp
