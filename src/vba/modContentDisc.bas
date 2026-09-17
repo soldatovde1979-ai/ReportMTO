@@ -1,6 +1,8 @@
 Attribute VB_Name = "modContentDisc"
 ' modContentDisc - CONTENT-слой части «Дисциплина» (слайды 2-4) отчёта МТО.
 '
+' Версия 1.5 от 17.09.2026: конкретные даты в подписях периода слайдов 2-4,
+'   как в modContentZone v2.12.
 ' Версия 1.3 от 17.09.2026: приёмка против выдачи.
 '   Новое: BuildAccLev / {{BLOCK_ACCLEV_DENT}} и {{BLOCK_ACCLEV_DGM}} - события
 '   подписания раздельно по статусу ready_for: ПЛАНШЕТ / ПК / % планшета по неделям
@@ -1351,12 +1353,22 @@ Public Sub FillDiscPlaceholders(ByVal d As Object)
     EnsureDisc
 
     ' Подписи периода (PeriodCap) - централизованно, как в FillZonePlaceholders.
+    ' Периоды - с конкретными датами, как на слайдах 1 и 5-8.
     Dim wl As String, w8 As String, w4 As String, ytd As String
-    wl = "отчётная неделя " & modContentZone.WLab(mRw)
-    w8 = "окно 8 недель по дате статуса"
-    w4 = "4 недели по дате статуса; объём и время - отчётная неделя " & _
-        modContentZone.WLab(mRw)
-    ytd = "с начала года (01.01.2026)"
+    Dim wkD As Variant, w4D As Variant, weekLast As Date
+    wkD = modContentZone.WeekWindow(8)
+    w4D = modContentZone.WeekWindow(4)
+    weekLast = modContentZone.WeekMonday(mRw) + 6
+    wl = "неделя " & modContentZone.WLab(mRw) & " (" & _
+        modContentZone.WeekRange(mRw) & "), по " & Format$(weekLast, "dd.mm.yyyy")
+    w8 = "8 недель: " & modContentZone.WLab(CLng(wkD(0))) & " " & ChrW$(&H2192) & _
+        " " & modContentZone.WLab(mRw) & ", по " & Format$(weekLast, "dd.mm.yyyy") & _
+        ", по дате статуса"
+    w4 = "4 недели: " & modContentZone.WLab(CLng(w4D(0))) & " " & ChrW$(&H2192) & _
+        " " & modContentZone.WLab(mRw) & ", по дате статуса; объём и время - " & wl
+    ytd = "с начала года: " & Format$(CDate(modContentZone.YtdStart()), "dd.mm.yyyy") & _
+        " " & ChrW$(&H2192) & " " & _
+        Format$(CDate(modContentZone.SnapshotEnd()), "dd.mm.yyyy")
 
     ' Слайды 2 и 3 раскручивают ОДИН показатель - «% подписаний с планшета» - вглубь:
     ' недели -> приёмка против выдачи -> ремзоны -> люди -> подразделения -> подписи.
