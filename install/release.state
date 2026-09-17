@@ -1,7 +1,7 @@
 # Служебный файл install\install.ps1 - состояние последнего успешного релиза.
 # Руками не править: отсюда берётся ответ на вопрос «менялись ли исходники».
-version 8.1.10
-digest e85e042001518cd294e41c3b5fc4ae1d
+version 8.1.11
+digest 00548b31dfa176c6543935bf1670ee63
 file src/vba/modAggregate.bas 6E701973B32F50F176EB23F9F075AA3F
 file src/vba/modAIGateway.bas 326ACCDCC53035229FE4922FDDB88F58
 file src/vba/modColor.bas 35CB06FF36A3AE0ED0F0B286ABB7828F
@@ -30,28 +30,29 @@ file src/powerquery/qProf6_Groups.pq 238FE2A049014A7350279A6A7983C703
 file src/powerquery/qProf7_Retention.pq 74826B85C168B04B82924652FE43A88B
 file src/powerquery/Query-ImportJSON.pq B8E5A47500BE4C11E2E6F9EA68BF61BE
 file tmp_index.html 031BA82BCC4EEC6A620E18512A1060E2
-file README.md A7E72A59F9BEB1FBEC0C4F13FB9F3547
+file README.md 12BD0D5971A4F1459A763D1A3C7516B4
 file docs/archive/ft_Report v1.2.md 723D2916E12460C25ED5723CF183B80B
-file docs/archive/logs.md 8B6616DF39A9AA917E957AF3075534C5
+file docs/archive/git-sync-v1.0.md 97F577E68147DE68698152D4442A2990
+file docs/archive/logs.md B9B75E3147BD140811E2BB605E55E2E7
 file docs/archive/manifest-v6.1.md D36D0478BB0EC17502738E659F815BF1
+file docs/archive/MTO_отчёт_v8.0_раскатка_v1.0.md F717C852AEC776AB38DDC37CA40E31DF
+file docs/archive/MTO_ТЗ_доработка_отчета_v1.6.md B0820EDE4D2FD0C7B917C37D95F80294
+file docs/archive/next-steps.md 4D066A61E240718F4D20B0C8F02AE53E
 file docs/archive/run-report-20260909.md 74D96C36096B5FCF76A21CE6AC2915CA
+file docs/archive/task-rep.md DCD4C1E78EA7CA5DD0421273FA9E2920
+file docs/archive/tz_developer_logging_and_release_v1.0.md D5AE027B4BFE2A9E9DD6D1E5789BE81B
+file docs/archive/tz_pq_optimizations_and_e2e_v1.0.md 5EDA5FBBDE061FA6067425AC2E6FF704
+file docs/archive/tz_pq_profile_optimize_v1.0.md A3F846AD7E8C9E9EB14FA89D290C5943
 file docs/archive/tz_Report v1.2.md 063C8153D3C7FDEA75B54181F4194E00
 file docs/archive/tz_Reports2.md 7774DE065C6BAB61214091ADFB674344
 file docs/data.md B188E583FCBEA57B8D69E0BE30F97E4B
-file docs/index.md C9F3CE3392A03DD50056C0FE4FC77394
+file docs/index.md 9F0593655CA0C5D70E68EB83F3D986C0
 file docs/plans/analysis_loadpackage_hang_v1.0.md 0BF80EDC0F56C0512506DFFB530E33F8
-file docs/plans/git-sync-v1.0.md 97F577E68147DE68698152D4442A2990
 file docs/plans/MTO_контракт_шаблона_v1.0.md 1DF8F9F6DBE31E3BFBA7E9E96A8E32BF
-file docs/plans/MTO_отчёт_v8.0_раскатка_v1.0.md F717C852AEC776AB38DDC37CA40E31DF
-file docs/plans/MTO_ТЗ_доработка_отчета_v1.6.md B0820EDE4D2FD0C7B917C37D95F80294
-file docs/plans/MTO_ТЗ_правки_шапки_и_слайда1_v1.0.md B19855955496A3C8E175E4E170113300
-file docs/plans/next-steps.md 4D066A61E240718F4D20B0C8F02AE53E
+file docs/plans/MTO_ТЗ_правки_шапки_и_слайда1_v1.0.md 2A9716368E862D38D506C0F0940C7053
 file docs/plans/plan_fix_loadpackage_a-c_v1.0.md 7ABF70DB29B77E8F90255167BD30136C
 file docs/plans/task-rep-v2-постановка-разработчику.md 4087E377F6377743EE66EAC872C1CCCC
 file docs/plans/task-rep-v2-часть3-постановка-разработчику.md C293536E4E510AD5F88A393E027D8379
-file docs/plans/tz_developer_logging_and_release_v1.0.md D5AE027B4BFE2A9E9DD6D1E5789BE81B
-file docs/plans/tz_pq_optimizations_and_e2e_v1.0.md 5EDA5FBBDE061FA6067425AC2E6FF704
-file docs/plans/tz_pq_profile_optimize_v1.0.md A3F846AD7E8C9E9EB14FA89D290C5943
 file docs/plans/tz_Remzona_Part3_v1.0.md 6F370B4C4B6EF1D4FA4CBF4BADBC78A2
 file docs/presentations/MTO_Презентация_и_блоки_данных_v2.5.md 186077F1E4EB2BCB3D73DBA5A426BC45
 file docs/presentations/Презентация и блоки данных (Трек Б) v1.0.md 3D33C698C7F4450586F611F100B98CA1
@@ -60,8 +61,7 @@ file docs/runner-guide.md 2305B9D59B518E89822B57BF52C6370C
 file docs/spec.md 5B157C06DB75D764219FC626D498A741
 file docs/specs/brief-data-mto.md 0E7DFD726A8FFB5ACAF553E96BA0CADE
 file docs/specs/pri-json-findings-v1.md BB90964325B0E051E5B85FD8B990A5BA
-file docs/task-rep.md DCD4C1E78EA7CA5DD0421273FA9E2920
-file docs/task-rep-v2.md 8D51EDFA8B112D07D63C8B6BFDBF2C33
-file docs/tasks.md 9A73259CB4AEA23DC305FA29C442CFAE
+file docs/task-rep-v2.md 8AB8F6891F776B3B5FFF45A35D8FD0F1
+file docs/tasks.md 108750AC7DF3815791A280868270072B
 file docs/version-guide.md 31B0E756E274EFFF2755F164905E6D20
 file install/install-v7.1.md 5029B74F81DC07B69D6DD9895385AA43

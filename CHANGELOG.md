@@ -10,6 +10,16 @@
 установке; сам журнал руками дописывать не нужно. Порядок работы:
 [`docs/version-guide.md`](docs/version-guide.md).
 
+## 8.1.11 — 17.09.2026
+
+Первая строка этого файла - версия сборки, её ведёт install\install.ps1.
+Ниже, до следующего релиза, впишите человеческое описание изменений:
+  что добавлено; какая ошибка исправлена; что и с каким результатом оптимизировано.
+Оно попадёт в CHANGELOG.md первым абзацем записи новой версии.
+
+- Книга: C:\Projects\ReportMTO\ReportMTO.xlsm
+- Хеш исходников: 00548b31dfa176c6543935bf1670ee63
+
 ## 8.1.10 — 16.09.2026
 
 Собрано 16.09.2026. Изменены: src/vba/modContentDisc.bas, tmp_index.html, README.md, docs/archive/ft_Report v1.2.md, docs/archive/tz_Report v1.2.md, docs/data.md, docs/index.md, docs/presentations/Презентация и блоки данных (Трек Б) v1.0.md, docs/task-rep-v2.md, docs/presentations/Презентация (удалён), docs/archive/tz_Report (удалён), docs/specs/data.md (удалён), docs/archive/ft_Report (удалён)
