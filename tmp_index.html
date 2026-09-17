@@ -142,18 +142,21 @@ td.pct.empty{color:var(--muted)}
 table.wk-stack td,table.wk-stack th{vertical-align:middle}
 table.wk-stack td.pct,table.wk-stack td.n,table.wk-stack th.n{white-space:nowrap}
 table.wk-stack td.pct .delta{margin-left:5px}
-td.stack{padding:2px 8px;text-align:right;white-space:nowrap}
-td.stack .wk{display:flex;align-items:center;justify-content:flex-end;gap:4px;
+/* Прошлые недели - мелким шрифтом: три строки стопки занимают примерно полторы
+   базовые строки таблицы, а не три. Иначе высота таблицы утраивается и список
+   людей перестаёт влезать на слайд. */
+td.stack{padding:1px 8px;text-align:right;white-space:nowrap}
+td.stack .wk{display:flex;align-items:center;justify-content:flex-end;gap:3px;
   font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;
-  font-size:11px;line-height:16px;height:16px;color:var(--ink-2)}
+  font-size:10px;line-height:12px;height:12px;color:var(--ink-2)}
 td.stack .wk + .wk{border-top:1px dotted var(--line)}
 td.stack .wk.empty{color:var(--muted)}
 /* слот стрелки фиксированной ширины: числа стоят в колонку и при пустой стрелке */
-td.stack .wk .delta{flex:none;width:9px;text-align:center;font-size:10px;line-height:16px}
+td.stack .wk .delta{flex:none;width:8px;text-align:center;font-size:9px;line-height:12px}
 td.stack .wk .v{flex:none}
 th.stack-h{text-align:right;white-space:nowrap}
-th.stack-h .wk{font-family:"IBM Plex Mono",monospace;font-size:10.5px;line-height:16px;
-  height:16px;color:var(--muted);font-weight:400}
+th.stack-h .wk{font-family:"IBM Plex Mono",monospace;font-size:9.5px;line-height:12px;
+  height:12px;color:var(--muted);font-weight:400}
 
 .pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-family:"IBM Plex Mono",monospace;
   padding:1px 7px;border:1px solid var(--line-strong);white-space:nowrap}
