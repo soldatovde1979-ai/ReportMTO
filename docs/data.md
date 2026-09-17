@@ -457,7 +457,7 @@ Text.From([number] ?? "") & "|"
 
 ### 3.3 Плейсхолдеры HTML-шаблона (`tmp_index.html`)
 
-Сверено 16.09.2026 с шаблоном v4.3 и кодом v8.3: **74 плейсхолдера**, все заполняются словарём
+Сверено 16.09.2026 с шаблоном v4.4 и кодом v8.3: **75 плейсхолдеров**, все заполняются словарём
 `Scripting.Dictionary` из `modContentMTO.BuildPlaceholders` (шапка/подвал/ИИ) +
 `modContentZone.FillZonePlaceholders` (слайды 1, 5–8) + `modContentDisc.FillDiscPlaceholders`
 (слайды 2–4). Механизм подстановки — `modHTMLEngine.RenderTemplate`: `Replace(html, "{{" & key & "}}", ...)`;
@@ -481,6 +481,7 @@ Text.From([number] ?? "") & "|"
 |---|---|---|
 | `{{KPI_OVERVIEW}}` | 8 плиток за отчётную неделю: открыто/закрыто/висит/без поста/заезды/ТС/медиана в ремзоне/возвраты (7 дн.) | `BuildKpiOverview` (ряды `Slide1Series` по `date`/`zn_closed`) |
 | `{{BLOCK_ZNTYPE_FLOW_HANG}}` | вид воздействия: за неделю / всего с начала года / висит на конец недели / доля висящих / медиана срока. Сортировка — по доле висящих | `BuildZnTypeFlowHang` |
+| `{{BLOCK_HANG_STATUS_SPECIAL}}` | два «нерабочих» статуса («Отменен, требует повторного планирования», «Ожидание ТМЦ»): срез на конец недели + помесячный остаток двумя сериями | `BuildHangStatusSpecial` |
 | `{{BLOCK_HANG_STATUS}}` | «висит на конец недели» по текущему статусу (`TekStatusPoDoc`; «Закрыт (Омникомм)» = «Закрыт») | `BuildHangByStatus` |
 | `{{BLOCK_NOZONE_ZNTYPE}}` | наряды с пустым `postN` по виду ремонта (фильтр `NoZoneOk`) | `BuildNoZoneZnType` |
 | `{{BLOCK_NOZONE_STATUS}}` | наряды с пустым `postN` по статусу («Закрыт (Омникомм)» = «Закрыт») | `BuildNoZoneStatus` |
@@ -488,8 +489,9 @@ Text.From([number] ?? "") & "|"
 
 > Снято со слайда 1 ревизией 16.09.2026 (функции остались в коде невызываемыми):
 > `BLOCK_HANG_ZNTYPE` и `BLOCK_FLOW_ZNTYPE` — слиты в `BLOCK_ZNTYPE_FLOW_HANG`;
-> `BLOCK_HANG_STATUS_CHART` и `BLOCK_HANG_STATUS_SPECIAL` — повторяли таблицу
-> `BLOCK_HANG_STATUS`. `BLOCK_FLOW_DEFEKT` переехал на слайд 6.
+> `BLOCK_HANG_STATUS_CHART` — повторял таблицу `BLOCK_HANG_STATUS`.
+> `BLOCK_HANG_STATUS_SPECIAL` возвращён 17.09.2026 в переработанном виде: к срезу
+> добавлен помесячный остаток, то есть второй разрез, а не копия первого. `BLOCK_FLOW_DEFEKT` переехал на слайд 6.
 
 #### Слайды 2–4 — дисциплина (modContentDisc.FillDiscPlaceholders)
 

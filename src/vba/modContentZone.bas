@@ -30,6 +30,15 @@ Attribute VB_Name = "modContentZone"
 '   (блоки «возвраты» и «фазы наряда») лежали в середине файла, после процедур -
 '   перенесены в секцию Declarations. В BuildAgeCurve и BuildChronics цикл
 '   For Each k закрывался Next i.
+' Версия 2.8 от 17.09.2026: блок двух «нерабочих» статусов возвращён на слайд 1.
+'   BuildHangStatusSpecial переработан: к прежнему срезу на конец отчётной недели
+'   добавлен ПОМЕСЯЧНЫЙ ОСТАТОК по каждому из двух статусов, две серии разного цвета
+'   (GroupBars). Это второй разрез, а не копия первого: таблица отвечает «сколько
+'   сейчас», график - «накапливается хвост или рассасывается».
+'   Ограничение названо в пояснении под графиком: TekStatusPoDoc - текущий статус,
+'   истории смены статусов в выгрузке нет, поэтому ряд считает наряды, которые
+'   числятся в статусе СЕЙЧАС, по их незакрытости на конец каждого месяца.
+'   Новая приватная MonthEnd; константы S_CANCEL / S_WAIT вместо литералов в трёх местах.
 ' Версия 2.7 от 17.09.2026: возвраты в двух окнах.
 '   Слайд 6 показывал только окно 30 суток, а окно 7 суток жило отдельно - в факте
 '   шапки «ПОВТОРНЫЕ» и в плитке слайда 1, и читатель не мог их сопоставить.
@@ -128,6 +137,10 @@ Private Const NOSECT As String = "(раздел не указан)"
 ' Порог достоверности доли для блока «вид воздействия» (слайд 1): на трёх нарядах
 ' доля висящих - шум, такие виды уходят в хвост таблицы отдельной группой.
 Private Const ZNTYPE_MIN_ROWS As Long = 10
+
+' Два «нерабочих» статуса: наряд в них не движется ни к закрытию, ни к отмене.
+Private Const S_CANCEL As String = "Отменен, требует повторного планирования"
+Private Const S_WAIT As String = "Ожидание ТМЦ"
 
 Private mReady As Boolean
 Private mZn As Object            ' number -> Variant(Z_FIELDS)
@@ -3582,6 +3595,7 @@ Public Sub FillZonePlaceholders(ByVal d As Object)
 
     d("KPI_OVERVIEW") = BuildKpiOverview()
     d("BLOCK_ZNTYPE_FLOW_HANG") = BuildZnTypeFlowHang()
+    d("BLOCK_HANG_STATUS_SPECIAL") = BuildHangStatusSpecial()
     d("BLOCK_HANG_STATUS") = BuildHangByStatus()
     d("BLOCK_NOZONE_ZNTYPE") = BuildNoZoneZnType()
     d("BLOCK_NOZONE_STATUS") = BuildNoZoneStatus()
@@ -4302,12 +4316,33 @@ Public Function BuildHangStatusChart() As String
     BuildHangStatusChart = s
 End Function
 
-' Отдельный небольшой блок по двум статусам выборки «висит на конец недели».
+' Конец месяца как серийная дата: первое число следующего (DateSerial сам переносит
+' 13-й месяц на январь). Сравнение строгое «<», поэтому граница не задваивается.
+Private Function MonthEnd(ByVal ym As Long) As Double
+    MonthEnd = CDbl(DateSerial(ym \ 100, (ym Mod 100) + 1, 1))
+End Function
+
+' Отдельный блок по двум статусам выборки «висит на конец недели»: «Отменен, требует
+' повторного планирования» и «Ожидание ТМЦ». Это не обычные рабочие статусы - наряд
+' в них не двигается ни к закрытию, ни к отмене, и растущий остаток по ним означает,
+' что работа встала не в ремзоне, а в снабжении или в планировании.
+'
+' Два разных разреза, а не таблица и её копия:
+'   слева - срез на конец отчётной недели, сколько сейчас и какая доля от висящих;
+'   ниже  - помесячный ОСТАТОК по каждому статусу, две серии разными цветами: видно,
+'           накапливается хвост или рассасывается.
+'
+' (!) Ограничение, которое нельзя обойти этой выгрузкой: TekStatusPoDoc - ТЕКУЩИЙ статус
+' документа, истории смены статусов в данных нет. Поэтому помесячный ряд отвечает на
+' вопрос «сколько нарядов, которые СЕЙЧАС числятся в этом статусе, висело на конец
+' каждого месяца», а не «сколько нарядов было в этом статусе тогда». Для хвоста, который
+' не двигается, это одно и то же; для наряда, прошедшего статус транзитом, - нет.
 Public Function BuildHangStatusSpecial() As String
     EnsureZn
     Dim rw As Long, we As Double
     rw = ZoneReportWeek()
     we = WeekEnd(rw)
+
     Dim d As Object
     Set d = CreateObject("Scripting.Dictionary")
     Dim k As Variant, z As Variant, t As String, totAll As Double
@@ -4318,8 +4353,8 @@ Public Function BuildHangStatusSpecial() As String
             If CDbl(z(Z_CLOSED)) <= 0# Or CDbl(z(Z_CLOSED)) >= we Then
                 totAll = totAll + 1#
                 t = Trim$(CStr(z(Z_TEK)))
-                If StrComp(t, "Отменен, требует повторного планирования", vbTextCompare) = 0 _
-                   Or StrComp(t, "Ожидание ТМЦ", vbTextCompare) = 0 Then
+                If StrComp(t, S_CANCEL, vbTextCompare) = 0 _
+                   Or StrComp(t, S_WAIT, vbTextCompare) = 0 Then
                     AddCnt d, t, 1#
                 End If
             End If
@@ -4338,10 +4373,94 @@ Public Function BuildHangStatusSpecial() As String
             FmtF(SafePct(CDbl(vals(i)), totAll), 1) & "</td></tr>"
     Next i
     s = s & "</tbody></table>"
-    s = s & NoteBlk("Статусы «Отменен, требует повторного планирования» и «Ожидание " & _
-        "ТМЦ» выборки «висит на конец недели» (" & modContentMTO.FmtInt(totAll) & _
-        " ЗН). % - от всей выборки висящих нарядов. Период - накопление к концу " & _
-        "отчётной недели " & WLab(rw) & ".")
+    s = s & NoteBlk("Срез на конец отчётной недели " & WLab(rw) & ": статусы «" & _
+        S_CANCEL & "» и «" & S_WAIT & "» внутри выборки «висит на конец недели» (" & _
+        modContentMTO.FmtInt(totAll) & " ЗН). Процент " & ChrW$(&H2014) & _
+        " от всей выборки висящих.")
+
+    ' --- Помесячный остаток по каждому из двух статусов ---
+    Dim ymFrom As Long, ymTo As Long
+    ymFrom = YearMonth(YtdStart())
+    ymTo = YearMonth(SnapshotEnd())
+    If ymFrom <= 0 Or ymTo <= 0 Or ymTo < ymFrom Then BuildHangStatusSpecial = s: Exit Function
+
+    Dim mlist(0 To 35) As Long, mn As Long, yy As Long, mo As Long
+    mn = 0
+    yy = ymFrom \ 100: mo = ymFrom Mod 100
+    Do While (yy * 100 + mo) <= ymTo And mn <= 35
+        mlist(mn) = yy * 100 + mo
+        mn = mn + 1
+        mo = mo + 1
+        If mo > 12 Then mo = 1: yy = yy + 1
+    Loop
+    If mn = 0 Then BuildHangStatusSpecial = s: Exit Function
+
+    Dim c1() As Double, c2() As Double
+    ReDim c1(0 To mn - 1)
+    ReDim c2(0 To mn - 1)
+    For Each k In mZn.Keys
+        z = mZn(k)
+        t = Trim$(CStr(z(Z_TEK)))
+        Dim isC As Boolean, isW As Boolean
+        isC = (StrComp(t, S_CANCEL, vbTextCompare) = 0)
+        isW = (StrComp(t, S_WAIT, vbTextCompare) = 0)
+        If isC Or isW Then
+            Dim dt As Double, cl As Double
+            dt = CDbl(z(Z_DATE)): cl = CDbl(z(Z_CLOSED))
+            If dt > 0# Then
+                For i = 0 To mn - 1
+                    Dim me2 As Double
+                    me2 = MonthEnd(mlist(i))
+                    If dt < me2 Then
+                        If cl <= 0# Or cl >= me2 Then
+                            If isC Then c1(i) = c1(i) + 1# Else c2(i) = c2(i) + 1#
+                        End If
+                    End If
+                Next i
+            End If
+        End If
+    Next k
+
+    Dim ml() As Variant, v1() As Variant, v2() As Variant
+    ReDim ml(0 To mn - 1)
+    ReDim v1(0 To mn - 1)
+    ReDim v2(0 To mn - 1)
+    For i = 0 To mn - 1
+        ml(i) = MLab(mlist(i))
+        v1(i) = c1(i)
+        v2(i) = c2(i)
+    Next i
+
+    Dim delta As String
+    If mn >= 2 Then
+        Dim dSum As Double
+        dSum = (c1(mn - 1) + c2(mn - 1)) - (c1(0) + c2(0))
+        If dSum > 0# Then
+            delta = " Суммарный остаток по двум статусам с начала года <b>вырос</b> на " & _
+                modContentMTO.FmtInt(dSum) & " ЗН " & ChrW$(&H2014) & " хвост накапливается."
+        ElseIf dSum < 0# Then
+            delta = " Суммарный остаток по двум статусам с начала года <b>сократился</b> на " & _
+                modContentMTO.FmtInt(-dSum) & " ЗН."
+        Else
+            delta = " Суммарный остаток по двум статусам с начала года не изменился."
+        End If
+    End If
+
+    s = s & MockLabel("Остаток по этим статусам на конец месяца")
+    s = s & "<figure>" & GroupBars(ml, v1, v2, 680, 240) & _
+        "<figcaption>Наряды, не закрытые на конец месяца, по каждому из двух статусов." & _
+        "</figcaption></figure>"
+    s = s & "<div class=""legend""><span><i style=""background:var(--s2)""></i>" & _
+        modContentMTO.Esc(S_CANCEL) & "</span><span><i style=""background:var(--s7)""></i>" & _
+        modContentMTO.Esc(S_WAIT) & "</span></div>"
+    s = s & NoteBlk("Остаток на конец месяца " & ChrW$(&H2014) & " наряды, созданные до " & _
+        "конца месяца и не закрытые (<code>zn_closed</code> пуст или позже границы). " & _
+        "Период " & ChrW$(&H2014) & " с начала года. <b>Ограничение выгрузки:</b> " & _
+        "<code>TekStatusPoDoc</code> " & ChrW$(&H2014) & " ТЕКУЩИЙ статус документа, " & _
+        "истории смены статусов в данных нет. Ряд отвечает на вопрос «сколько нарядов, " & _
+        "которые числятся в этом статусе сейчас, висело на конец каждого месяца», а не " & _
+        "«сколько нарядов было в этом статусе тогда». Для застрявшего хвоста это одно " & _
+        "и то же, для наряда, прошедшего статус транзитом, " & ChrW$(&H2014) & " нет." & delta)
     BuildHangStatusSpecial = s
 End Function
 
