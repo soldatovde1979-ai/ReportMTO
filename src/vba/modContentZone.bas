@@ -30,6 +30,14 @@ Attribute VB_Name = "modContentZone"
 '   (блоки «возвраты» и «фазы наряда») лежали в середине файла, после процедур -
 '   перенесены в секцию Declarations. В BuildAgeCurve и BuildChronics цикл
 '   For Each k закрывался Next i.
+' Версия 2.12 от 17.09.2026: знак % и конкретные даты в подписях периода.
+'   - PctTd печатал голое число под заголовком «%», и ещё 12 ячеек таблиц выводили
+'     FmtF(SafePct(...)) без знака. Все переведены на Pc() - процент теперь виден
+'     как процент, а не как «12,3» рядом со столбцом «Нарядов».
+'   - Подписи периода над блоками получили КОНКРЕТНЫЕ ДАТЫ вместо слов: «с начала
+'     года: 01.01.2026 -> 21.09.2026», «8 недель: 2026-31 -> 2026-38, по 21.09.2026».
+'     «с начала года» без числа и «окно 8 недель» без границ на вопрос «за какое
+'     это число» не отвечали.
 ' Версия 2.11 от 17.09.2026: износ по счётчику, план против факта, минус два дубля.
 '   - BuildWearByMeter / {{BLOCK_WEAR_METER}}: вторая ось износа рядом с возрастом парка.
 '     Корзины - квинтили по самим данным: масштаб пробега и моточасов разный, круглые
@@ -874,7 +882,7 @@ Public Function PctTd(ByVal p As Double, Optional ByVal hasValue As Boolean = Tr
         Exit Function
     End If
     PctTd = "<td class=""pct""><span style=""border-color:" & _
-        modContentMTO.PctBorderColor(p) & """>" & FmtF(p, 0) & "</span></td>"
+        modContentMTO.PctBorderColor(p) & """>" & Pc(p, 0) & "</span></td>"
 End Function
 
 Public Function Pill(ByVal cls As String, ByVal txt As String) As String
@@ -1477,7 +1485,7 @@ End Function
 ' Под блоком остаётся calc-note с полным определением выборки - это разные вещи:
 ' подпись отвечает «за какой период», примечание - «что именно посчитано».
 Public Function PeriodCap(ByVal t As String) As String
-    PeriodCap = "<div class=""period-cap"">Период: " & modContentMTO.Esc(t) & "</div>"
+    PeriodCap = "<div class=""period-cap""><b>Период</b>" & modContentMTO.Esc(t) & "</div>"
 End Function
 
 Public Function MockLabel(ByVal t As String) As String
@@ -2741,8 +2749,8 @@ Public Function BuildPareto() As String
         If i < 3 Then top3 = top3 + CDbl(vals(i))
         s = s & "<tr><td>" & modContentMTO.Esc(CStr(labs(i))) & "</td><td class=""n"">" & _
             modContentMTO.FmtInt(CDbl(vals(i))) & "</td><td class=""n"">" & _
-            FmtF(SafePct(CDbl(vals(i)), tot), 1) & "</td><td class=""n"">" & _
-            FmtF(SafePct(acc, tot), 1) & "</td></tr>"
+            Pc(SafePct(CDbl(vals(i)), tot), 1) & "</td><td class=""n"">" & _
+            Pc(SafePct(acc, tot), 1) & "</td></tr>"
     Next i
     s = s & "</tbody></table>"
     s = s & NoteBlk("Топ-8 групп дефекта по внеплановым нарядам, накопленный процент. " & _
@@ -2889,7 +2897,7 @@ Public Function BuildDefectDetail() As String
         s = s & "<tr" & IIf(i = 0, " class=""total""", "") & "><td>" & _
             modContentMTO.Esc(CStr(kl(i))) & "</td><td class=""n"">" & _
             modContentMTO.FmtInt(CDbl(kv(i))) & "</td><td class=""n"">" & _
-            FmtF(SafePct(CDbl(kv(i)), tot), 1) & "</td></tr>"
+            Pc(SafePct(CDbl(kv(i)), tot), 1) & "</td></tr>"
     Next i
     s = s & "</tbody></table>"
     s = s & NoteBlk("Уровень 0 - характер работы из классификатора описаний. Наряды " & _
@@ -2930,7 +2938,7 @@ Public Function BuildDefectDetail() As String
             s = s & "<tr><td" & mut & ">" & Indent() & _
                 modContentMTO.Esc(CStr(nl(j))) & "</td><td class=""n"">" & _
                 modContentMTO.FmtInt(CDbl(nv(j))) & "</td><td class=""n"">" & _
-                FmtF(SafePct(CDbl(nv(j)), CDbl(gv(i))), 1) & "</td></tr>"
+                Pc(SafePct(CDbl(nv(j)), CDbl(gv(i))), 1) & "</td></tr>"
         Next j
     Next i
     s = s & "</tbody></table></div></div></div>"
@@ -3759,7 +3767,7 @@ Public Function BuildAbc() As String
     For i = 0 To 2
         s = s & "<tr><td class=""head"">" & CStr(gl(i)) & "</td><td class=""n"">" & _
             modContentMTO.FmtInt(cars(i)) & "</td><td class=""n"">" & Rub(sums(i)) & _
-            "</td><td class=""n"">" & FmtF(SafePct(sums(i), tot), 1) & "</td></tr>"
+            "</td><td class=""n"">" & Pc(SafePct(sums(i), tot), 1) & "</td></tr>"
     Next i
     s = s & "</tbody></table>"
     s = s & NoteBlk(modContentMTO.FmtInt(cars(0)) & " машин из " & _
@@ -3814,7 +3822,7 @@ Public Function BuildMoneyDefekt() As String
     For i = 0 To UBound(labs)
         s = s & "<tr><td>" & modContentMTO.Esc(CStr(labs(i))) & "</td><td class=""n"">" & _
             Rub(CDbl(vals(i))) & "</td><td class=""n"">" & _
-            FmtF(SafePct(CDbl(vals(i)), tot), 1) & "</td></tr>"
+            Pc(SafePct(CDbl(vals(i)), tot), 1) & "</td></tr>"
     Next i
     s = s & "</tbody></table>"
     s = s & NoteBlk("Материалы по разделам дефекта, топ-6, период - с начала года " & _
@@ -4258,19 +4266,31 @@ Public Sub FillZonePlaceholders(ByVal d As Object)
     ' Подпись периода у каждого блока (PeriodCap) ставится здесь, а не внутри
     ' построителей: один список - видно, что у соседних блоков периоды разные,
     ' и новый блок нельзя добавить, промолчав про период.
+    ' Периоды - с конкретными датами, а не словами: «с начала года» без числа
+    ' и «окно 8 недель» без границ не отвечают на вопрос «за какое число это всё».
     Dim wl As String, w8 As String, ytd As String, snap As String
-    wl = "отчётная неделя " & WLab(ZoneReportWeek())
-    w8 = "окно 8 недель по дате создания наряда"
-    ytd = "с начала года (01.01.2026)"
-    snap = "весь снимок"
+    Dim rwP As Long, wkP As Variant, weekLast As Date
+    rwP = ZoneReportWeek()
+    weekLast = WeekMonday(rwP) + 6
+    wkP = WeekWindow(8)
+    wl = "неделя " & WLab(rwP) & " (" & WeekRange(rwP) & "), по " & _
+        Format$(weekLast, "dd.mm.yyyy")
+    w8 = "8 недель: " & WLab(CLng(wkP(0))) & " " & ChrW$(&H2192) & " " & WLab(rwP) & _
+        ", по " & Format$(weekLast, "dd.mm.yyyy") & ", по дате создания наряда"
+    ytd = "с начала года: " & Format$(CDate(YtdStart()), "dd.mm.yyyy") & " " & _
+        ChrW$(&H2192) & " " & Format$(CDate(SnapshotEnd()), "dd.mm.yyyy")
+    snap = "весь снимок: " & Format$(CDate(SnapFrom()), "dd.mm.yyyy") & " " & _
+        ChrW$(&H2192) & " " & Format$(CDate(SnapshotEnd()), "dd.mm.yyyy")
 
     d("KPI_OVERVIEW") = PeriodCap(wl & "; спарклайны и дельта - " & w8) & BuildKpiOverview()
-    d("BLOCK_ZNTYPE_FLOW_HANG") = PeriodCap(ytd & " до конца недели " & _
-        WLab(ZoneReportWeek()) & "; колонка «за неделю» - " & wl) & BuildZnTypeFlowHang()
-    d("BLOCK_HANG_STATUS_SPECIAL") = PeriodCap("срез на конец недели " & _
-        WLab(ZoneReportWeek()) & "; график - остаток по месяцам " & ytd) & BuildHangStatusSpecial()
-    d("BLOCK_HANG_STATUS") = PeriodCap("накопление к концу недели " & _
-        WLab(ZoneReportWeek())) & BuildHangByStatus()
+    d("BLOCK_ZNTYPE_FLOW_HANG") = PeriodCap(ytd & "; колонка «за неделю» - " & wl) & _
+        BuildZnTypeFlowHang()
+    d("BLOCK_HANG_STATUS_SPECIAL") = PeriodCap("срез на " & _
+        Format$(weekLast, "dd.mm.yyyy") & " (конец недели " & WLab(rwP) & _
+        "); график - остаток на конец каждого месяца, " & ytd) & BuildHangStatusSpecial()
+    d("BLOCK_HANG_STATUS") = PeriodCap("накопление на " & _
+        Format$(weekLast, "dd.mm.yyyy") & " (конец недели " & WLab(rwP) & ")") & _
+        BuildHangByStatus()
     d("BLOCK_NOZONE_ZNTYPE") = PeriodCap(ytd) & BuildNoZoneZnType()
     d("BLOCK_NOZONE_STATUS") = PeriodCap(ytd) & BuildNoZoneStatus()
     d("BLOCK_NOPOST_WEEKLY") = PeriodCap(w8) & BuildNoPostWeekly()
@@ -4280,7 +4300,8 @@ Public Sub FillZonePlaceholders(ByVal d As Object)
     d("KPI_FLEET") = PeriodCap(snap & "; заезды за неделю - " & wl) & BuildKpiFleet()
     d("BLOCK_POSTS_WEEK") = PeriodCap(wl) & BuildPostsWeek()
     d("BLOCK_AGE_CURVE") = PeriodCap(snap) & BuildAgeCurve()
-    d("BLOCK_WEAR_METER") = PeriodCap("счётчики - на момент выгрузки; наряды, отказы, возвраты и материалы - " & ytd) & BuildWearByMeter()
+    d("BLOCK_WEAR_METER") = PeriodCap("счётчики - на " & Format$(CDate(SnapshotEnd()), "dd.mm.yyyy") & _
+        " (момент выгрузки); наряды, отказы, возвраты и материалы - " & ytd) & BuildWearByMeter()
     d("BLOCK_AGE_MATRIX") = PeriodCap(snap) & BuildAgeMatrix()
     d("BLOCK_AGING") = PeriodCap(snap) & BuildAging()
     d("BLOCK_PACK") = PeriodCap(snap) & BuildPack()
@@ -4291,21 +4312,21 @@ Public Sub FillZonePlaceholders(ByVal d As Object)
     ' Перенесён со слайда 1: дефекты - тема этого слайда. Недельный срез стоит
     ' перед годовым Парето: «что ломалось на неделе» против «что ломается всегда».
     d("BLOCK_FLOW_DEFEKT") = PeriodCap(wl) & BuildFlowDefekt()
-    d("BLOCK_FAIL_MONTH_YOY") = PeriodCap("помесячно " & ytd & " против того же периода " & _
+    d("BLOCK_FAIL_MONTH_YOY") = PeriodCap("по месяцам, " & ytd & ", против тех же месяцев " & _
         "прошлого года, если он есть в выгрузке") & BuildFailMonthYoY()
     d("BLOCK_PARETO") = PeriodCap(ytd) & BuildPareto()
     d("BLOCK_DEFECT_DETAIL") = PeriodCap(ytd) & BuildDefectDetail()
     d("BLOCK_RET_KPI") = PeriodCap("пары возвратов - " & ytd & "; знаменатели - " & _
         snap) & BuildRetKpi()
-    d("BLOCK_RET_MONTH") = PeriodCap("помесячно " & ytd) & BuildRetMonth()
-    d("BLOCK_RET_WEEK") = PeriodCap("окно 8 недель") & BuildRetWeek()
+    d("BLOCK_RET_MONTH") = PeriodCap("по месяцам, " & ytd) & BuildRetMonth()
+    d("BLOCK_RET_WEEK") = PeriodCap(w8) & BuildRetWeek()
     d("BLOCK_RET_NODE") = PeriodCap("знаменатели - " & snap & "; пары возвратов - " & _
         ytd) & BuildRetNode()
     d("BLOCK_REPEATS") = PeriodCap(ytd) & BuildRepeats()
     modLog.WriteDebug 1, "Техника", "FillZonePlaceholders", _
         "Слайд 6 готов: " & Round(Timer - t0, 2) & " c"
 
-    d("BLOCK_PHASES") = PeriodCap("окно 8 недель по дате создания наряда") & BuildPhases()
+    d("BLOCK_PHASES") = PeriodCap(w8) & BuildPhases()
     d("BLOCK_REPEAT_TOP_VEH_YTD") = PeriodCap(ytd) & BuildRepeatTopVeh(False)
     d("BLOCK_REPEAT_TOP_VEH_WK") = PeriodCap(wl) & BuildRepeatTopVeh(True)
     d("BLOCK_REPEAT_TOP_DEF_YTD") = PeriodCap(ytd) & BuildRepeatTopDef(False)
@@ -4899,7 +4920,7 @@ Public Function BuildHangByZnType() As String
     For i = 0 To UBound(labs)
         s = s & "<tr><td>" & modContentMTO.Esc(CStr(labs(i))) & "</td><td class=""n"">" & _
             modContentMTO.FmtInt(CDbl(vals(i))) & "</td><td class=""n"">" & _
-            FmtF(SafePct(CDbl(vals(i)), tot), 1) & "</td></tr>"
+            Pc(SafePct(CDbl(vals(i)), tot), 1) & "</td></tr>"
     Next i
     s = s & "</tbody></table>"
     s = s & NoteBlk("«Висит» " & ChrW$(&H2014) & " наряд без <code>zn_closed</code>, " & _
@@ -4941,7 +4962,7 @@ Public Function BuildHangByStatus() As String
     For i = 0 To UBound(labs)
         s = s & "<tr><td>" & modContentMTO.Esc(CStr(labs(i))) & "</td><td class=""n"">" & _
             modContentMTO.FmtInt(CDbl(vals(i))) & "</td><td class=""n"">" & _
-            FmtF(SafePct(CDbl(vals(i)), tot), 1) & "</td></tr>"
+            Pc(SafePct(CDbl(vals(i)), tot), 1) & "</td></tr>"
     Next i
     s = s & "</tbody></table>"
     s = s & NoteBlk("Разрез по текущему статусу документа <code>TekStatusPoDoc</code> " & _
@@ -5050,7 +5071,7 @@ Public Function BuildHangStatusSpecial() As String
     For i = 0 To UBound(labs)
         s = s & "<tr><td>" & modContentMTO.Esc(CStr(labs(i))) & "</td><td class=""n"">" & _
             modContentMTO.FmtInt(CDbl(vals(i))) & "</td><td class=""n"">" & _
-            FmtF(SafePct(CDbl(vals(i)), totAll), 1) & "</td></tr>"
+            Pc(SafePct(CDbl(vals(i)), totAll), 1) & "</td></tr>"
     Next i
     s = s & "</tbody></table>"
     s = s & NoteBlk("Срез на конец отчётной недели " & WLab(rw) & ": статусы «" & _
@@ -5173,7 +5194,7 @@ Public Function BuildNoZoneZnType() As String
     For i = 0 To UBound(labs)
         s = s & "<tr><td>" & modContentMTO.Esc(CStr(labs(i))) & "</td><td class=""n"">" & _
             modContentMTO.FmtInt(CDbl(vals(i))) & "</td><td class=""n"">" & _
-            FmtF(SafePct(CDbl(vals(i)), tot), 1) & "</td></tr>"
+            Pc(SafePct(CDbl(vals(i)), tot), 1) & "</td></tr>"
     Next i
     s = s & "</tbody></table>"
     s = s & NoteBlk("Наряды с пустым <code>postN</code> в разрезе <code>zn_type</code>. " & _
@@ -5216,7 +5237,7 @@ Public Function BuildNoZoneStatus() As String
     For i = 0 To UBound(labs)
         s = s & "<tr><td>" & modContentMTO.Esc(CStr(labs(i))) & "</td><td class=""n"">" & _
             modContentMTO.FmtInt(CDbl(vals(i))) & "</td><td class=""n"">" & _
-            FmtF(SafePct(CDbl(vals(i)), tot), 1) & "</td></tr>"
+            Pc(SafePct(CDbl(vals(i)), tot), 1) & "</td></tr>"
     Next i
     s = s & "</tbody></table>"
     s = s & NoteBlk("Наряды с пустым <code>postN</code> в разрезе <code>TekStatusPoDoc</code>. " & _
@@ -5251,7 +5272,7 @@ Public Function BuildFlowZnType() As String
     For i = 0 To UBound(labs)
         s = s & "<tr><td>" & modContentMTO.Esc(CStr(labs(i))) & "</td><td class=""n"">" & _
             modContentMTO.FmtInt(CDbl(vals(i))) & "</td><td class=""n"">" & _
-            FmtF(SafePct(CDbl(vals(i)), tot), 1) & "</td></tr>"
+            Pc(SafePct(CDbl(vals(i)), tot), 1) & "</td></tr>"
     Next i
     s = s & "</tbody></table>"
     s = s & NoteBlk("Разрез <code>zn_type</code> по нарядам, топ-8 по числу нарядов, " & _

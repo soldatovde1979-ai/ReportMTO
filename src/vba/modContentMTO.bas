@@ -2,6 +2,12 @@ Attribute VB_Name = "modContentMTO"
 ' modContentMTO - CONTENT SPEC (МТО). Реализует 4 функции по контракту modMain.bas (Core):
 '   BuildPivots, BuildPrompt, ParseAIResponse, BuildPlaceholders(s3, s4, s5).
 '
+' Версия 8.4 от 17.09.2026: обязательное поле «Период» в шапке отчёта.
+'   BuildPeriodLine / {{REPORT_PERIOD}}: отчётная неделя с диапазоном дат, конец недели,
+'   границы «с начала года» (от REPORT/YTD_START до конца снимка), месяц и дата обрыва
+'   выгрузки. До этого период был размазан по подзаголовку и примечаниям под блоками,
+'   и на вопрос «за какое это число» приходилось искать ответ по всему отчёту.
+'   (!) Линтер поймал wEnd: это Wend, конец цикла While...Wend - переименовано в weekLast.
 ' Версия 8.3 от 14.09.2026: правки шапки по постановке docs/task-rep.md.
 '   - REPORT_TITLE: «Исполнительская дисциплина инженеров ДЭНТ и ДГМ»;
 '   - BuildLede: «Отчет о состоянии техники за {неделя} — с {дата} до {дата}»,
@@ -4095,6 +4101,7 @@ Public Function BuildPlaceholders(aiSlide3 As String, aiSlide4 As String, aiSlid
     d("REPORT_TITLE") = "Исполнительская дисциплина инженеров ДЭНТ и ДГМ"
     d("REPORT_WEEK_LABEL") = modContentZone.WeekCaption(rw)
     d("REPORT_LEDE") = BuildLede(rw)
+    d("REPORT_PERIOD") = BuildPeriodLine(rw)
     d("FACTS") = BuildFactsRef()
     d("REPORT_FOOTER") = BuildFooter(rw)
 
@@ -4143,6 +4150,42 @@ Public Function BuildPlaceholders(aiSlide3 As String, aiSlide4 As String, aiSlid
     End If
 
     Set BuildPlaceholders = d
+End Function
+
+' Обязательное поле «Период» в шапке отчёта. Четыре значения, каждое с конкретикой:
+' какая неделя, какой у неё конец, с какого числа считается «с начала года» и по какое
+' оборвана выгрузка, какой месяц. До этого период был размазан по подзаголовку и по
+' примечаниям под блоками, и на вопрос «за какое число это всё» приходилось искать ответ.
+Private Function BuildPeriodLine(ByVal rw As Long) As String
+    Dim weekLast As Date, ytdA As Double, snapB As Double
+    weekLast = modContentZone.WeekMonday(rw) + 6
+    ytdA = modContentZone.YtdStart()
+    snapB = modContentZone.SnapshotEnd()
+
+    Dim mn As Variant
+    mn = Array("январь", "февраль", "март", "апрель", "май", "июнь", _
+               "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь")
+
+    Dim s As String
+    s = "<div class=""period-line""><b>Период</b>"
+    s = s & "<span><i>отчётная неделя</i>" & Esc(modContentZone.WLab(rw)) & Nbsp() & "(" & _
+        Esc(modContentZone.WeekRange(rw)) & ")</span>"
+    s = s & "<span><i>конец недели</i>" & Format$(weekLast, "dd.mm.yyyy") & "</span>"
+    If ytdA > 0# And snapB > 0# Then
+        s = s & "<span><i>с начала года</i>" & Format$(CDate(ytdA), "dd.mm.yyyy") & _
+            Nbsp() & ChrW$(&H2192) & Nbsp() & Format$(CDate(snapB), "dd.mm.yyyy") & "</span>"
+    End If
+    If snapB > 0# Then
+        s = s & "<span><i>месяц</i>" & Esc(CStr(mn(Month(CDate(snapB)) - 1))) & Nbsp() & _
+            CStr(Year(CDate(snapB))) & "</span>"
+        s = s & "<span><i>выгрузка оборвана</i>" & Format$(CDate(snapB), "dd.mm.yyyy") & "</span>"
+    End If
+    BuildPeriodLine = s & "</div>"
+End Function
+
+' Неразрывный пробел: дата и её ярлык не должны переноситься по разным строкам.
+Private Function Nbsp() As String
+    Nbsp = ChrW$(&HA0)
 End Function
 
 ' Подзаголовок шапки: «Отчет о состоянии техники за {неделя} - с {дата} до {дата}».
