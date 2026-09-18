@@ -81,11 +81,13 @@
 | `docs\index.md`, `docs\logs.md`, `docs\rules.md`, `docs\tasks.md` | Карта документации, журнал работ, память правил, задачи | — |
 | `docs\archive\*` | Исторические документы: выполненные планы, старые инструкции установки (для истории) | — |
 | `build\` | Заготовка `ReportMTO_starter.xlsx` и собранная книга (передаются в git-обмен) | — |
+| `run.bat`, `tools\run_report.ps1` | Двойной щелчок по `run.bat`: открыть книгу и сформировать отчёт (`BuildPivots` + `GenerateReport`), свежий `Report_*.html` в `result\` | — |
 | `data\` | Входящие JSON-выгрузки из 1С (вне git) | — |
 | `result\` | Готовые отчёты (не версионируется) | — |
 
 > `tools\` содержит скрипты сборки/тестов/обслуживания: `build-report-mto.ps1` (сборка книги
-> из `src\` через COM), `run-e2e-tests-v1.ps1` (сквозные тесты), `md_to_docx.py`, `sim-pipeline.py`.
+> из `src\` через COM), `run_report.ps1` (исполнитель `run.bat`: открыть книгу и сформировать
+> отчёт), `run-e2e-tests-v1.ps1` (сквозные тесты), `md_to_docx.py`, `sim-pipeline.py`.
 > Скрипты установки `install.ps1`/`install_prod.ps1` лежат в `install\` вместе с инструкциями.
 > Источник истины для кода — только `src\vba\` и `src\powerquery\`.
 
