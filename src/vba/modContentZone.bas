@@ -1,6 +1,11 @@
 Attribute VB_Name = "modContentZone"
 ' modContentZone - CONTENT-слой части «Техника» (слайды 5-8) отчёта МТО.
 '
+' Версия 2.14 от 29.09.2026: AutoLines - автовыводы по правилам для слайдов 1, 5-8
+'   (мнение по слайду без внешнего ИИ и сырьё для «Главное за неделю»);
+'   IsoYearWeek считается через четверг недели (ISO-8601 без DatePart, задача 1.5);
+'   ZoneReportWeek учитывает явный REPORT/WEEK (задача 1.7).
+'
 ' Версия 2.5 от 14.09.2026 Правки шапки и слайда 1 (постановка docs/task-rep.md):
 '   - слайд 1: плитки «Без поста за неделю», «ТС по ЗН», «Возвратов (7 дн.)»;
 '     сняты плитки «Висит дольше 14 суток» и «Подписей с планшета»;
@@ -831,6 +836,29 @@ Public Function ZoneReportWeek() As Long
     For Each k In byW.Keys
         If CLng(k) > mx Then mx = CLng(k)
     Next k
+
+    ' v2.14 (задача 1.7): явный REPORT/WEEK перекрывает авто-режим для ВСЕГО отчёта.
+    ' Раньше ключ управлял только промптом ИИ: выводы говорили об одной неделе, таблицы -
+    ' о другой. Значение - номер недели (36) или ГГГГНН (202636); номер без года - самая
+    ' поздняя неделя с этим номером в данных. Недели нет в данных - авто-режим.
+    Dim fixS As String, fixN As Long, fixW As Long
+    fixS = Trim$(modMain.GetVariableDef("REPORT/WEEK", "0"))
+    If IsNumeric(fixS) Then
+        fixN = CLng(Val(fixS))
+        fixW = 0
+        If fixN > 190000 Then
+            If byW.Exists(CStr(fixN)) Then fixW = fixN
+        ElseIf fixN >= 1 And fixN <= 53 Then
+            For Each k In byW.Keys
+                If CLng(k) Mod 100 = fixN And CLng(k) > fixW Then fixW = CLng(k)
+            Next k
+        End If
+        If fixW > 0 Then
+            mRepWeek = fixW
+            ZoneReportWeek = fixW
+            Exit Function
+        End If
+    End If
     ' Текущая неделя на момент выгрузки всегда неполная - пусть на несколько часов,
     ' но неполная, и сравнивать её с полными неделями некорректно. Отчётной берём
     ' последнюю неделю, которая к концу снимка уже закончилась (решение владельца
@@ -954,16 +982,15 @@ End Function
 Public Function IsoYearWeek(ByVal ser As Double) As Long
     IsoYearWeek = 0
     If ser <= 0# Then Exit Function
-    Dim d As Date, w As Long, y As Long
+    ' v2.14: через четверг недели. DatePart("ww", ..., vbFirstFourDays) в ряде лет
+    ' отдаёт 53 вместо 1 для последних дней декабря (известная ошибка VBA/OLE):
+    ' 29.12.2025 (понедельник недели 2026-01) превращался в 2025-53. Правило ISO-8601:
+    ' неделя принадлежит году, в который попал её четверг.
+    Dim d As Date, th As Date, y As Long
     d = CDate(Int(ser))
-    w = DatePart("ww", d, vbMonday, vbFirstFourDays)
-    y = Year(d)
-    If w >= 52 And Month(d) = 1 Then
-        y = y - 1
-    ElseIf w = 1 And Month(d) = 12 Then
-        y = y + 1
-    End If
-    IsoYearWeek = y * 100 + w
+    th = d - (Weekday(d, vbMonday) - 1) + 3
+    y = Year(th)
+    IsoYearWeek = y * 100 + CLng(Int((th - DateSerial(y, 1, 1)) / 7#)) + 1
 End Function
 
 Public Function YearMonth(ByVal ser As Double) As Long
@@ -5836,4 +5863,190 @@ Public Function WeeksFromDate() As Variant
         r(i) = v(i) & "|"
     Next i
     WeeksFromDate = r
+End Function
+
+' =====================================================================================
+' Автовыводы по правилам (v2.14 от 29.09.2026). Мнение по слайду, когда внешний ИИ
+' недоступен, и сырьё для блока «Главное за неделю». Формат - строки через vbLf,
+' каждая «уровень<TAB>текст»; уровень: crit / warn / good / info.
+' Правила считают ТОЛЬКО то, что уже посчитано для слайдов, и называют число:
+' вывод без числа читатель проверить не может.
+' =====================================================================================
+Public Function AutoLines(ByVal slideNo As Long) As String
+    Dim s As String
+    On Error GoTo Fail
+    Select Case slideNo
+        Case 1: s = AutoSlide1()
+        Case 5: s = AutoSlide5()
+        Case 6: s = AutoSlide6()
+        Case 7: s = AutoSlide7()
+        Case 8: s = AutoSlide8()
+        Case Else: s = ""
+    End Select
+    AutoLines = s
+    Exit Function
+Fail:
+    modLog.WriteLogEntry Now, "Предупреждение", "Автовыводы", "modContentZone.AutoLines", _
+        "Слайд " & CStr(slideNo) & ": " & Err.Description
+    AutoLines = ""
+End Function
+
+Private Function AL(ByVal sev As String, ByVal txt As String) As String
+    AL = sev & vbTab & txt & vbLf
+End Function
+
+Private Function AutoSlide1() As String
+    Dim wk As Variant, tail14 As Variant
+    Dim opened() As Double, closedA() As Double, visitsA() As Double, hangA() As Double
+    Dim medA() As Double, partsA() As Double, tabPct() As Double
+    Dim noPost() As Double, uniqVeh() As Double, ret7() As Double
+    Dim n As Long, c As Long, p As Long, s As String, om As Double
+
+    Slide1Series wk, opened, closedA, visitsA, hangA, medA, tail14, partsA, tabPct, _
+        noPost, uniqVeh, ret7
+    n = UBound(wk) + 1
+    If n < 1 Then AutoSlide1 = "": Exit Function
+    c = n - 1
+    If n >= 2 Then p = n - 2 Else p = c
+
+    If closedA(c) < opened(c) Then
+        s = s & AL("warn", "За неделю открыто " & modContentMTO.FmtInt(opened(c)) & _
+            " нарядов, закрыто " & modContentMTO.FmtInt(closedA(c)) & _
+            " - ремзона закрывает меньше, чем получает, очередь растёт.")
+    Else
+        s = s & AL("good", "Закрыто " & modContentMTO.FmtInt(closedA(c)) & _
+            " нарядов при " & modContentMTO.FmtInt(opened(c)) & _
+            " открытых - ремзона успевает за потоком.")
+    End If
+    If n >= 2 Then
+        If hangA(c) > hangA(p) * 1.1 And hangA(c) - hangA(p) >= 5# Then
+            s = s & AL("crit", "Висящих на конец недели " & modContentMTO.FmtInt(hangA(c)) & _
+                " - на " & modContentMTO.FmtInt(hangA(c) - hangA(p)) & _
+                " больше прошлой недели. Разобрать в первую очередь блок нерабочих статусов.")
+        ElseIf hangA(c) < hangA(p) Then
+            s = s & AL("good", "Висящих нарядов стало меньше: " & _
+                modContentMTO.FmtInt(hangA(c)) & " против " & modContentMTO.FmtInt(hangA(p)) & ".")
+        End If
+        If medA(c) > medA(p) * 1.25 And medA(p) > 0# Then
+            s = s & AL("warn", "Медиана срока наряда выросла до " & Hh(medA(c)) & _
+                " (была " & Hh(medA(p)) & ").")
+        End If
+    End If
+    om = OpenOverMonth()
+    If om > 0# Then
+        s = s & AL(IIf(om >= 50#, "crit", "warn"), modContentMTO.FmtInt(om) & _
+            " нарядов открыты больше месяца - это не ремонт, а незакрытые документы.")
+    End If
+    If ret7(c) > 0# Then
+        s = s & AL("warn", "Возвратов в 7 суток за неделю: " & modContentMTO.FmtInt(ret7(c)) & _
+            " - машины вернулись с той же группой дефекта.")
+    End If
+    If noPost(c) > 0# Then
+        s = s & AL("info", "Без поста ремзоны за неделю " & modContentMTO.FmtInt(noPost(c)) & _
+            " нарядов - они не попадают ни в одну ремзону.")
+    End If
+    AutoSlide1 = s
+End Function
+
+Private Function AutoSlide5() As String
+    Dim col As Collection, i As Long, multi As Long, s As String
+    Dim k As Variant, topV As String, topN As Double
+    EnsureVeh
+    Set col = mVisitSizes(CStr(GAP_HOURS))
+    multi = 0
+    For i = 1 To col.Count
+        If CLng(col(i)) > 1 Then multi = multi + 1
+    Next i
+    s = AL("info", "В ремзону заезжало " & modContentMTO.FmtInt(CDbl(mVeh.Count)) & _
+        " машин, заездов " & modContentMTO.FmtInt(CDbl(col.Count)) & ".")
+    If col.Count > 0 Then
+        If SafePct(CDbl(multi), CDbl(col.Count)) >= 30# Then
+            s = s & AL("warn", Pc(SafePct(CDbl(multi), CDbl(col.Count)), 0) & _
+                " заездов дают больше одного наряда - работы по машине дробятся.")
+        End If
+    End If
+    topN = 0#
+    For Each k In mVeh.Keys
+        If CDbl(mVeh(k)(V_ZN)) > topN Then topN = CDbl(mVeh(k)(V_ZN)): topV = CStr(k)
+    Next k
+    If topN >= 5# Then
+        s = s & AL("warn", "Больше всех нарядов у машины " & topV & ": " & _
+            modContentMTO.FmtInt(topN) & " - кандидат в список хроников слайда 6.")
+    End If
+    AutoSlide5 = s
+End Function
+
+Private Function AutoSlide6() As String
+    Dim s As String, pf As Double, pf7 As Double
+    EnsureRet
+    If mDenFail > 0 Then
+        pf = SafePct(CDbl(mFailTot), CDbl(mDenFail))
+        pf7 = SafePct(CDbl(mFailTot7), CDbl(mDenFail))
+        s = s & AL(IIf(pf >= 10#, "crit", IIf(pf >= 5#, "warn", "good")), _
+            "Возвратов по отказу в 30 суток " & Pc(pf, 1) & " (" & _
+            modContentMTO.FmtInt(CDbl(mFailTot)) & " из " & modContentMTO.FmtInt(CDbl(mDenFail)) & _
+            " нарядов-отказов), из них в первую неделю " & Pc(pf7, 1) & ".")
+        If pf > 0# Then
+            If pf7 >= pf * 0.6 Then
+                s = s & AL("warn", "Большинство возвратов случается в первые 7 суток - " & _
+                    "ремонт не устраняет причину, проверять качество приёмки после ремонта.")
+            Else
+                s = s & AL("info", "Возвраты растянуты на месяц - часть из них может быть " & _
+                    "новой поломкой того же узла, а не браком ремонта.")
+            End If
+        End If
+    End If
+    If mDenAll > 0 Then
+        s = s & AL("info", "Возвратов по группе дефекта без отбора отказов: " & _
+            modContentMTO.FmtInt(CDbl(mRetTot)) & " из " & modContentMTO.FmtInt(CDbl(mDenAll)) & _
+            " внеплановых нарядов (" & Pc(SafePct(CDbl(mRetTot), CDbl(mDenAll)), 1) & ").")
+    End If
+    AutoSlide6 = s
+End Function
+
+Private Function AutoSlide7() As String
+    Dim s As String, has As Boolean, med As Double
+    EnsureFlow
+    If mHang.Count > 0 Then
+        s = s & AL(IIf(mHang.Count >= 30, "crit", "warn"), modContentMTO.FmtInt(CDbl(mHang.Count)) & _
+            " нарядов с подписью выбытия так и не закрыты - ремонт сделан, документ висит.")
+    End If
+    If mStuck.Count > 0 Then
+        s = s & AL("warn", modContentMTO.FmtInt(CDbl(mStuck.Count)) & _
+            " машин приняты в ремзону и не выданы (нет подписи выбытия).")
+    End If
+    If mTail.Count > 0 Then
+        s = s & AL("info", "Всего незакрытых нарядов: " & modContentMTO.FmtInt(CDbl(mTail.Count)) & ".")
+    End If
+    med = MedianOf(mCloseH, has)
+    If has Then
+        s = s & AL(IIf(med > 72#, "warn", "info"), "Медиана от подписи выбытия до закрытия наряда - " & _
+            Hh(med) & ": столько наряд числится открытым после фактической выдачи машины.")
+    End If
+    AutoSlide7 = s
+End Function
+
+Private Function AutoSlide8() As String
+    Dim s As String, k As Variant, tot As Double, topP As Double, topV As String
+    EnsureVeh
+    tot = 0#: topP = 0#
+    For Each k In mVeh.Keys
+        tot = tot + CDbl(mVeh(k)(V_PARTS))
+        If CDbl(mVeh(k)(V_PARTS)) > topP Then topP = CDbl(mVeh(k)(V_PARTS)): topV = CStr(k)
+    Next k
+    If tot > 0# Then
+        s = s & AL("info", "Материалов списано на " & Rub(tot) & "; самая дорогая машина - " & _
+            topV & " (" & Rub(topP) & ", " & Pc(SafePct(topP, tot), 1) & " расхода).")
+    End If
+    If mRows > 0 Then
+        If SafePct(CDbl(mArmNone), CDbl(mRows)) >= 20# Then
+            s = s & AL("warn", Pc(SafePct(CDbl(mArmNone), CDbl(mRows)), 0) & _
+                " событий подписания без подписи (НЕ ПОДПИСАНО) - дыра в контроле, см. слайд 4.")
+        End If
+    End If
+    If mBadClosed > 0 Then
+        s = s & AL("warn", modContentMTO.FmtInt(CDbl(mBadClosed)) & _
+            " нарядов с невозможной датой закрытия (раньше создания или позже года) - брак учёта.")
+    End If
+    AutoSlide8 = s
 End Function

@@ -26,6 +26,10 @@ Attribute VB_Name = "modMain"
 '   (вехи/тайминги) в LoadSourceFile и LoadPackage, сортировка ListJsonFiles
 '   по дате/времени из имени файла.
 '
+' v9.0 (29.09.2026) - свёртка истории: modRollup.RollupBeforeLoad перед Refresh
+'   в LoadSourceFile и LoadPackage; в GenerateReport ошибка слоя ИИ проверяется
+'   после каждого шага (задача 9.5 docs/task-rep-v3.md).
+'
 ' v7.1 (08.09.2026) - ключ ИИ вынесен за пределы книги:
 '   ResolveAiApiKey: AI_API_KEY (переменная окружения) -> %APPDATA%\ReportMTO\deepseek.key
 '   (UTF-8) -> лист Variable (legacy, с предупреждением в лог). Ключ в лог и HTML не пишется.
@@ -47,6 +51,11 @@ Public Sub LoadSourceFile()
     Dim t0 As Single
     t0 = Timer
     modLog.WriteDebug 2, "Загрузка данных", "LoadSourceFile", "Старт (строк до: " & rowsBefore & ")"
+
+    ' v9.0: свёртка истории ДО Refresh - ретеншн Power Query удалит только то,
+    ' что уже лежит в tbARCHIVE (modRollup, qRollupUntil). Ошибка свёртки загрузку
+    ' не останавливает: водяной знак не сдвигается, и ничего лишнего не удаляется.
+    modRollup.RollupBeforeLoad
 
     SetSourcePathParameter CStr(filePath)
     ' Итог этапа 1/3 (вариант А - логирование в оркестраторе): полный путь нужен для
@@ -132,6 +141,8 @@ Public Sub LoadPackage()
     modLog.WriteDebug 2, "Загрузка пакета", "LoadPackage", "Старт (строк до: " & rowsBeforePkg & ")"
 
     ClearLogs
+    ' v9.0: свёртка - до пересборки, пока в tbDATA лежат прежние строки.
+    modRollup.RollupBeforeLoad
     ClearTbData
 
     ' Манифест очереди (ТЗ v1.0, п.2.2): одна запись «Веха» ДО Refresh - перечень
@@ -423,15 +434,43 @@ Public Sub GenerateReport()
     parsedOK = False
 
     ' --- Внешний ИИ: неуспех здесь НЕ блокирует выдачу отчёта (Core §11.3) ---
+    ' v9.0 (задача 9.5): ошибка проверяется после КАЖДОГО шага и в журнал пишется,
+    ' какой именно шаг не прошёл. Раньше одна общая проверка Err на три шага: нет
+    ' ключа AI/ENDPOINT - и в журнале «запрос пропущен» без указания причины.
     On Error Resume Next
     Dim endpoint As String, apiKey As String, requestBody As String, responseText As String
+    Dim aiStepErr As String
+    aiStepErr = ""
     endpoint = GetVariable("AI/ENDPOINT")
-    apiKey = ResolveAiApiKey()
+    If Err.Number <> 0 Then
+        aiStepErr = "шаг 1/3 - ключ AI/ENDPOINT на листе Variable: " & Err.Description
+        Err.Clear
+    End If
+    If aiStepErr = "" Then
+        apiKey = ResolveAiApiKey()
+        If Err.Number <> 0 Then
+            aiStepErr = "шаг 2/3 - ключ API: " & Err.Description
+            Err.Clear
+        ElseIf Len(apiKey) = 0 Then
+            aiStepErr = "шаг 2/3 - ключ API не найден (AI_API_KEY / deepseek.key / Variable)"
+        End If
+    End If
 
     Application.StatusBar = "Формирование запроса к ИИ..."
-    requestBody = modContentMTO.BuildPrompt()
+    If aiStepErr = "" Then
+        requestBody = modContentMTO.BuildPrompt()
+        If Err.Number <> 0 Then
+            aiStepErr = "шаг 3/3 - сборка промпта (ключ AI/MODEL?): " & Err.Description
+            Err.Clear
+        End If
+    End If
+    If aiStepErr <> "" Then
+        modLog.WriteLogEntry Now, "Предупреждение", "Формирование отчёта", "DeepSeek", _
+            "Запрос к ИИ не отправлен, " & aiStepErr & _
+            ". Выводы слайдов будут собраны автоматически по правилам."
+    End If
 
-    If Err.Number = 0 And requestBody <> "" Then
+    If aiStepErr = "" And requestBody <> "" Then
         modLog.WriteDebug 1, "Формирование отчёта", "BuildPrompt", _
             "Запрос к ИИ собран: " & Len(requestBody) & " символов"
         modLog.WriteDebug 2, "Формирование отчёта", "BuildPrompt", _
