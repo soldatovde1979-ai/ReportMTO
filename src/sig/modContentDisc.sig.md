@@ -146,4 +146,4 @@ CONTENT-слой части «Дисциплина» отчёта МТО (сла
 
 ### Изменены
 - `EnsureDisc`: при нескольких записях статуса берётся самая ранняя подпись (задача 1.6); месячные счётчики `mMonTot/mMonTab`.
-- `FillDiscPlaceholders`: `BLOCK_HISTORY_DENT/DGM`.
+- `FillDiscPlaceholders`: `BLOCK_HISTORY_DENT/DGM`; `modMain.ShowProgress` перед слайдами 2–4.

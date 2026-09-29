@@ -1508,6 +1508,7 @@ Public Sub FillDiscPlaceholders(ByVal d As Object)
     ' недели -> приёмка против выдачи -> ремзоны -> люди -> подразделения -> подписи.
     ' Снята «Таблица 1» (BuildBlock1): она повторяла матрицу BLOCK_WEEKS_*, стоявшую
     ' прямо над ней. Функция BuildBlock1 оставлена в коде невызываемой.
+    modMain.ShowProgress 78, "слайд 2 из 8: планшет ДЭНТ"
     d("BLOCK_WEEKS_DENT") = modContentZone.PeriodCap(w8) & BuildWeeksTable("ДЭНТ")
     d("BLOCK_POSTS_DENT") = modContentZone.PeriodCap(wl) & BuildPostsTable("ДЭНТ")
     d("BLOCK_PEOPLE_DENT") = modContentZone.PeriodCap(w4) & BuildPeople("ДЭНТ")
@@ -1517,6 +1518,7 @@ Public Sub FillDiscPlaceholders(ByVal d As Object)
     modLog.WriteDebug 1, "Дисциплина", "FillDiscPlaceholders", _
         "Слайд 2 готов: " & Round(Timer - t0, 2) & " c"
 
+    modMain.ShowProgress 84, "слайд 3 из 8: планшет ДГМ"
     d("BLOCK_WEEKS_DGM") = modContentZone.PeriodCap(w8) & BuildWeeksTable("ДГМ")
     d("BLOCK_POSTS_DGM") = modContentZone.PeriodCap(wl) & BuildPostsTable("ДГМ")
     d("BLOCK_PEOPLE_DGM") = modContentZone.PeriodCap(w4) & BuildPeople("ДГМ")
@@ -1531,6 +1533,7 @@ Public Sub FillDiscPlaceholders(ByVal d As Object)
     ' давали две одинаковые копии. Разрез по виду ремонта заменил прежний
     ' BLOCK_UNSIGNED_ZNTYPE - у них была одна и та же выборка и один и тот же
     ' разрез, но таблица даёт ещё и проценты. BuildUnsignedZnType остаётся в коде.
+    modMain.ShowProgress 90, "слайд 4 из 8: не подписано"
     d("KPI_UNSIGNED") = modContentZone.PeriodCap(ytd) & BuildKpiUnsigned()
     d("BLOCK_UNSIGNED_AGE") = modContentZone.PeriodCap(ytd) & BuildUnsignedAge()
     d("BLOCK_UNSIGNED_POST") = modContentZone.PeriodCap(ytd) & BuildUnsignedPost()

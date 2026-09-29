@@ -99,3 +99,18 @@ CORE-модуль, оркестрация (Architecture Core §11). Обрабо
 ### Изменены
 - `LoadSourceFile`, `LoadPackage`: `modRollup.RollupBeforeLoad` до Refresh (в `LoadPackage` — до пересборки).
 - `GenerateReport`: ошибка слоя ИИ проверяется после каждого шага (ENDPOINT → ключ API → промпт), в журнал пишется номер шага; пустой ключ API — запрос не отправляется (задача 9.5).
+
+## Дополнения 29.09.2026 (код v9.1) — прогресс сборки
+
+### ShowProgress(pct As Long, stage As String)
+- Назначение: индикатор сборки — строка состояния и полоса на листе `Main`; `pct = 0` — старт отсчёта времени.
+- Побочные эффекты: `Application.StatusBar`, фигуры `PRG_TRACK/PRG_BAR/PRG_TEXT` на листе `Main` (создаются при первом вызове), `DoEvents`. Вне сборки (флаг `mBusy`) — ничего. Ошибки глушатся.
+
+### EndProgress(Optional failedStage As String = "")
+- Назначение: конец сборки: успех — скрыть полосу и сбросить строку состояния; ошибка — красная полоса с этапом.
+
+### DrawProgress, FindShape, HideProgressShapes (private)
+- Назначение: отрисовка, поиск и скрытие фигур индикатора.
+
+### Изменены
+- `GenerateReport`, `DebugGenerateOffline`: защита от повторного запуска (`mBusy`), вызовы `ShowProgress` по этапам, `EndProgress` в выходе и обработчике ошибок.

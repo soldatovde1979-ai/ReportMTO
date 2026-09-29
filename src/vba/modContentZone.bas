@@ -4738,6 +4738,7 @@ Public Sub FillZonePlaceholders(ByVal d As Object)
     snap = "весь снимок: " & Format$(CDate(SnapFrom()), "dd.mm.yyyy") & " " & _
         ChrW$(&H2192) & " " & Format$(CDate(SnapshotEnd()), "dd.mm.yyyy")
 
+    modMain.ShowProgress 28, "слайд 1 из 8: обзор недели"
     d("KPI_OVERVIEW") = PeriodCap(wl & "; спарклайны и дельта - " & w8) & BuildKpiOverview()
     d("BLOCK_ZNTYPE_FLOW_HANG") = PeriodCap(ytd & "; колонка «за неделю» - " & wl) & _
         BuildZnTypeFlowHang()
@@ -4753,6 +4754,7 @@ Public Sub FillZonePlaceholders(ByVal d As Object)
     modLog.WriteDebug 1, "Техника", "FillZonePlaceholders", _
         "Слайд 1 готов: " & Round(Timer - t0, 2) & " c"
 
+    modMain.ShowProgress 42, "слайд 5 из 8: парк и заезды"
     d("KPI_FLEET") = PeriodCap(snap & "; заезды за неделю - " & wl) & BuildKpiFleet()
     d("BLOCK_POSTS_WEEK") = PeriodCap(wl) & BuildPostsWeek()
     d("BLOCK_AGE_CURVE") = PeriodCap(snap) & BuildAgeCurve()
@@ -4764,6 +4766,7 @@ Public Sub FillZonePlaceholders(ByVal d As Object)
     modLog.WriteDebug 1, "Техника", "FillZonePlaceholders", _
         "Слайд 5 готов: " & Round(Timer - t0, 2) & " c"
 
+    modMain.ShowProgress 52, "слайд 6 из 8: дефекты и возвраты"
     d("BLOCK_CHRONICS") = PeriodCap(ytd & "; заезды - " & snap) & BuildChronics()
     ' Перенесён со слайда 1: дефекты - тема этого слайда. Недельный срез стоит
     ' перед годовым Парето: «что ломалось на неделе» против «что ломается всегда».
@@ -4798,6 +4801,7 @@ Public Sub FillZonePlaceholders(ByVal d As Object)
     modLog.WriteDebug 1, "Техника", "FillZonePlaceholders", _
         "Слайд 6 готов: " & Round(Timer - t0, 2) & " c"
 
+    modMain.ShowProgress 64, "слайд 7 из 8: сутки в ремзоне"
     d("BLOCK_PHASES") = PeriodCap(w8) & BuildPhases()
     d("BLOCK_PHASES_ZNTYPE") = PeriodCap(ytd) & BuildPhasesByType()
     d("BLOCK_REPEAT_TOP_VEH_YTD") = PeriodCap(ytd) & BuildRepeatTopVeh(False)
@@ -4820,6 +4824,7 @@ Public Sub FillZonePlaceholders(ByVal d As Object)
     modLog.WriteDebug 1, "Техника", "FillZonePlaceholders", _
         "Слайд 7 готов: " & Round(Timer - t0, 2) & " c"
 
+    modMain.ShowProgress 74, "слайд 8 из 8: материалы и учёт"
     d("KPI_PARTS") = PeriodCap(ytd) & BuildKpiParts()
     d("BLOCK_ABC") = PeriodCap(ytd) & BuildAbc()
     d("BLOCK_MONEY_DEFEKT") = PeriodCap(ytd) & BuildMoneyDefekt()

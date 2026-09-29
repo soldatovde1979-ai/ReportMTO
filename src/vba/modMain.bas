@@ -26,6 +26,8 @@ Attribute VB_Name = "modMain"
 '   (вехи/тайминги) в LoadSourceFile и LoadPackage, сортировка ListJsonFiles
 '   по дате/времени из имени файла.
 '
+' v9.1 (29.09.2026) - прогресс сборки отчёта: ShowProgress / EndProgress (строка
+'   состояния + полоса на листе Main), защита от повторного запуска во время сборки.
 ' v9.0 (29.09.2026) - свёртка истории: modRollup.RollupBeforeLoad перед Refresh
 '   в LoadSourceFile и LoadPackage; в GenerateReport ошибка слоя ИИ проверяется
 '   после каждого шага (задача 9.5 docs/task-rep-v3.md).
@@ -34,6 +36,11 @@ Attribute VB_Name = "modMain"
 '   ResolveAiApiKey: AI_API_KEY (переменная окружения) -> %APPDATA%\ReportMTO\deepseek.key
 '   (UTF-8) -> лист Variable (legacy, с предупреждением в лог). Ключ в лог и HTML не пишется.
 Option Explicit
+
+' Прогресс сборки отчёта (v9.1): см. ShowProgress / EndProgress в конце модуля.
+Private mPrgT0 As Single
+Private mPrgStage As String
+Private mBusy As Boolean
 
 Public Sub LoadSourceFile()
     Dim filePath As Variant
@@ -404,9 +411,17 @@ ErrHandler:
 End Sub
 
 Public Sub GenerateReport()
+    ' v9.1: повторное нажатие кнопки во время сборки. DoEvents в ShowProgress
+    ' пропускает клики, и без этой защиты вторая сборка пошла бы поверх первой.
+    If mBusy Then
+        modLog.WriteLogEntry Now, "Предупреждение", "Формирование отчёта", "GenerateReport", _
+            "Отчёт уже формируется - повторный запуск пропущен."
+        Exit Sub
+    End If
+    mBusy = True
     On Error GoTo ErrHandler
 
-    Application.StatusBar = "Подготовка данных..."
+    ShowProgress 0, "подготовка данных"
 
     Dim t0 As Single
     t0 = Timer
@@ -425,7 +440,9 @@ Public Sub GenerateReport()
         GoTo CleanExit
     End If
 
+    ShowProgress 3, "снимок данных tbDATA"
     modContentMTO.BuildPivots ' пересчёт на случай, если отчёт формируют без предварительной загрузки
+    ShowProgress 10, "данные готовы"
     modLog.WriteDebug 1, "Формирование отчёта", "GenerateReport", _
         "BuildPivots завершён: " & Round(Timer - t0, 2) & " c"
 
@@ -456,7 +473,7 @@ Public Sub GenerateReport()
         End If
     End If
 
-    Application.StatusBar = "Формирование запроса к ИИ..."
+    ShowProgress 12, "сборка запроса к ИИ"
     If aiStepErr = "" Then
         requestBody = modContentMTO.BuildPrompt()
         If Err.Number <> 0 Then
@@ -475,7 +492,7 @@ Public Sub GenerateReport()
             "Запрос к ИИ собран: " & Len(requestBody) & " символов"
         modLog.WriteDebug 2, "Формирование отчёта", "BuildPrompt", _
             "Тело запроса: " & Left$(requestBody, 20000)
-        Application.StatusBar = "Ожидание ответа внешнего ИИ (до 60 сек)..."
+        ShowProgress 15, "ожидание ответа ИИ (до 60 с, полоса стоит)"
         responseText = modAIGateway.PostJSON(endpoint, apiKey, requestBody)
     Else
         modLog.WriteDebug 1, "Формирование отчёта", "DeepSeek", _
@@ -506,7 +523,7 @@ Public Sub GenerateReport()
     End If
 
     ' --- Сборка отчёта ---
-    Application.StatusBar = "Сборка HTML-отчёта..."
+    ShowProgress 25, "сборка слайдов"
     Dim placeholders As Object
     Set placeholders = modContentMTO.BuildPlaceholders(slide3, slide4, slide5)
     modLog.WriteDebug 1, "Формирование отчёта", "BuildPlaceholders", _
@@ -515,6 +532,7 @@ Public Sub GenerateReport()
     Dim templatePath As String
     templatePath = ThisWorkbook.Path & "\tmp_index.html"
 
+    ShowProgress 94, "сборка HTML"
     Dim html As String
     html = modHTMLEngine.RenderTemplate(templatePath, placeholders)
     modLog.WriteDebug 1, "Формирование отчёта", "RenderTemplate", _
@@ -523,6 +541,7 @@ Public Sub GenerateReport()
     Dim resultFolder As String
     resultFolder = GetVariable("OUTPUT/RESULT_FOLDER")
 
+    ShowProgress 97, "сохранение файла"
     Dim savedPath As String
     savedPath = modHTMLEngine.SaveHTMLFile(html, resultFolder)
     modLog.WriteDebug 1, "Формирование отчёта", "SaveHTMLFile", _
@@ -537,7 +556,8 @@ Public Sub GenerateReport()
 
 CleanExit:
     modAggregate.EndSnapshot
-    Application.StatusBar = False
+    EndProgress
+    mBusy = False
     Exit Sub
 
 ErrHandler:
@@ -547,7 +567,8 @@ ErrHandler:
         "Падение через " & Round(Timer - t0, 2) & " c от старта: " & Err.Number & _
         " (" & Err.Description & ")"
     modAggregate.EndSnapshot
-    Application.StatusBar = False
+    EndProgress mPrgStage
+    mBusy = False
     modLog.WriteLogEntry Now, "Ошибка", "Формирование отчёта", "GenerateReport", _
         "Не удалось сформировать отчёт: " & Err.Description
 End Sub
@@ -556,7 +577,10 @@ End Sub
 ' заглушками ИИ-выводов. Нужен для прогона Блоков 1-9 на обезличенном тестовом JSON,
 ' не тратя токены и не завися от доступности провайдера.
 Public Sub DebugGenerateOffline()
+    If mBusy Then Exit Sub
+    mBusy = True
     On Error GoTo ErrHandler
+    ShowProgress 0, "подготовка данных (отладка, без ИИ)"
 
     If SafeRowCount() = 0 Then
         modLog.WriteLogEntry Now, "Ошибка", "Отладочный отчёт", "DebugGenerateOffline", _
@@ -566,6 +590,7 @@ Public Sub DebugGenerateOffline()
 
     modContentMTO.BuildPivots
 
+    ShowProgress 25, "сборка слайдов"
     Const STUB As String = "[offline] Внешний ИИ не вызывался - отладочный прогон."
     Dim placeholders As Object
     Set placeholders = modContentMTO.BuildPlaceholders(STUB, STUB, STUB)
@@ -586,14 +611,19 @@ Public Sub DebugGenerateOffline()
     Dim path As String
     path = folder & "\debug_" & Format(Now, "yyyymmdd_hhnnss") & ".html"
 
+    ShowProgress 97, "сохранение файла"
     modHTMLEngine.WriteUtf8 path, html
     modAggregate.EndSnapshot
+    EndProgress
+    mBusy = False
 
     modLog.WriteLogEntry Now, "Инфо", "Отладочный отчёт", folder, "Сохранён: " & path
     Exit Sub
 
 ErrHandler:
     modAggregate.EndSnapshot
+    EndProgress mPrgStage
+    mBusy = False
     modLog.WriteLogEntry Now, "Ошибка", "Отладочный отчёт", "DebugGenerateOffline", Err.Description
 End Sub
 
@@ -726,4 +756,125 @@ Public Sub SetVariable(key As String, value As String)
     Set r = lo.ListRows.Add
     r.Range.Cells(1, 1).Value = key
     r.Range.Cells(1, 2).Value = value
+End Sub
+
+' =====================================================================================
+' Прогресс сборки отчёта (v9.1 от 29.09.2026). Два индикатора сразу:
+'   - строка состояния Excel: «Отчёт: [####....] 40 % · Слайд 5 · 42 с»;
+'   - полоса на листе Main под кнопками (фигуры PRG_BACK / PRG_BAR создаются сами).
+' DoEvents после отрисовки: без него Excel во время сборки не перерисовывает окно,
+' и прогресс не виден. Ошибка отрисовки сборку не роняет - индикатор вторичен.
+' =====================================================================================
+Public Sub ShowProgress(ByVal pct As Long, ByVal stage As String)
+    Dim nCells As Long, filled As Long, bar As String, secs As Long
+    If Not mBusy Then Exit Sub   ' вне сборки отчёта (самотест, сверка) индикатор не нужен
+    On Error GoTo Quiet
+    mPrgStage = stage
+    If pct <= 0 Then mPrgT0 = Timer
+    If pct < 0 Then pct = 0
+    If pct > 100 Then pct = 100
+    secs = CLng(Timer - mPrgT0)
+    If secs < 0 Then secs = secs + 86400    ' переход через полночь
+    nCells = 20
+    filled = CLng(pct * nCells / 100)
+    ' Replace(Space$), а не String$: так символ вне ANSI гарантированно не искажается.
+    bar = Replace$(Space$(filled), " ", ChrW$(&H25A0)) & Replace$(Space$(nCells - filled), " ", ChrW$(&H25A1))
+    Application.StatusBar = "Отчёт: " & bar & " " & CStr(pct) & " % " & ChrW$(&HB7) & " " & _
+        stage & " " & ChrW$(&HB7) & " " & CStr(secs) & " с"
+    DrawProgress pct, stage & " " & ChrW$(&HB7) & " " & CStr(pct) & " % " & ChrW$(&HB7) & _
+        " " & CStr(secs) & " с", False
+    DoEvents
+    Exit Sub
+Quiet:
+    Err.Clear
+End Sub
+
+' Конец сборки: успех - полоса и строка состояния убираются; ошибка - полоса
+' остаётся красной с названием этапа, чтобы было видно, где остановилось.
+Public Sub EndProgress(Optional ByVal failedStage As String = "")
+    On Error GoTo Quiet
+    Application.StatusBar = False
+    If Len(failedStage) = 0 Then
+        HideProgressShapes
+    Else
+        DrawProgress 100, "Ошибка на этапе: " & failedStage & " " & ChrW$(&H2014) & _
+            " подробности в журнале", True
+    End If
+    Exit Sub
+Quiet:
+    Err.Clear
+End Sub
+
+Private Sub DrawProgress(ByVal pct As Long, ByVal txt As String, ByVal isError As Boolean)
+    Dim ws As Worksheet, tr As Shape, br As Shape, lb As Shape, shp As Shape
+    Dim topY As Double, leftX As Double
+    Const W As Double = 420#
+    Const H As Double = 26#
+    On Error GoTo Quiet
+    Set ws = ThisWorkbook.Worksheets("Main")
+    ' Три фигуры: серая дорожка, цветная полоса поверх неё, прозрачная подпись сверху.
+    Set tr = FindShape(ws, "PRG_TRACK")
+    Set br = FindShape(ws, "PRG_BAR")
+    Set lb = FindShape(ws, "PRG_TEXT")
+    If tr Is Nothing Then
+        ' Место - под самой нижней фигурой листа (кнопками), слева по ней же.
+        topY = 10#: leftX = 10#
+        For Each shp In ws.Shapes
+            If Left$(shp.Name, 4) <> "PRG_" Then
+                If shp.Top + shp.Height + 12# > topY Then
+                    topY = shp.Top + shp.Height + 12#
+                    leftX = shp.Left
+                End If
+            End If
+        Next shp
+        Set tr = ws.Shapes.AddShape(1, leftX, topY, W, H)     ' 1 = msoShapeRectangle
+        tr.Name = "PRG_TRACK"
+        tr.Fill.ForeColor.RGB = RGB(230, 230, 230)
+        tr.Line.ForeColor.RGB = RGB(160, 160, 160)
+    End If
+    If br Is Nothing Then
+        Set br = ws.Shapes.AddShape(1, tr.Left, tr.Top, 1#, tr.Height)
+        br.Name = "PRG_BAR"
+        br.Line.Visible = False
+    End If
+    If lb Is Nothing Then
+        Set lb = ws.Shapes.AddShape(1, tr.Left, tr.Top, tr.Width, tr.Height)
+        lb.Name = "PRG_TEXT"
+        lb.Fill.Visible = False
+        lb.Line.Visible = False
+        lb.TextFrame2.TextRange.Font.Size = 10
+        lb.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(20, 20, 20)
+    End If
+    tr.Visible = True: br.Visible = True: lb.Visible = True
+    br.Left = tr.Left: br.Top = tr.Top: br.Height = tr.Height
+    If pct <= 0 Then br.Width = 1# Else br.Width = tr.Width * pct / 100#
+    If isError Then
+        br.Fill.ForeColor.RGB = RGB(208, 59, 59)
+    Else
+        br.Fill.ForeColor.RGB = RGB(120, 170, 235)
+    End If
+    lb.Left = tr.Left: lb.Top = tr.Top: lb.Width = tr.Width: lb.Height = tr.Height
+    br.ZOrder 0     ' msoBringToFront: полоса над дорожкой
+    lb.ZOrder 0     ' подпись над полосой
+    lb.TextFrame2.TextRange.Text = txt
+    Exit Sub
+Quiet:
+    Err.Clear
+End Sub
+
+Private Function FindShape(ByVal ws As Worksheet, ByVal nm As String) As Shape
+    Set FindShape = Nothing
+    On Error Resume Next
+    Set FindShape = ws.Shapes(nm)
+    Err.Clear
+End Function
+
+Private Sub HideProgressShapes()
+    Dim ws As Worksheet
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets("Main")
+    ws.Shapes("PRG_TRACK").Visible = False
+    ws.Shapes("PRG_BAR").Visible = False
+    ws.Shapes("PRG_TEXT").Visible = False
+    Err.Clear
 End Sub

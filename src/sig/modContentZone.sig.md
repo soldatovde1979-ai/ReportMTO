@@ -618,4 +618,4 @@ CONTENT-слой части «Техника» отчёта МТО (слайды
 - `BuildRetKpi`: плитки «по подкатегории / по группе» × «7 / 30 суток» + медиана.
 - `IsoYearWeek`: ISO-8601 через четверг недели (без `DatePart`).
 - `ZoneReportWeek`: учитывает явный `REPORT/WEEK` (номер или ГГГГНН).
-- `FillZonePlaceholders`: пары `BLOCK_RET_*` / `BLOCK_RET_*_7`, `BLOCK_RET_ARM_SEC(_7)`, `BLOCK_PHASES_ZNTYPE`.
+- `FillZonePlaceholders`: `modMain.ShowProgress` перед слайдами 1, 5–8; пары `BLOCK_RET_*` / `BLOCK_RET_*_7`, `BLOCK_RET_ARM_SEC(_7)`, `BLOCK_PHASES_ZNTYPE`.
