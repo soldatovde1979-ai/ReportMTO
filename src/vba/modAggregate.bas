@@ -3,6 +3,9 @@ Attribute VB_Name = "modAggregate"
 ' Нужен там, где классический PivotTable (без Data Model) не справляется: Distinct Count,
 ' % от группы, сортировка/топ-N, попарные сравнения между строками.
 '
+' v3.3 (29.09.2026): RowMatchesFilters - оператор фильтра определяется по первому
+'   символу из «@», «<», «=» (ФАЗА 4.1, латентный дефект «по левому вхождению»).
+'
 ' v3.1 (правки по ревью 24.08.2026):
 '   P0-1  - все массивы принимаются как Variant (VBA не допускает Optional-массивы и требует
 '           точного совпадения типа у параметра-массива; Array(...) - всегда Variant).
@@ -154,18 +157,25 @@ Private Function RowMatchesFilters(r As Long, filters As Variant) As Boolean
         Dim f As String: f = CStr(filters(i))
         If Len(f) > 0 Then
             Dim opPos As Long, op As String, col As String, val As String
-            opPos = InStr(f, "@=")
-            If opPos > 0 Then
+            Dim scanI As Long, ch1 As String
+            ' v3.3 (29.09.2026, ФАЗА 4.1): оператор - ПЕРВЫЙ символ из «@», «<», «=».
+            ' Прежний разбор искал «@=», затем «<>», затем «=» по всей строке, и значение
+            ' с «<>» или «@=» внутри («zn_type=А<>Б») резало фильтр не там. Имена
+            ' столбцов этих символов не содержат, значение может содержать что угодно.
+            opPos = 0
+            For scanI = 1 To Len(f)
+                ch1 = Mid$(f, scanI, 1)
+                If ch1 = "@" Or ch1 = "<" Or ch1 = "=" Then opPos = scanI: Exit For
+            Next scanI
+            If opPos = 0 Then Err.Raise vbObjectError + 4, , "Неверный фильтр: " & f
+            If Mid$(f, opPos, 2) = "@=" Then
                 op = "@=": col = Left$(f, opPos - 1): val = Mid$(f, opPos + 2)
+            ElseIf Mid$(f, opPos, 2) = "<>" Then
+                op = "<>": col = Left$(f, opPos - 1): val = Mid$(f, opPos + 2)
+            ElseIf Mid$(f, opPos, 1) = "=" Then
+                op = "=": col = Left$(f, opPos - 1): val = Mid$(f, opPos + 1)
             Else
-                opPos = InStr(f, "<>")
-                If opPos > 0 Then
-                    op = "<>": col = Left$(f, opPos - 1): val = Mid$(f, opPos + 2)
-                Else
-                    opPos = InStr(f, "=")
-                    If opPos = 0 Then Err.Raise vbObjectError + 4, , "Неверный фильтр: " & f
-                    op = "=": col = Left$(f, opPos - 1): val = Mid$(f, opPos + 1)
-                End If
+                Err.Raise vbObjectError + 4, , "Неверный фильтр: " & f
             End If
 
             Dim cellVal As String

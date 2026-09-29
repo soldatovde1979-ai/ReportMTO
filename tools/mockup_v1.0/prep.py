@@ -3,7 +3,10 @@
 import json, os, re, datetime, collections, statistics
 
 HOME = os.environ['HOME']
-SRC  = os.path.join(HOME, 'mnt', 'ReportMTO', 'data', 'pri.json')
+# 29.09.2026: путь к выгрузке больше не зашит под Linux-сессию ($HOME/mnt/.../pri.json,
+# файла давно нет). Порядок: переменная окружения MTO_SRC -> образец из репозитория.
+_REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+SRC  = os.environ.get('MTO_SRC') or os.path.join(_REPO, 'examples', 'ForGrateClaude_22020rec.json')
 
 PLAN_PREFIX = ('ТО', 'СТО', 'ЧТО', 'ПТО', 'ГТО')
 PLAN_EXACT  = {'Обслуживание при выпуске', 'Omnicomm'}

@@ -215,8 +215,16 @@ Private Sub EnsureDisc()
                     fa = E_LD: ft = E_TLD
                 End If
             End If
-            e(fa) = arm
-            e(ft) = sd
+            ' v1.7 (задача 1.6): при нескольких записях одного статуса берётся САМАЯ
+            ' РАННЯЯ подпись - как в modContentZone (минимальная дата). Раньше побеждала
+            ' последняя строка таблицы, и «приёмка -> выбытие» на слайдах 2-3 и 7
+            ' считалась от разных отметок. Неподписанная строка не затирает подписанную.
+            If CDbl(e(ft)) = 0# Or (sd > 0# And sd < CDbl(e(ft))) Then
+                If sd > 0# Or Len(CStr(e(fa))) = 0 Then
+                    e(fa) = arm
+                    e(ft) = sd
+                End If
+            End If
             mOrd(num) = e
 
             If signed And sd > 0# Then
@@ -1581,8 +1589,9 @@ Private Function AutoDir(ByVal dirName As String) As String
     Dim lowCnt As Long, pt As Double, pb As Double
 
     EnsureDisc
-    norma = modContentZone.ToNum(Replace(modMain.GetVariableDef("NormaForPlanshet", "90"), ",", "."))
-    proval = modContentZone.ToNum(Replace(modMain.GetVariableDef("ProvalForPlanshet", "50"), ",", "."))
+    ' Val, а не CDbl: не зависит от десятичного разделителя локали (как в modContentMTO).
+    norma = Val(Replace(modMain.GetVariableDef("NormaForPlanshet", "90"), ",", "."))
+    proval = Val(Replace(modMain.GetVariableDef("ProvalForPlanshet", "50"), ",", "."))
     If norma <= 0# Then norma = 90#
     If proval <= 0# Then proval = 50#
     minRec = modContentZone.ToNum(modMain.GetVariableDef("REPORT/MIN_POST_RECORDS", "10"))
