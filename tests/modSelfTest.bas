@@ -20,6 +20,9 @@ Option Explicit
 '   - ParseAIResponse: fake-ответ на 4 слайда; контракт параметров наружу slide3/4/5
 '     = слайды 2/3/4 (слайд 1 - только кэш mInsights);
 '   - HTML: drill-dump в шаблоне v3.0 больше нет - проверки на mto-report/slide-nav.
+' Версия 1.3 от 29.09.2026: STUB_FALLBACK/STUB_OFFLINE/HTML_OFFLINE - автовывод по правилам
+'   вместо заглушки; новые проверки: период на слайдах, <title>, «Главное за неделю»,
+'   два окна возвратов, блок истории, строки «Зачем».
 ' Файл хранится в UTF-8; перед импортом в VBE перекодируется в ANSI 1251
 ' скриптом run-e2e-tests-v1.ps1 (редактор VBA читает .bas только в ANSI).
 
@@ -105,8 +108,15 @@ Public Sub SelfTest()
     Dim s2b As String
     s2b = CStr(d2("AI_INSIGHT_SLIDE_2"))
     WLine "CHECK:STUB_NO_STALE=" & B2S(InStr(s1b, "Обзор:") = 0)
-    WLine "CHECK:STUB_FALLBACK=" & B2S(InStr(s1b, "Внешний ИИ недоступен") > 0)
-    WLine "CHECK:STUB_OFFLINE=" & B2S(InStr(s2b, "[offline]") > 0)
+    ' v1.3 (29.09.2026): вместо заглушки «ИИ недоступен» - автовывод по правилам,
+    ' источник подписан под списком (modContentMTO v8.5).
+    WLine "CHECK:STUB_FALLBACK=" & B2S(InStr(s1b, "автовывод по правилам") > 0)
+    WLine "CHECK:STUB_OFFLINE=" & B2S(InStr(s2b, "автовывод по правилам") > 0 And InStr(s2b, "[offline]") = 0)
+    WLine "CHECK:PERIOD_CHIP=" & B2S(InStr(CStr(d2("REPORT_PERIOD_CHIP")), "отчётная неделя") > 0)
+    WLine "CHECK:TITLE_TAG=" & B2S(InStr(CStr(d2("REPORT_TITLE_TAG")), "неделя") > 0)
+    WLine "CHECK:EXEC_SUMMARY=" & B2S(Left$(CStr(d2("EXEC_SUMMARY")), 4) = "<ul>")
+    WLine "CHECK:RET_TWO_WINDOWS=" & B2S(d2.Exists("BLOCK_RET_ARM_7") And d2.Exists("BLOCK_RET_ARM"))
+    WLine "CHECK:HISTORY_DGM=" & B2S(Len(CStr(d2("BLOCK_HISTORY_DGM"))) > 0)
 
     ' 6. Полная сборка HTML и контроль содержимого (шаблон v3.0, 4 слайда)
     modContentMTO.BuildPivots
@@ -119,7 +129,8 @@ Public Sub SelfTest()
     WLine "CHECK:HTML_NAV=" & B2S(InStr(html, "slide-nav") > 0)
     WLine "CHECK:HTML_SVG=" & B2S(InStr(html, "<svg") > 0)
     WLine "CHECK:HTML_TITLE=" & B2S(InStr(html, "Отчёт МТО") > 0)
-    WLine "CHECK:HTML_OFFLINE=" & B2S(InStr(html, "[offline]") > 0)
+    WLine "CHECK:HTML_OFFLINE=" & B2S(InStr(html, "автовывод по правилам") > 0)
+    WLine "CHECK:HTML_WHY=" & B2S(InStr(html, "class=""why""") > 0)
     WLine "CHECK:HTML_PEOPLE=1"
     WLine "CHECK:HTML_ZNTYPE=" & B2S(InStr(html, "Внеплановый ремонт") > 0)
 

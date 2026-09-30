@@ -1,7 +1,7 @@
 # modContentZone
 
 Статус: CLEAN
-Обновлено: 17.09.2026
+Обновлено: 29.09.2026
 
 ## Назначение
 CONTENT-слой части «Техника» отчёта МТО (слайды 1 и 5–8) + общие примитивы для `modContentDisc`. За один проход по снимку `tbDATA` строит уровни: события → заказы-наряды (`mZn`, 26 полей) → машины и заезды (`mVeh`). Считает парк, заезды, возвраты (три уровня строгости, окна 7/30 суток, включая разрез по АРМ подписи ДЭНТ на выбытии), фазы наряда, хвост незакрытого, износ по счётчику (норма по корзинам + выбивающиеся машины), план/факт трудозатрат, материалы (ABC), качество учёта, заявку в 1С. Версия кода 2.13 (17.09.2026): возвраты в разрезе АРМ подписи ДЭНТ, блок наработки переписан.
@@ -589,3 +589,41 @@ CONTENT-слой части «Техника» отчёта МТО (слайды
 - Назначение: все ISO-недели данных по дате создания (запасной путь, если yearWeek в книге мёртв).
 - Вход: нет. Выход: Variant-массив строк «неделя|».
 - Побочные эффекты: EnsureZn.
+
+## Дополнения 29.09.2026 (код v2.14)
+
+### IsUnplanned(znType As String) : Boolean
+- Назначение: вид воздействия = `REPORT/UNPLANNED_TYPE` (по умолчанию «Внеплановый ремонт»). База возвратов, Парето, хроник, износа, «год к году» (задача 8.7).
+- Побочные эффекты: кэш значения ключа в модуле.
+
+### VehLab(vn As String) : String
+- Назначение: подпись машины в поимённых списках — `ts` («номер + группа + модель»), иначе гаражный номер (8.21).
+
+### DoneDate(z) : Double (private)
+- Назначение: дата завершения наряда для возвратов: `Z_LASTST` (max `status_date`), иначе `zn_closed`, иначе 0 — наряд не база пары.
+
+### AutoLines(slideNo As Long) : String
+- Назначение: автовыводы по правилам для слайдов 1, 5–8 — строки «уровень<TAB>текст» через vbLf (crit/warn/good/info). Мнение по слайду без ИИ и сырьё для «Главное за неделю».
+- Побочные эффекты: ошибка правила не бросается — предупреждение в журнал, пустая строка.
+
+### BuildPhasesByType() : String
+- Назначение: `{{BLOCK_PHASES_ZNTYPE}}` — медианы трёх фаз наряда по виду воздействия, YTD (8.14).
+
+### Изменены
+- `EnsureZn`: поля `Z_LASTST`, `Z_SEKTOR`, `Z_TS`; словарь `mVehTs`.
+- `RetKey`: база `IsUnplanned`, уровень 2 = уровень 1.
+- `RetPairs`: отсчёт от `DoneDate`; пара и YTD — по возвратному наряду.
+- `EnsureRet`: знаменатели итогов YTD; второй проход окна 7 → `mRetSrc7`, `mFailNumM7/W7`.
+- `RetArmCollect(…, Optional winDays)`, `BuildRetArm(Optional winDays)`, `BuildRetArmCut(cut, title, topN, Optional winDays)` (cut 4 — сектор), `BuildRetMonth(Optional winDays)`, `BuildRetWeek(Optional winDays)`.
+- `BuildRetKpi`: плитки «по подкатегории / по группе» × «7 / 30 суток» + медиана.
+- `IsoYearWeek`: ISO-8601 через четверг недели (без `DatePart`).
+- `ZoneReportWeek`: учитывает явный `REPORT/WEEK` (номер или ГГГГНН).
+- `FillZonePlaceholders`: `modMain.ShowProgress` перед слайдами 1, 5–8; пары `BLOCK_RET_*` / `BLOCK_RET_*_7`, `BLOCK_RET_ARM_SEC(_7)`, `BLOCK_PHASES_ZNTYPE`.
+
+## Дополнения 30.09.2026 (код v2.15)
+
+- `IsNoSignType(znType)` — «Обслуживание при выпуске» / Omnicomm: подпись не положена.
+- `HangAt(z, we)` — единое правило «висит»: создан до `we`, не закрыт к `we`, не вид без подписи, статус не «Закрыт». Используют `Slide1Series`, `BuildZnTypeFlowHang`, `BuildHangByStatus`, `BuildHangStatusSpecial`, `OpenOverMonth`.
+- `HangExcluded`, `HangExclNote` (private) — число исключённых правилом и строка пояснения.
+- `AddIv`, `UnionHours`, `UnionByKey`, `PeriodBounds`, `MaxPos` (private) — часы по машине как объединение интервалов с обрезкой периодом; используют `BuildAging`, `BuildChronics`, `BuildDownVsHours`.
+- Изменены: `BuildPlanFact` (отсечка > `PLANFACT_MAX_H` = 720 ч), `RetArmCollect`/`BuildRetArm`/`BuildRetArmCut` (две группы: с планшета / не с планшета), `Slide1Series` (медиана «приёмка → выбытие», возвраты 7 по подкатегории), `RetCount7` (по подкатегории), `BuildKpiFleet` («ТС по ЗН»), список износа (наработка полным числом).
