@@ -1,14 +1,14 @@
 # Служебный файл install\install.ps1 - состояние последнего успешного релиза.
 # Руками не править: отсюда берётся ответ на вопрос «менялись ли исходники».
-version 8.1.12
-digest a45f3bf82e2d220338e9770dd852e536
+version 8.1.13
+digest 0a69e416f96a7f31b0f72ae4d4db105b
 file src/vba/modAggregate.bas 6E701973B32F50F176EB23F9F075AA3F
 file src/vba/modAIGateway.bas 326ACCDCC53035229FE4922FDDB88F58
 file src/vba/modColor.bas 35CB06FF36A3AE0ED0F0B286ABB7828F
-file src/vba/modContentDisc.bas B38DC4812593C395E8C0A2E027945446
-file src/vba/modContentMTO.bas 4FC4FA7D9C24DB6E6933652A4CEB7594
-file src/vba/modContentZone.bas 0C02A2EA354F913E307A93BB1A1E9E49
-file src/vba/modHTMLEngine.bas 3E618D3701239AC0DBA87706A8903DA5
+file src/vba/modContentDisc.bas F1017363394245AE16DA7F96C24F32D8
+file src/vba/modContentMTO.bas 005835546B296C59EC8057C12E187581
+file src/vba/modContentZone.bas 20BEC937C666196B35A02970383213F1
+file src/vba/modHTMLEngine.bas 387D70C07D694AC23EFF229B0FF20DC2
 file src/vba/modLog.bas D48B98B276747EC709897EF7CE88C7AA
 file src/vba/modMain.bas 8BCBB00A245B7DF89B0A4AD7BD4D2BC2
 file src/vba/modPivotBuilder.bas 9C1CB4D17743ECC21CE3666D8E1D669E
@@ -29,42 +29,50 @@ file src/powerquery/qProf5_Dedup.pq CA064C89D5E5D7FDB43F6AFE41DF993B
 file src/powerquery/qProf6_Groups.pq 238FE2A049014A7350279A6A7983C703
 file src/powerquery/qProf7_Retention.pq 74826B85C168B04B82924652FE43A88B
 file src/powerquery/Query-ImportJSON.pq B8E5A47500BE4C11E2E6F9EA68BF61BE
-file tmp_index.html 60DFBF6BD4D2DA70E229E9088146525A
-file README.md 5AA45334888BDF13257967FB8E82A2CB
+file tmp_index.html 06FE0679B3E4173260114F6843048E67
+file README.md 1F2C1AF63BA63C2FFD6D1C89CC9E1C95
 file docs/archive/ft_Report v1.2.md 723D2916E12460C25ED5723CF183B80B
-file docs/archive/git-sync-v1.0.md 97F577E68147DE68698152D4442A2990
+file docs/archive/git-sync-v1.0.md 6382651AA200B680D13102BB4A574930
 file docs/archive/logs.md B9B75E3147BD140811E2BB605E55E2E7
 file docs/archive/manifest-v6.1.md D36D0478BB0EC17502738E659F815BF1
-file docs/archive/MTO_отчёт_v8.0_раскатка_v1.0.md F717C852AEC776AB38DDC37CA40E31DF
-file docs/archive/MTO_ТЗ_доработка_отчета_v1.6.md B0820EDE4D2FD0C7B917C37D95F80294
+file docs/archive/MTO_отчёт_v8.0_раскатка_v1.0.md 597F850703EA610C87D655CD7C4A127A
+file docs/archive/MTO_ТЗ_доработка_отчета_v1.6.md 11FCB817FC24FD0DF9A8E48AED9ACD94
 file docs/archive/next-steps.md 4D066A61E240718F4D20B0C8F02AE53E
 file docs/archive/run-report-20260909.md 74D96C36096B5FCF76A21CE6AC2915CA
-file docs/archive/task-rep.md DCD4C1E78EA7CA5DD0421273FA9E2920
 file docs/archive/tz_developer_logging_and_release_v1.0.md D5AE027B4BFE2A9E9DD6D1E5789BE81B
 file docs/archive/tz_pq_optimizations_and_e2e_v1.0.md 5EDA5FBBDE061FA6067425AC2E6FF704
 file docs/archive/tz_pq_profile_optimize_v1.0.md A3F846AD7E8C9E9EB14FA89D290C5943
 file docs/archive/tz_Report v1.2.md 063C8153D3C7FDEA75B54181F4194E00
 file docs/archive/tz_Reports2.md 7774DE065C6BAB61214091ADFB674344
-file docs/data.md 168AB7004A080F02C3DD16A86D8962AF
-file docs/index.md F4D93EF962BC419D55737398B19E1D30
+file docs/data.md F3684C3B498E3352A37E7DACDD9A9C84
+file docs/HANDOFF_2026-09-19.md 63177B7E51B6233DCA4485EA8596CC7B
+file docs/index.md 24BABDDC29A94A0E3295A5869813A781
+file docs/MTO_выгрузка_1С_разбор_v1.0.md 975ADA75ED71F45BFAC89D967CE1B8A9
+file docs/MTO_данные_v1.0.md 52784B5589EFB5FBEC089E571ED4CE5A
+file docs/MTO_ревью_отчёта_v1.0.md 66D440FF0D4AD80F1E10F5FD41792EF9
+file docs/my-FT.md F4D206B4AE605FCBED16FBC11F4305FB
 file docs/plans/analysis_loadpackage_hang_v1.0.md 0BF80EDC0F56C0512506DFFB530E33F8
 file docs/plans/audit_kod_i_slaidy_v1.0.md 73EB91292D069A9BF6FAC1972246E852
-file docs/plans/MTO_контракт_шаблона_v1.0.md 1DF8F9F6DBE31E3BFBA7E9E96A8E32BF
+file docs/plans/MTO_контракт_шаблона_v1.0.md EC74B35BC56A1B7B957A38D6D99094CF
 file docs/plans/MTO_ТЗ_правки_шапки_и_слайда1_v1.0.md 2A9716368E862D38D506C0F0940C7053
 file docs/plans/plan_fix_loadpackage_a-c_v1.0.md 7ABF70DB29B77E8F90255167BD30136C
-file docs/plans/task-rep-v2-постановка-разработчику.md 4087E377F6377743EE66EAC872C1CCCC
-file docs/plans/task-rep-v2-часть3-постановка-разработчику.md C293536E4E510AD5F88A393E027D8379
+file docs/plans/task-rep-v2-постановка-разработчику.md 3124DCCA5D9EF672532C0D77E7D2CD57
+file docs/plans/task-rep-v2-часть3-постановка-разработчику.md 67E0B8A7917FBFDAC47F089220BD753D
 file docs/plans/tz_raskladka_slaidov_v1.0.md E111D0EAC7423B45683A51EF15DC5C6E
-file docs/plans/tz_Remzona_Part3_v1.0.md 6F370B4C4B6EF1D4FA4CBF4BADBC78A2
-file docs/presentations/MTO_Презентация_и_блоки_данных_v2.5.md 186077F1E4EB2BCB3D73DBA5A426BC45
+file docs/plans/tz_Remzona_Part3_v1.0.md F1981CAC9E2FD0007545E765B6C2C552
+file docs/plans/tz_vozvraty_arm_i_delta_po_godam_v1.0.md 80B2AE051AC3FB0FF7D878FE451E97DA
+file docs/plans/tz_vozvraty_planshet_v2.0.md D3F364C6B6A33C98829EEE21A013B2AB
+file docs/plans/tz_vozvraty_planshet_v2.8.md 0922703E766BC5299774B14FE5FFB47D
+file docs/presentations/MTO_Презентация_и_блоки_данных_v2.5.md 451769C3DC67542EBDE50C4D0167E195
 file docs/presentations/Презентация и блоки данных (Трек Б) v1.0.md 3D33C698C7F4450586F611F100B98CA1
-file docs/rules.md 291B2B45A542E8751CEE29C5A2B19578
+file docs/rules.md 1DAF876ACCEC0AEF462F2A2365B53ECA
 file docs/runner-guide.md 2305B9D59B518E89822B57BF52C6370C
-file docs/spec.md 5B157C06DB75D764219FC626D498A741
+file docs/spec.md 0470ACF41441088D2805B5038EDB669D
 file docs/specs/brief-data-mto.md 0E7DFD726A8FFB5ACAF553E96BA0CADE
-file docs/specs/pri-json-findings-v1.md BB90964325B0E051E5B85FD8B990A5BA
+file docs/specs/pri-json-findings-v1.md 84FC014C128DC7481E0A6743D26CD065
+file docs/task-rep.md DCD4C1E78EA7CA5DD0421273FA9E2920
 file docs/task-rep-v2.md 8AB8F6891F776B3B5FFF45A35D8FD0F1
-file docs/task-rep-v3.md 3479416E1A25678E87A081148FCD95A3
+file docs/task-rep-v3.md 6D2AAD429003D8BFDBA2626F4FFCA2AB
 file docs/tasks.md 108750AC7DF3815791A280868270072B
 file docs/version-guide.md 31B0E756E274EFFF2755F164905E6D20
 file install/install-v7.1.md 5029B74F81DC07B69D6DD9895385AA43
