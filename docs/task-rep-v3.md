@@ -433,7 +433,7 @@
 
 Поручение владельца: «доработать всё, вопросы закрыть своими ответами». Подробно —
 [`docs/plans/dorabotka_2026-09-29_v1.0.md`](plans/dorabotka_2026-09-29_v1.0.md); чек-лист
-требований — [`docs/my-FT.md`](my-FT.md). **Не компилировалось** — Часть 5 в силе.
+требований — [`docs/plans/chek-list_FT_v1.4.md`](plans/chek-list_FT_v1.4.md). **Не компилировалось** — Часть 5 в силе.
 
 - [x] **10.1. Свёртка истории** — `modRollup`, `tbARCHIVE`, `qRollupUntil`, водяной знак
   `DATA/ROLLUP_UNTIL`; постановка [`tz_svertka_istorii_v1.0.md`](plans/tz_svertka_istorii_v1.0.md).
