@@ -619,3 +619,11 @@ CONTENT-слой части «Техника» отчёта МТО (слайды
 - `IsoYearWeek`: ISO-8601 через четверг недели (без `DatePart`).
 - `ZoneReportWeek`: учитывает явный `REPORT/WEEK` (номер или ГГГГНН).
 - `FillZonePlaceholders`: `modMain.ShowProgress` перед слайдами 1, 5–8; пары `BLOCK_RET_*` / `BLOCK_RET_*_7`, `BLOCK_RET_ARM_SEC(_7)`, `BLOCK_PHASES_ZNTYPE`.
+
+## Дополнения 30.09.2026 (код v2.15)
+
+- `IsNoSignType(znType)` — «Обслуживание при выпуске» / Omnicomm: подпись не положена.
+- `HangAt(z, we)` — единое правило «висит»: создан до `we`, не закрыт к `we`, не вид без подписи, статус не «Закрыт». Используют `Slide1Series`, `BuildZnTypeFlowHang`, `BuildHangByStatus`, `BuildHangStatusSpecial`, `OpenOverMonth`.
+- `HangExcluded`, `HangExclNote` (private) — число исключённых правилом и строка пояснения.
+- `AddIv`, `UnionHours`, `UnionByKey`, `PeriodBounds`, `MaxPos` (private) — часы по машине как объединение интервалов с обрезкой периодом; используют `BuildAging`, `BuildChronics`, `BuildDownVsHours`.
+- Изменены: `BuildPlanFact` (отсечка > `PLANFACT_MAX_H` = 720 ч), `RetArmCollect`/`BuildRetArm`/`BuildRetArmCut` (две группы: с планшета / не с планшета), `Slide1Series` (медиана «приёмка → выбытие», возвраты 7 по подкатегории), `RetCount7` (по подкатегории), `BuildKpiFleet` («ТС по ЗН»), список износа (наработка полным числом).

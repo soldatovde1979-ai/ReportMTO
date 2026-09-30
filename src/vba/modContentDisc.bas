@@ -1,6 +1,8 @@
 Attribute VB_Name = "modContentDisc"
 ' modContentDisc - CONTENT-слой части «Дисциплина» (слайды 2-4) отчёта МТО.
 '
+' Версия 1.8 от 30.09.2026: база слайда 4 и статистики подписания - без видов, которым
+'   подпись не положена (Обслуживание при выпуске, Omnicomm): InBase, NoSignNote.
 ' Версия 1.7 от 29.09.2026: {{BLOCK_HISTORY_DENT}} / {{BLOCK_HISTORY_DGM}} -
 '   помесячный «% планшета» на всю глубину (+ AutoLines - автовыводы слайдов 2-4): архив свёртки tbARCHIVE (modRollup)
 '   плюс живые события. Живые события старше водяного знака свёртки не считаются,
@@ -165,7 +167,7 @@ Private Sub EnsureDisc()
 
     Dim n As Long, r As Long
     n = modAggregate.RowCount()
-    mEvRows = n
+    mEvRows = 0
     mEvUnsigned = 0
 
     For r = 1 To n
@@ -199,7 +201,12 @@ Private Sub EnsureDisc()
             isAcc = (InStr(1, rf, "приемке", vbTextCompare) > 0)
             signed = (arm = "ПК" Or arm = "ПЛАНШЕТ")
             tab1 = (arm = "ПЛАНШЕТ")
-            If Not signed Then mEvUnsigned = mEvUnsigned + 1
+            ' v1.8: события видов без подписи (Обслуживание при выпуске, Omnicomm) в долю
+            ' «НЕ ПОДПИСАНО» не идут - им подпись не положена (решение владельца 30.09.2026).
+            If Not modContentZone.IsNoSignType(CStr(e(E_TYPE))) Then
+                mEvRows = mEvRows + 1
+                If Not signed Then mEvUnsigned = mEvUnsigned + 1
+            End If
 
             Dim fa As Long, ft As Long
             If isG Then
@@ -302,7 +309,10 @@ End Sub
 ' =====================================================================================
 Private Function ZoneOf(ByVal e As Variant) As String
     Dim z As String
-    z = Trim$(CStr(e(E_ZONE)))
+    ' v1.8: неразрывный пробел, табуляция и переводы строки - тоже «пусто». Trim$ их
+    ' не снимает, и в таблице постов появлялась строка без имени с нулями.
+    z = Replace$(Replace$(Replace$(Replace$(CStr(e(E_ZONE)), ChrW$(&HA0), " "), vbTab, " "), vbCr, " "), vbLf, " ")
+    z = Trim$(z)
     If z = "" Then z = NOPOST
     ZoneOf = z
 End Function
@@ -829,7 +839,7 @@ Public Function BuildPeople(ByVal dir As String) As String
         "<th class=""n"" rowspan=""3"">Из них планшет</th>" & _
         "<th class=""n"" rowspan=""3"">Приёмка</th>" & _
         "<th class=""n"" rowspan=""3"">Выбытие</th>" & _
-        "<th class=""n"" rowspan=""3"">Ср. время</th></tr>"
+        "<th class=""n"" rowspan=""3"">Приёмка " & ChrW$(&H2192) & " выбытие, медиана</th></tr>"
     s = s & "<tr><th class=""n"">ПН " & ChrW$(&HB7) & " " & _
         modContentZone.WLab(CLng(wk(3))) & "</th><th></th><th class=""n"">ПН-2 " & _
         ChrW$(&HB7) & " " & modContentZone.WLab(CLng(wk(1))) & "</th><th></th></tr>"
@@ -879,7 +889,7 @@ Public Function BuildPeople(ByVal dir As String) As String
         "Справа - объём и время за отчётную неделю " & modContentZone.WLab(mRw) & ". " & _
         "Порог включения - не менее " & modContentMTO.FmtInt(minRec) & " событий за " & _
         "отчётную неделю; в списке " & modContentMTO.FmtInt(CDbl(pick.Count)) & _
-        " человек. ФИО во внешнюю модель не уходят.")
+        " человек. ФИО во внешнюю модель не уходят. «Приёмка " & ChrW$(&H2192) & " выбытие» - медиана времени между подписями «Готов к приемке» и «Готов к выбытию» по нарядам, выбытие которых сотрудник подписал на отчётной неделе.")
     BuildPeople = s
 End Function
 
@@ -906,9 +916,10 @@ End Function
 Private Function AvgSpan(ByVal pk As String) As String
     AvgSpan = ChrW$(&H2014)
     If Not mPPairs.Exists(pk) Then Exit Function
-    Dim col As Collection, i As Long, sum As Double, cnt As Long
+    Dim col As Collection, i As Long, sum As Double, cnt As Long, spans As Collection, hasM As Boolean
     Set col = mPPairs(pk)
     sum = 0#: cnt = 0
+    Set spans = New Collection
     For i = 1 To col.Count
         Dim pr As Variant, e As Variant, a As Double, l As Double
         pr = Split(CStr(col(i)), Chr$(1))
@@ -921,11 +932,13 @@ Private Function AvgSpan(ByVal pk As String) As String
             End If
             If a > 0# And l >= a Then
                 sum = sum + (l - a) * 24#
+                spans.Add (l - a) * 24#
                 cnt = cnt + 1
             End If
         End If
     Next i
-    If cnt > 0 Then AvgSpan = modContentZone.Hh(sum / cnt)
+    ' v1.8: медиана вместо среднего - одна стоянка на месяц раздувала «среднее» до суток.
+    If cnt > 0 Then AvgSpan = modContentZone.Hh(modContentZone.MedianOf(spans, hasM))
 End Function
 
 ' {{BLOCK_DEPTS_*}} - подразделения дирекции (по образцу BuildPeople, без сотрудников).
@@ -964,7 +977,7 @@ Public Function BuildDepts(ByVal dir As String) As String
         "<th class=""n"" rowspan=""3"">Из них планшет</th>" & _
         "<th class=""n"" rowspan=""3"">Приёмка</th>" & _
         "<th class=""n"" rowspan=""3"">Выбытие</th>" & _
-        "<th class=""n"" rowspan=""3"">Ср. время</th></tr>"
+        "<th class=""n"" rowspan=""3"">Приёмка " & ChrW$(&H2192) & " выбытие, медиана</th></tr>"
     s = s & "<tr><th class=""n"">ПН " & ChrW$(&HB7) & " " & _
         modContentZone.WLab(CLng(wk(3))) & "</th><th></th><th class=""n"">ПН-2 " & _
         ChrW$(&HB7) & " " & modContentZone.WLab(CLng(wk(1))) & "</th><th></th></tr>"
@@ -1022,9 +1035,10 @@ End Function
 Private Function AvgSpanD(ByVal dk2 As String) As String
     AvgSpanD = ChrW$(&H2014)
     If Not mDPairs.Exists(dk2) Then Exit Function
-    Dim col As Collection, i As Long, sum As Double, cnt As Long
+    Dim col As Collection, i As Long, sum As Double, cnt As Long, spans As Collection, hasM As Boolean
     Set col = mDPairs(dk2)
     sum = 0#: cnt = 0
+    Set spans = New Collection
     For i = 1 To col.Count
         Dim pr As Variant, e As Variant, a As Double, l As Double
         pr = Split(CStr(col(i)), Chr$(1))
@@ -1037,11 +1051,13 @@ Private Function AvgSpanD(ByVal dk2 As String) As String
             End If
             If a > 0# And l >= a Then
                 sum = sum + (l - a) * 24#
+                spans.Add (l - a) * 24#
                 cnt = cnt + 1
             End If
         End If
     Next i
-    If cnt > 0 Then AvgSpanD = modContentZone.Hh(sum / cnt)
+    ' v1.8: медиана вместо среднего - одна стоянка на месяц раздувала «среднее» до суток.
+    If cnt > 0 Then AvgSpanD = modContentZone.Hh(modContentZone.MedianOf(spans, hasM))
 End Function
 
 ' {{BLOCK_SIGNSTAT_*}} - разбор всех нарядов дирекции по подписанным статусам.
@@ -1055,7 +1071,7 @@ Public Function BuildSignStat(ByVal dir As String) As String
     Dim k As Variant, e As Variant
     For Each k In mOrd.Keys
         e = mOrd(k)
-        If modContentZone.InYtdOrd(e) Then
+        If InBase(e) Then
             tot = tot + 1#
             Dim aa As String, ll As String, accS As Boolean, levS As Boolean
             aa = CStr(e(ArmField(dir, True)))
@@ -1097,14 +1113,15 @@ Public Function BuildSignStat(ByVal dir As String) As String
     Dim s As String
     s = "<div class=""two-col wide-l""><div><table><thead><tr>" & _
         "<th>Заказ-наряды дирекции</th><th class=""n"">Нарядов</th>" & _
-        "<th class=""n"">Доля</th></tr></thead><tbody>"
+        "<th class=""n"">Доля, % от всех</th></tr></thead><tbody>"
     s = s & "<tr class=""total""><td class=""head"">Всего заказ-нарядов</td><td class=""n"">" & _
         modContentMTO.FmtInt(tot) & "</td><td class=""n"">" & _
         modContentZone.Pc(100#, 1) & "</td></tr>"
     s = s & SsRow("Из них подписаны полностью", full, tot, False)
-    s = s & SsRow("оба статуса с планшета", bothT, full, True)
-    s = s & SsRow("один с планшета, другой с ПК", mixT, full, True)
-    s = s & SsRow("оба статуса с ПК", bothP, full, True)
+    ' v1.8: у вложенных строк база другая - подписанные полностью; пишем это прямо.
+    s = s & SsRow("оба статуса с планшета (% от подписанных полностью)", bothT, full, True)
+    s = s & SsRow("один с планшета, другой с ПК (% от подписанных полностью)", mixT, full, True)
+    s = s & SsRow("оба статуса с ПК (% от подписанных полностью)", bothP, full, True)
     s = s & SsRow("Подписана только «Готов к приемке»", onlyA, tot, False)
     s = s & SsRow("Подписана только «Готов к выбытию»", onlyL, tot, False)
     s = s & "<tr><td><b style=""color:var(--crit)"">Не подписан ни один статус</b></td>" & _
@@ -1133,7 +1150,7 @@ Public Function BuildSignStat(ByVal dir As String) As String
         "различаются АРМ подписей (" & dir & ": " & _
         modContentZone.Pc(modContentZone.SafePct(bothT, full), 1) & " нарядов целиком с " & _
         "планшета). График справа " & ChrW$(&H2014) & " неподписанные статусы в разрезе " & _
-        "возраста наряда от даты создания. Период - с начала года (01.01.2026).")
+        "возраста наряда от даты создания. Период - с начала года (01.01.2026)." & NoSignNote())
     BuildSignStat = s
 End Function
 
@@ -1187,7 +1204,7 @@ Public Function BuildNoSignSplit(ByVal fld As Long, _
     tot = 0#
     For Each k In mOrd.Keys
         e = mOrd(k)
-        If SignedCount(e) = 0 And modContentZone.InYtdOrd(e) Then
+        If SignedCount(e) = 0 And InBase(e) Then
             Dim v As String
             v = Trim$(CStr(e(fld)))
             If v = "" Then v = emptyLab
@@ -1215,13 +1232,42 @@ Public Function BuildNoSignSplit(ByVal fld As Long, _
         "нарядов (" & modContentMTO.FmtInt(tot) & "). Отбор не зависит от дирекции: у " & _
         "наряда без единой подписи нет подписей ни одной дирекции " & ChrW$(&H2014) & _
         " поэтому блок стоит здесь, а не на слайдах ДЭНТ и ДГМ. Период - " & _
-        "с начала года (01.01.2026).")
+        "с начала года (01.01.2026)." & NoSignNote())
     BuildNoSignSplit = s
 End Function
 
 ' =====================================================================================
 ' СЛАЙД 4. Не подписано.
 ' =====================================================================================
+' База слайда 4 и статистики подписания (v1.8): наряд с начала года, которому подпись
+' положена. «Обслуживание при выпуске» и Omnicomm планшетом не подписываются
+' (владелец 30.09.2026) - раньше они давали 64 % «не подписанных вообще».
+Private Function InBase(ByVal e As Variant) As Boolean
+    InBase = False
+    If Not modContentZone.InYtdOrd(e) Then Exit Function
+    If modContentZone.IsNoSignType(CStr(e(E_TYPE))) Then Exit Function
+    InBase = True
+End Function
+
+' Сколько нарядов с начала года исключено из базы как «подпись не положена».
+Private Function NoSignExcluded() As Double
+    Dim k As Variant, e As Variant, c As Double
+    c = 0#
+    For Each k In mOrd.Keys
+        e = mOrd(k)
+        If modContentZone.InYtdOrd(e) Then
+            If modContentZone.IsNoSignType(CStr(e(E_TYPE))) Then c = c + 1#
+        End If
+    Next k
+    NoSignExcluded = c
+End Function
+
+Private Function NoSignNote() As String
+    NoSignNote = " Не входят в базу: " & modContentMTO.FmtInt(NoSignExcluded()) & _
+        " нарядов «Обслуживание при выпуске» и Omnicomm " & ChrW$(&H2014) & _
+        " планшетом они не подписываются по регламенту."
+End Function
+
 Private Function SignedCount(ByVal e As Variant) As Long
     Dim c As Long, f As Variant, i As Long
     f = Array(E_AG, E_LG, E_AD, E_LD)
@@ -1241,7 +1287,7 @@ Public Function BuildKpiUnsigned() As String
     tot = 0#: none = 0#: part = 0#: oldest = 0#
     For Each k In mOrd.Keys
         e = mOrd(k)
-        If modContentZone.InYtdOrd(e) Then
+        If InBase(e) Then
             tot = tot + 1#
             Dim c As Long
             c = SignedCount(e)
@@ -1277,7 +1323,7 @@ Public Function BuildKpiUnsigned() As String
         "«НЕ ПОДПИСАНО» - строки снимка с пустым АРМ, % от всех событий; подписан " & _
         "частично - наряды с 1-3 подписями из 4; самый старый - возраст в сутках " & _
         "самого старого неподписанного наряда от даты создания до конца снимка. " & _
-        "Период - с начала года (01.01.2026).")
+        "Период - с начала года (01.01.2026)." & NoSignNote())
     BuildKpiUnsigned = s & "</div>"
 End Function
 
@@ -1289,7 +1335,7 @@ Private Function UnsignedBy(ByVal fld As Long, ByVal emptyLab As String) As Obje
     Dim k As Variant, e As Variant
     For Each k In mOrd.Keys
         e = mOrd(k)
-        If SignedCount(e) = 0 And modContentZone.InYtdOrd(e) Then
+        If SignedCount(e) = 0 And InBase(e) Then
             Dim v As String
             v = Trim$(CStr(e(fld)))
             If v = "" Then v = emptyLab
@@ -1308,7 +1354,7 @@ Public Function BuildUnsignedAge() As String
     Dim k As Variant, e As Variant
     For Each k In mOrd.Keys
         e = mOrd(k)
-        If SignedCount(e) = 0 And CDbl(e(E_DATE)) > 0# And modContentZone.InYtdOrd(e) Then
+        If SignedCount(e) = 0 And CDbl(e(E_DATE)) > 0# And InBase(e) Then
             Dim a As Double
             a = modContentZone.SnapshotEnd() - CDbl(e(E_DATE))
             If a < 3# Then
@@ -1701,7 +1747,7 @@ Private Function AutoUnsigned() As String
     EnsureDisc
     For Each k In mOrd.Keys
         e = mOrd(k)
-        If modContentZone.InYtdOrd(e) Then
+        If InBase(e) Then
             tot = tot + 1#
             If SignedCount(e) = 0 Then
                 none = none + 1#

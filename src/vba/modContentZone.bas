@@ -1,6 +1,8 @@
 Attribute VB_Name = "modContentZone"
 ' modContentZone - CONTENT-слой части «Техника» (слайды 5-8) отчёта МТО.
 '
+' Версия 2.15 от 30.09.2026: часы простоя и «в ремзоне» - объединение интервалов машины
+'   с обрезкой по периоду (AddIv/UnionHours); разбор отчёта владельца 30.09.2026.
 ' Версия 2.14 от 29.09.2026: AutoLines - автовыводы по правилам для слайдов 1, 5-8
 '   (мнение по слайду без внешнего ИИ и сырьё для «Главное за неделю»);
 '   IsoYearWeek считается через четверг недели (ISO-8601 без DatePart, задача 1.5);
@@ -214,6 +216,9 @@ Private Const NOSECT As String = "(раздел не указан)"
 ' Порог достоверности доли для блока «вид воздействия» (слайд 1): на трёх нарядах
 ' доля висящих - шум, такие виды уходят в хвост таблицы отдельной группой.
 Private Const ZNTYPE_MIN_ROWS As Long = 10
+
+' План против факта (v2.15): больше месяца на наряд - брак поля hourdlit / cost_Trudozatrat.
+Private Const PLANFACT_MAX_H As Double = 720#
 
 ' Порог достоверности для разреза возвратов по АРМ выбытия: на пяти нарядах
 ' доля возвратов - шум, разрыв между группами в такой строке не показывается.
@@ -763,6 +768,63 @@ Public Function IsUnplanned(ByVal znType As String) As Boolean
         mUnplType = Trim$(modMain.GetVariableDef("REPORT/UNPLANNED_TYPE", "Внеплановый ремонт"))
     End If
     IsUnplanned = (StrComp(Trim$(znType), mUnplType, vbTextCompare) = 0)
+End Function
+
+' v2.15 (решение владельца 30.09.2026): «Обслуживание при выпуске» и Omnicomm
+' планшетом НЕ подписываются. Это не ремонт: в «не подписано» и в «висит» они
+' шли как нарушение (Omnicomm «висел» на 100 %: 1 033 из 1 034), хотя им и не
+' положено ни подписи, ни закрытия в ремзоне. Выводятся отдельной строкой.
+Public Function IsNoSignType(ByVal znType As String) As Boolean
+    Dim t As String
+    t = Trim$(znType)
+    IsNoSignType = (StrComp(t, "Обслуживание при выпуске", vbTextCompare) = 0) Or _
+                   (StrComp(t, "Omnicomm", vbTextCompare) = 0)
+End Function
+
+' Статус документа «Закрыт» при пустом zn_closed - ошибка учёта, а не висящий ремонт.
+Private Function IsClosedStatus(ByVal tek As String) As Boolean
+    IsClosedStatus = (Left$(LCase$(Trim$(tek)), 6) = "закрыт")
+End Function
+
+' Наряд ВИСИТ на момент we: создан раньше, к we не закрыт, это ремонт (не вид без
+' подписи) и документ не в статусе «Закрыт». Одно правило для плитки, разрезов,
+' факта шапки и автовыводов (v2.15).
+Public Function HangAt(ByVal z As Variant, ByVal we As Double) As Boolean
+    Dim dt As Double, cl As Double
+    HangAt = False
+    dt = CDbl(z(Z_DATE)): cl = CDbl(z(Z_CLOSED))
+    If dt <= 0# Or dt >= we Then Exit Function
+    If cl > 0# And cl < we Then Exit Function
+    If IsNoSignType(CStr(z(Z_TYPE))) Then Exit Function
+    If IsClosedStatus(CStr(z(Z_TEK))) Then Exit Function
+    HangAt = True
+End Function
+
+' Сколько нарядов, не закрытых к we, исключено правилом HangAt: виды без подписи и
+' статус «Закрыт» без даты закрытия. Для строки-пояснения под блоками.
+Private Sub HangExcluded(ByVal we As Double, ByRef nNoSign As Double, ByRef nClosedSt As Double)
+    Dim k As Variant, z As Variant, dt As Double, cl As Double
+    nNoSign = 0#: nClosedSt = 0#
+    For Each k In mZn.Keys
+        z = mZn(k)
+        dt = CDbl(z(Z_DATE)): cl = CDbl(z(Z_CLOSED))
+        If dt > 0# And dt < we And (cl <= 0# Or cl >= we) Then
+            If IsNoSignType(CStr(z(Z_TYPE))) Then
+                nNoSign = nNoSign + 1#
+            ElseIf IsClosedStatus(CStr(z(Z_TEK))) Then
+                nClosedSt = nClosedSt + 1#
+            End If
+        End If
+    Next k
+End Sub
+
+Private Function HangExclNote(ByVal we As Double) As String
+    Dim a As Double, b As Double
+    HangExcluded we, a, b
+    HangExclNote = " Не считаются висящими: " & modContentMTO.FmtInt(a) & _
+        " нарядов «Обслуживание при выпуске» и Omnicomm (планшетом не подписываются и " & _
+        "в ремзоне не закрываются) и " & modContentMTO.FmtInt(b) & " нарядов со статусом " & _
+        "«Закрыт» без даты закрытия " & ChrW$(&H2014) & " это ошибка учёта, она в реестре качества."
 End Function
 
 ' Подпись машины в поимённых списках: «5-26 Микроавтобус FORD TRANSIT» (поле ts),
@@ -1678,8 +1740,9 @@ Public Function BuildKpiFleet() As String
 
     Dim s As String
     s = "<div class=""kpis"">"
-    s = s & KpiTile("Машин в парке", modContentMTO.FmtInt(CDbl(mVeh.Count)), "", _
-        "уникальных гаражных номеров")
+    ' v2.15: реестра парка в выгрузке нет - это машины, у которых были наряды.
+    s = s & KpiTile("ТС по ЗН", modContentMTO.FmtInt(CDbl(mVeh.Count)), "", _
+        "машин с нарядами за период выгрузки")
     s = s & KpiTile("Заездов за неделю", modContentMTO.FmtInt(visWeek), "", _
         "было " & modContentMTO.FmtInt(visPrev) & " неделей раньше")
     s = s & KpiTile("Заездов пакетом", Pc(SafePct(multi, tot), 1), "", _
@@ -1687,8 +1750,8 @@ Public Function BuildKpiFleet() As String
     s = s & KpiTile("Возраст парка", IIf(hasMed, FmtF(medAge, 1), Dash()) & _
         " <small>лет</small>", "", _
         modContentMTO.FmtInt(CDbl(old15)) & " машин старше 15 лет")
-    s = s & NoteBlk("Плитки слайда 5: машин в парке - уникальные гаражные номера на " & _
-        "конец снимка; заездов за неделю - заезды (наряды одной машины с разрывом не " & _
+    s = s & NoteBlk("Плитки слайда 5: ТС по ЗН - уникальные гаражные номера машин, " & _
+        "у которых были наряды (реестра всего парка в выгрузке нет); заездов за неделю - заезды (наряды одной машины с разрывом не " & _
         "более 12 ч), начавшиеся на отчётной неделе, рядом значение неделей раньше; " & _
         "заездов пакетом - доля заездов из более чем одного наряда; возраст парка - " & _
         "медиана возраста машин от года выпуска до конца снимка, рядом число машин " & _
@@ -1976,7 +2039,7 @@ Private Function WearRows(ByVal meter As Long, ByVal unit As String) As String
     QSortPair rr, nn, 0, m - 1
 
     s = s & MockLabel("Ломаются чаще, чем положено их наработке")
-    s = s & "<table><thead><tr><th>Машина</th><th class=""n"">Наработка, тыс.</th>" & _
+    s = s & "<table><thead><tr><th>Машина</th><th class=""n"">Наработка</th>" & _
         "<th class=""n"">Внеплановых</th><th class=""n"">Норма корзины</th>" & _
         "<th class=""n"">Во сколько раз выше</th><th class=""n"">Возвратов</th>" & _
         "</tr></thead><tbody>"
@@ -1985,7 +2048,8 @@ Private Function WearRows(ByVal meter As Long, ByVal unit As String) As String
     For i = 0 To m - 1
         If MeterBucket(nn(i), meter, b, idx) Then
             s = s & "<tr><td class=""mono"">" & modContentMTO.Esc(VehLab(nn(i))) & "</td>"
-            s = s & "<td class=""n"">" & FmtF(DictVal(src, nn(i)) / 1000#, 0) & "</td>"
+            ' v2.15: полное значение, а не тысячи - моточасы меньше 1 000 печатались «0».
+            s = s & "<td class=""n"">" & modContentMTO.FmtInt(DictVal(src, nn(i))) & "</td>"
             s = s & "<td class=""n"">" & modContentMTO.FmtInt(DictVal(fl, nn(i))) & "</td>"
             s = s & "<td class=""n"">" & FmtF(SafeDiv(sumF(idx), cnt(idx)), 1) & "</td>"
             s = s & "<td class=""n""><span class=""delta up"">" & FmtF(-rr(i), 1) & _
@@ -2133,6 +2197,82 @@ Public Function BuildAgeMatrix() As String
     BuildAgeMatrix = s
 End Function
 
+' =====================================================================================
+' Часы по машине без двойного счёта (v2.15 от 30.09.2026). Раньше часы нарядов машины
+' просто складывались: пересекающиеся наряды одной машины (пакет в одном заезде, наряд,
+' висящий месяц, рядом с короткими) и пары подписей по каждой дирекции давали больше
+' часов, чем было в календаре: 27 610 ч «простоя» за 8 месяцев (~6 000 ч). Теперь
+' интервалы машины объединяются и обрезаются границами периода отчёта.
+' =====================================================================================
+Private Sub AddIv(ByVal d As Object, ByVal key As String, ByVal a As Double, ByVal b As Double, _
+                  ByVal lo As Double, ByVal hi As Double)
+    If a <= 0# Or b <= a Then Exit Sub
+    If (b - a) * 24# > MAX_DUR_H Then Exit Sub      ' брак выгрузки, как в DurHours
+    If lo > 0# And a < lo Then a = lo
+    If hi > 0# And b > hi Then b = hi
+    If b <= a Then Exit Sub
+    If Not d.Exists(key) Then d.Add key, New Collection
+    d(key).Add Array(a, b)
+End Sub
+
+' Длина объединения интервалов, часы.
+Private Function UnionHours(ByVal col As Collection) As Double
+    Dim n As Long, i As Long, ks() As Double, vs() As String, ends() As Double
+    Dim curA As Double, curB As Double, tot As Double, a As Double, b As Double
+    UnionHours = 0#
+    If col Is Nothing Then Exit Function
+    n = col.Count
+    If n = 0 Then Exit Function
+    ReDim ks(0 To n - 1)
+    ReDim vs(0 To n - 1)
+    ReDim ends(0 To n - 1)
+    For i = 1 To n
+        ks(i - 1) = CDbl(col(i)(0))
+        ends(i - 1) = CDbl(col(i)(1))
+        vs(i - 1) = CStr(i - 1)
+    Next i
+    QSortPair ks, vs, 0, n - 1
+    curA = ks(0): curB = ends(CLng(vs(0)))
+    tot = 0#
+    For i = 1 To n - 1
+        a = ks(i): b = ends(CLng(vs(i)))
+        If a <= curB Then
+            If b > curB Then curB = b
+        Else
+            tot = tot + (curB - curA)
+            curA = a: curB = b
+        End If
+    Next i
+    tot = tot + (curB - curA)
+    UnionHours = tot * 24#
+End Function
+
+' Словарь «машина -> Collection интервалов» в «машина -> часы».
+Private Function UnionByKey(ByVal d As Object) As Object
+    Dim r As Object, k As Variant
+    Set r = CreateObject("Scripting.Dictionary")
+    For Each k In d.Keys
+        r(CStr(k)) = UnionHours(d(k))
+    Next k
+    Set UnionByKey = r
+End Function
+
+' Границы периода для обрезки интервалов: неделя отчёта или «с начала года».
+Private Sub PeriodBounds(ByVal byWeek As Boolean, ByRef lo As Double, ByRef hi As Double)
+    If byWeek Then
+        lo = CDbl(WeekMonday(ZoneReportWeek()))
+        hi = lo + 7#
+    Else
+        lo = YtdStart()
+        hi = SnapshotEnd()
+    End If
+End Sub
+
+' Самая поздняя НЕнулевая из двух отметок.
+Private Function MaxPos(ByVal a As Double, ByVal b As Double) As Double
+    If a > b Then MaxPos = a Else MaxPos = b
+End Function
+
 Public Function BuildAging() As String
     EnsureVeh
     Dim labs As Variant
@@ -2151,7 +2291,9 @@ Public Function BuildAging() As String
         End If
     Next k
 
-    Dim z As Variant, aD As Double, bD As Double, hh As Double
+    Dim z As Variant, ivs As Object, uh As Object, lo As Double, hi As Double
+    Set ivs = CreateObject("Scripting.Dictionary")
+    PeriodBounds False, lo, hi
     For Each k In mZn.Keys
         z = mZn(k)
         If InYtd(z) Then
@@ -2159,13 +2301,17 @@ Public Function BuildAging() As String
                 i = CohortOf(AgeYears(CDbl(z(Z_MADE))))
                 If i >= 0 Then
                     prt(i) = prt(i) + CDbl(z(Z_PARTS))
-                    aD = CDbl(z(Z_DATE)): bD = CDbl(z(Z_CLOSED))
-                    If aD > 0# And bD > 0# Then
-                        hh = (bD - aD) * 24#
-                        If hh >= 0# And hh <= MAX_DUR_H Then hrs(i) = hrs(i) + hh
-                    End If
+                    AddIv ivs, CStr(z(Z_VEH)), CDbl(z(Z_DATE)), CDbl(z(Z_CLOSED)), lo, hi
                 End If
             End If
+        End If
+    Next k
+    ' v2.15: часы - объединение интервалов машины, без двойного счёта пересечений.
+    Set uh = UnionByKey(ivs)
+    For Each k In uh.Keys
+        If mVeh.Exists(CStr(k)) Then
+            i = CohortOf(AgeYears(CDbl(mVeh(CStr(k))(V_MADE))))
+            If i >= 0 Then hrs(i) = hrs(i) + CDbl(uh(k))
         End If
     Next k
 
@@ -2497,7 +2643,8 @@ Public Function BuildRetKpi() As String
         "дефекта (строже), «по группе» " & ChrW$(&H2014) & " только группы (шире). " & _
         "Возврат относится к периоду <b>возвратного</b> наряда; числитель и знаменатель " & _
         ChrW$(&H2014) & " с начала года. Плитка слайда 1 «Возвратов (7 дн.)» и факт шапки " & _
-        "«ПОВТОРНЫЕ» " & ChrW$(&H2014) & " это «по группе дефекта · 7 суток».")
+        "«ПОВТОРНЫЕ» " & ChrW$(&H2014) & " это «по подкатегории · 7 суток»: главная " & _
+        "метрика; «по группе» шире и дана для сравнения.")
     BuildRetKpi = s & "</div>"
 End Function
 
@@ -2718,12 +2865,14 @@ Private Function RetArmCollect(ByVal cut As Long, ByVal nT As Object, ByVal rT A
                     ck = RetCutKey(z, cut)
                     arm = Trim$(CStr(z(Z_ALEVD)))
                     isRet = src.Exists(CStr(k))
+                    ' v2.15 (ФТ 8.1, владелец 17.09.2026): ДВЕ группы - «есть подпись
+                    ' с планшета» и «нет подписи с планшета». ПК и отсутствие подписи -
+                    ' одно и то же: работу на месте не приняли. Три группы давали строку
+                    ' «подписи нет» из 19 нарядов, и разрыв не считался нигде.
+                    ' nP/rP больше не наполняются: параметры оставлены ради сигнатуры.
                     If arm = "ПЛАНШЕТ" Then
                         AddCnt nT, ck, 1#
                         If isRet Then AddCnt rT, ck, 1#
-                    ElseIf arm = "ПК" Then
-                        AddCnt nP, ck, 1#
-                        If isRet Then AddCnt rP, ck, 1#
                     Else
                         AddCnt nN, ck, 1#
                         If isRet Then AddCnt rN, ck, 1#
@@ -2781,27 +2930,26 @@ Public Function BuildRetArm(Optional ByVal winDays As Long = 30) As String
     s = "<table><thead><tr><th>Подпись ДЭНТ на «Готов к выбытию»</th><th class=""n"">Нарядов</th>" & _
         "<th class=""n"">Из них вернулись</th><th class=""n"">Доля возвратов</th>" & _
         "</tr></thead><tbody>"
-    s = s & ArmRow("Есть, с планшета", a1, b1, "")
-    s = s & ArmRow("Есть, с ПК", a2, b2, "")
-    s = s & ArmRow("Подписи нет", a3, b3, "")
-    s = s & ArmRow("Всего", tot, b1 + b2 + b3, " class=""total""")
+    s = s & ArmRow("Есть подпись с планшета", a1, b1, "")
+    s = s & ArmRow("Нет подписи с планшета (ПК или без подписи)", a3, b3, "")
+    s = s & ArmRow("Всего", tot, b1 + b3, " class=""total""")
     s = s & "</tbody></table>"
 
     Dim verdict As String
     If a1 < RETARM_MIN Or a3 < RETARM_MIN Then
         verdict = "<b>Для вывода мало данных:</b> с планшета " & modContentMTO.FmtInt(a1) & _
-            " нарядов, без подписи ДЭНТ " & modContentMTO.FmtInt(a3) & "; порог " & _
+            " нарядов, не с планшета " & modContentMTO.FmtInt(a3) & "; порог " & _
             CStr(RETARM_MIN) & "."
     Else
         Dim p1 As Double, p3 As Double
         p1 = SafePct(b1, a1): p3 = SafePct(b3, a3)
         If p3 > p1 Then
-            verdict = "Наряды, где подписи ДЭНТ на выбытии <b>нет</b>, возвращаются чаще: " & _
+            verdict = "Наряды, выбытие которых ДЭНТ принял <b>не с планшета</b>, возвращаются чаще: " & _
                 Pc(p3, 1) & " против " & Pc(p1, 1) & " у подписанных с планшета. Разрыв " & _
                 FmtF(p3 - p1, 1) & Nb() & "п.п."
         ElseIf p1 > p3 Then
             verdict = "Наряды, подписанные ДЭНТ <b>с планшета</b>, возвращаются чаще, чем " & _
-                "неподписанные: " & Pc(p1, 1) & " против " & Pc(p3, 1) & ". Гипотеза " & _
+                "остальные: " & Pc(p1, 1) & " против " & Pc(p3, 1) & ". Гипотеза " & _
                 "«приёмка с планшета снижает возвраты» на этих данных не подтверждается."
         Else
             verdict = "Разницы нет: " & Pc(p1, 1) & " в обеих группах."
@@ -2810,8 +2958,9 @@ Public Function BuildRetArm(Optional ByVal winDays As Long = 30) As String
 
     s = s & NoteBlk("Смотрим подпись <b>ДЭНТ</b>, а не ДГМ: из ремонта машину принимает " & _
         "ДЭНТ, и качество приёмки работ определяет их подпись. Подпись ДГМ " & _
-        ChrW$(&H2014) & " это «сдал», а не «принял». Три группы покрывают базу без " & _
-        "остатка: подпись есть с планшета, подпись есть с ПК, подписи нет вовсе. " & _
+        ChrW$(&H2014) & " это «сдал», а не «принял». Две группы покрывают базу без " & _
+        "остатка: подпись с планшета и всё остальное (ПК или подписи нет) " & ChrW$(&H2014) & _
+        " в обоих случаях работу на месте не приняли. " & _
         "База: наряды вида «" & mUnplType & "», завершённые (последняя подпись, иначе " & _
         "дата закрытия), с начала года " & ChrW$(&H2014) & " то же определение, что у " & _
         "плиток возвратов выше. Возврат " & ChrW$(&H2014) & " машина вернулась с той же " & _
@@ -2858,13 +3007,11 @@ Public Function BuildRetArmCut(ByVal cut As Long, ByVal colTitle As String, _
     shown = 0
     s = "<div class=""scroll""><table><thead><tr><th rowspan=""2"">" & _
         modContentMTO.Esc(colTitle) & "</th>" & _
-        "<th class=""grp"" colspan=""2"">Подпись с планшета</th>" & _
-        "<th class=""grp sep-l"" colspan=""2"">Подпись с ПК</th>" & _
-        "<th class=""grp sep-l"" colspan=""2"">Подписи нет</th>" & _
+        "<th class=""grp"" colspan=""2"">С планшета</th>" & _
+        "<th class=""grp sep-l"" colspan=""2"">Не с планшета</th>" & _
         "<th class=""n sep-l"" rowspan=""2"">Разрыв<br>планшет " & ChrW$(&H2212) & _
-        " без подписи</th></tr>" & _
+        " не планшет</th></tr>" & _
         "<tr><th class=""n"">Нарядов</th><th class=""n"">Доля возвратов</th>" & _
-        "<th class=""n sep-l"">Нарядов</th><th class=""n"">Доля возвратов</th>" & _
         "<th class=""n sep-l"">Нарядов</th><th class=""n"">Доля возвратов</th>" & _
         "</tr></thead><tbody>"
     For i = 0 To UBound(labs)
@@ -2876,7 +3023,6 @@ Public Function BuildRetArmCut(ByVal cut As Long, ByVal colTitle As String, _
         a3 = DictVal(nN, lab): b3 = DictVal(rN, lab)
         s = s & "<tr><td>" & modContentMTO.Esc(lab) & "</td>"
         s = s & "<td class=""n"">" & modContentMTO.FmtInt(a1) & "</td>" & PctTd(SafePct(b1, a1), a1 > 0#)
-        s = s & "<td class=""n sep-l"">" & modContentMTO.FmtInt(a2) & "</td>" & PctTd(SafePct(b2, a2), a2 > 0#)
         s = s & "<td class=""n sep-l"">" & modContentMTO.FmtInt(a3) & "</td>" & PctTd(SafePct(b3, a3), a3 > 0#)
         s = s & GapCell(SafePct(b1, a1), SafePct(b3, a3), a1 >= RETARM_MIN And a3 >= RETARM_MIN)
         s = s & "</tr>"
@@ -2888,11 +3034,11 @@ Public Function BuildRetArmCut(ByVal cut As Long, ByVal colTitle As String, _
         "разрыв держится в большинстве строк, дело действительно в приёмке, а если он " & _
         "есть в одной строке и пропадает в остальных " & ChrW$(&H2014) & " дело в том, " & _
         "что чинили и на чём, а не в подписи. <b>Разрыв</b> = доля возвратов при подписи " & _
-        "с планшета минус доля там, где подписи нет; отрицательный (зелёный) " & _
+        "с планшета минус доля там, где подписи с планшета нет; отрицательный (зелёный) " & _
         ChrW$(&H2014) & " у подписанных с планшета возвратов меньше, то есть в пользу " & _
         "приёмки на месте. Разрыв показывается, только если в обеих сравниваемых группах " & _
-        "не меньше " & CStr(RETARM_MIN) & " нарядов " & ChrW$(&H2014) & " иначе это шум. " & _
-        "Строк " & CStr(shown) & ", порядок " & ChrW$(&H2014) & " по объёму базы. " & _
+        "не меньше " & CStr(RETARM_MIN) & " нарядов " & ChrW$(&H2014) & " иначе это шум.")
+    s = s & NoteBlk("Строк " & CStr(shown) & ", порядок " & ChrW$(&H2014) & " по объёму базы. " & _
         "База и отсечение по незакрытому окну " & ChrW$(&H2014) & " как в блоке выше, " & _
         "окно " & CStr(winDays) & " суток (исключено " & modContentMTO.FmtInt(cutOpen) & " нарядов).")
     BuildRetArmCut = s
@@ -3033,21 +3179,21 @@ Public Function BuildChronics() As String
     Set locZn = CreateObject("Scripting.Dictionary")
     Set locHrs = CreateObject("Scripting.Dictionary")
     Set locPrt = CreateObject("Scripting.Dictionary")
-    Dim zz As Variant, aD As Double, bD As Double, hh As Double
+    Dim zz As Variant, ivC As Object, loC As Double, hiC As Double
+    Set ivC = CreateObject("Scripting.Dictionary")
+    PeriodBounds False, loC, hiC
     For Each k In mZn.Keys
         zz = mZn(k)
         If InYtd(zz) Then
             If Len(CStr(zz(Z_VEH))) > 0 Then
                 AddCnt locZn, CStr(zz(Z_VEH)), 1#
                 AddCnt locPrt, CStr(zz(Z_VEH)), CDbl(zz(Z_PARTS))
-                aD = CDbl(zz(Z_DATE)): bD = CDbl(zz(Z_CLOSED))
-                If aD > 0# And bD > 0# Then
-                    hh = (bD - aD) * 24#
-                    If hh >= 0# And hh <= MAX_DUR_H Then AddCnt locHrs, CStr(zz(Z_VEH)), hh
-                End If
+                AddIv ivC, CStr(zz(Z_VEH)), CDbl(zz(Z_DATE)), CDbl(zz(Z_CLOSED)), loC, hiC
             End If
         End If
     Next k
+    ' v2.15: часы в ремзоне - объединение интервалов «создание -> закрытие» машины.
+    Set locHrs = UnionByKey(ivC)
 
     Dim rVis As Object, rHrs As Object, rPrt As Object
     Set rVis = RankBy(names, V_VISITS)
@@ -3981,13 +4127,19 @@ Public Function BuildPlanFact() As String
     Set dN = CreateObject("Scripting.Dictionary")
 
     Dim k As Variant, z As Variant, t As String
-    Dim sumP As Double, sumF As Double, sumN As Double
+    Dim sumP As Double, sumF As Double, sumN As Double, nOut As Double
     For Each k In mZn.Keys
         z = mZn(k)
         If InYtd(z) Then
+            ' v2.15: план или факт больше PLANFACT_MAX_H - брак поля, а не норматив.
+            ' На рабочей выгрузке у «Внепланового ремонта» hourdlit доходил до
+            ' 1 888 ч на наряд в среднем (32,9 млн ч всего), и строка «Все виды»
+            ' показывала -100 %. Такие наряды не считаются и выводятся числом.
+            If CDbl(z(Z_PLAN)) > PLANFACT_MAX_H Or CDbl(z(Z_TRUD)) > PLANFACT_MAX_H Then
+                nOut = nOut + 1#
             ' В расчёт идут только наряды, где ЕСТЬ и план, и факт: иначе вид работ
             ' с пустым планом выглядел бы как «факт превысил план в бесконечность раз».
-            If CDbl(z(Z_PLAN)) > 0# And CDbl(z(Z_TRUD)) > 0# Then
+            ElseIf CDbl(z(Z_PLAN)) > 0# And CDbl(z(Z_TRUD)) > 0# Then
                 t = Trim$(CStr(z(Z_TYPE)))
                 If t = "" Then t = "(вид не указан)"
                 AddCnt dP, t, CDbl(z(Z_PLAN))
@@ -4059,7 +4211,10 @@ Public Function BuildPlanFact() As String
         " из всех за период; иначе вид работ с пустым планом выглядел бы как " & _
         "бесконечное превышение. Сортировка " & ChrW$(&H2014) & " по отклонению, а не " & _
         "по объёму: интересен вид, где норматив мимо, а не вид, которого много. " & _
-        "Период " & ChrW$(&H2014) & " с начала года.")
+        "Период " & ChrW$(&H2014) & " с начала года. <b>Исключено " & _
+        modContentMTO.FmtInt(nOut) & " нарядов</b> с планом или фактом больше " & _
+        CStr(CLng(PLANFACT_MAX_H)) & " ч " & ChrW$(&H2014) & " это брак поля (месяц " & _
+        "работы на один наряд), с ним строка «Все виды» теряла смысл.")
     s = s & NoteBlk("<b>Что это НЕ измеряет.</b> Факт " & ChrW$(&H2014) & " списанные " & _
         "трудозатраты, а не время, которое машина простояла: простой считается по парам " & _
         "подписей и лежит отдельным блоком. Систематическое превышение читается как " & _
@@ -4176,7 +4331,7 @@ Public Function BuildKpiParts() As String
     s = "<div class=""kpis"">"
     s = s & KpiTile("Материалы с начала года", Rub(tot), "", "единственное денежное поле выгрузки")
     s = s & KpiTile("Машин с расходом", modContentMTO.FmtInt(CDbl(n)), "", _
-        "из " & modContentMTO.FmtInt(CDbl(mVeh.Count)) & " в парке")
+        "из " & modContentMTO.FmtInt(CDbl(mVeh.Count)) & " ТС по ЗН")
     s = s & KpiTile("Группа A", modContentMTO.FmtInt(CDbl(aCars)) & " <small>машин</small>", _
         "crit", Pc(SafePct(aSum, tot), 1) & " всех денег")
     s = s & KpiTile("Самая дорогая", "<span class=""mono"" style=""font-size:26px"">" & _
@@ -4547,26 +4702,26 @@ Public Function BuildDownVsHours(ByVal byWeek As Boolean) As String
     Set down = CreateObject("Scripting.Dictionary")
     Set trud = CreateObject("Scripting.Dictionary")
     Set plan = CreateObject("Scripting.Dictionary")
-    Dim k As Variant, z As Variant, veh As String, hasPair As Boolean, j As Long
+    Dim k As Variant, z As Variant, veh As String, j As Long
+    Dim ivD As Object, loD As Double, hiD As Double, accX As Double, levX As Double
+    Set ivD = CreateObject("Scripting.Dictionary")
+    PeriodBounds byWeek, loD, hiD
     For Each k In mZn.Keys
         z = mZn(k)
         If InPeriod(z, byWeek) And Len(CStr(z(Z_VEH))) > 0 Then
             veh = CStr(z(Z_VEH))
-            hasPair = False
-            If CDbl(z(Z_ACCG)) > 0# And CDbl(z(Z_LEVG)) >= CDbl(z(Z_ACCG)) Then
-                AddCnt down, veh, (CDbl(z(Z_LEVG)) - CDbl(z(Z_ACCG))) * 24#
-                hasPair = True
-            End If
-            If CDbl(z(Z_ACCD)) > 0# And CDbl(z(Z_LEVD)) >= CDbl(z(Z_ACCD)) Then
-                AddCnt down, veh, (CDbl(z(Z_LEVD)) - CDbl(z(Z_ACCD))) * 24#
-                hasPair = True
-            End If
-            If hasPair Then
+            ' v2.15: одна пара на наряд (первая приёмка -> последнее выбытие), а не по
+            ' каждой дирекции: раньше простой наряда считался дважды.
+            accX = ZAcc(z)
+            levX = MaxPos(CDbl(z(Z_LEVG)), CDbl(z(Z_LEVD)))
+            If accX > 0# And levX >= accX Then
+                AddIv ivD, veh, accX, levX, loD, hiD
                 AddCnt trud, veh, CDbl(z(Z_TRUD))
                 AddCnt plan, veh, CDbl(z(Z_PLAN))
             End If
         End If
     Next k
+    Set down = UnionByKey(ivD)
 
     Dim labs As Variant, vals As Variant
     TopKeys down, 10, labs, vals
@@ -4604,9 +4759,10 @@ Public Function BuildDownVsHours(ByVal byWeek As Boolean) As String
     ' 17.09.2026: снят HBars - он рисовал колонку «Стояла, ч» той же таблицы
     ' и печатался дважды на слайде (YTD и неделя). Медиана простоя, которая
     ' была в подписи к графику, перенесена в примечание ниже.
-    s = s & NoteBlk("Топ машин по суммарному простою. Стояла - сумма пар «Готов к приемке» -> " & _
-        "«Готов к выбытию» по нарядам машины (пара считается по каждой дирекции отдельно, " & _
-        "возможен двойной счёт дирекций). Списано - cost_Trudozatrat (фактические часы), " & _
+    s = s & NoteBlk("Топ машин по простою. Стояла - время между первой подписью «Готов к " & _
+        "приемке» и последней «Готов к выбытию» по нарядам машины; пересекающиеся наряды " & _
+        "не складываются, а объединяются, время обрезано границами периода - больше " & _
+        "календарных часов периода быть не может. Списано - cost_Trudozatrat (фактические часы), " & _
         "план - hourdlit (плановая длительность). Медиана простоя по машинам выборки - " & Hh(med) & ". Период - " & PerLabel(byWeek) & ".")
     BuildDownVsHours = s
 End Function
@@ -5065,7 +5221,8 @@ Private Sub Slide1Series(ByRef wk As Variant, ByRef opened() As Double, _
         Set medCol(i) = New Collection
         visitsA(i) = DictVal(mVisitWeeks, CStr(wk(i)))
         tabPct(i) = SafePct(DictVal(mSignTab, CStr(wk(i))), DictVal(mSignTot, CStr(wk(i))))
-        ret7(i) = DictVal(mRetNumW7, CStr(wk(i)))
+        ' v2.15: по подкатегории (классификатор дефектов, ФТ п.19) - как главная плитка слайда 6.
+        ret7(i) = DictVal(mFailNumW7, CStr(wk(i)))
         Set vehU(i) = CreateObject("Scripting.Dictionary")
     Next i
 
@@ -5090,22 +5247,21 @@ Private Sub Slide1Series(ByRef wk As Variant, ByRef opened() As Double, _
                             vehU(i).Add CStr(z(Z_VEH)), True
                     End If
                 End If
-                If dt < we Then
-                    If cl <= 0# Or cl >= we Then
-                        hangA(i) = hangA(i) + 1#
-                        If dt < we - 14# Then t14(i) = t14(i) + 1#
-                    End If
+                If HangAt(z, we) Then
+                    hangA(i) = hangA(i) + 1#
+                    If dt < we - 14# Then t14(i) = t14(i) + 1#
                 End If
             End If
             If cl > 0# Then
                 If IsoYearWeek(cl) = CLng(wk(i)) Then closedA(i) = closedA(i) + 1#
             End If
-            ' «Медиана в ремзоне» - полный срок наряда: создание -> закрытие, по
-            ' нарядам, закрытым на этой неделе (определение эталона, k_medzone в
-            ' tools/mockup_v1.0/compute.py). Пара «приёмка -> выбытие» осталась
-            ' отдельной метрикой - гистограмма BLOCK_TIME_HIST и чипы под ней.
-            If cl > 0# And dt > 0# And cl >= dt Then
-                If IsoYearWeek(cl) = CLng(wk(i)) Then medCol(i).Add (cl - dt) * 24#
+            ' v2.15: «Медиана в ремзоне» - по ФТ (task-rep п.19): время нахождения в
+            ' ремзоне, «Готов к приемке» -> «Готов к выбытию», по нарядам, выбывшим на
+            ' этой неделе. Раньше плитка считала «создание -> закрытие» и противоречила
+            ' своему же названию и постановке. Гистограммы BLOCK_TIME_HIST больше нет,
+            ' дубля метрики не возникает.
+            If ac > 0# And lv >= ac Then
+                If IsoYearWeek(lv) = CLng(wk(i)) Then medCol(i).Add (lv - ac) * 24#
             End If
         Next i
     Next k
@@ -5277,10 +5433,10 @@ Public Function BuildZnTypeFlowHang() As String
                 AddCnt dWk, t, 1#
                 sumWk = sumWk + 1#
             End If
-            If cl <= 0# Or cl >= we Then
+            If HangAt(z, we) Then
                 AddCnt dHang, t, 1#
                 sumHang = sumHang + 1#
-            ElseIf cl >= dt Then
+            ElseIf cl > 0# And cl < we And cl >= dt Then
                 If Not dMed.Exists(t) Then dMed.Add t, New Collection
                 dMed(t).Add (cl - dt) * 24#
                 medAll.Add (cl - dt) * 24#
@@ -5358,7 +5514,8 @@ Public Function BuildZnTypeFlowHang() As String
         "на отчётной неделе " & WLab(rw) & ". <b>Всего с начала года</b> " & _
         ChrW$(&H2014) & " наряды вида, созданные с 01.01.2026 до конца отчётной недели; " & _
         "это знаменатель доли. <b>Висит</b> " & ChrW$(&H2014) & " из них без " & _
-        "<code>zn_closed</code> на конец недели. <b>Медиана срока</b> " & _
+        "<code>zn_closed</code> на конец недели, только ремонт." & HangExclNote(we) & _
+        " <b>Медиана срока</b> " & _
         ChrW$(&H2014) & " медиана «создание " & ChrW$(&H2192) & " закрытие» по закрытым " & _
         "нарядам вида. Сортировка " & ChrW$(&H2014) & " по доле висящих: вид, у которого " & _
         "доля в потоке мала, а доля застрявшего велика, и есть затык.")
@@ -5419,8 +5576,8 @@ Public Function BuildHangByStatus() As String
     tot = 0#
     For Each k In mZn.Keys
         z = mZn(k)
-        If CDbl(z(Z_DATE)) > 0# And CDbl(z(Z_DATE)) < we Then
-            If CDbl(z(Z_CLOSED)) <= 0# Or CDbl(z(Z_CLOSED)) >= we Then
+        If HangAt(z, we) Then
+            If True Then
                 t = Trim$(CStr(z(Z_TEK)))
                 ' R6: «Закрыт (Омникомм)» = «Закрыт».
                 If StrComp(t, "Закрыт (Омникомм)", vbTextCompare) = 0 Then t = "Закрыт"
@@ -5446,7 +5603,7 @@ Public Function BuildHangByStatus() As String
     s = s & NoteBlk("Разрез по текущему статусу документа <code>TekStatusPoDoc</code> " & _
         "той же выборки «висит на конец недели»; «Закрыт (Омникомм)» объединён со " & _
         "«Закрыт». Всего " & _
-        modContentMTO.FmtInt(tot) & " ЗН.")
+        modContentMTO.FmtInt(tot) & " ЗН." & HangExclNote(we))
     BuildHangByStatus = s
 End Function
 
@@ -5528,8 +5685,8 @@ Public Function BuildHangStatusSpecial() As String
     totAll = 0#
     For Each k In mZn.Keys
         z = mZn(k)
-        If CDbl(z(Z_DATE)) > 0# And CDbl(z(Z_DATE)) < we Then
-            If CDbl(z(Z_CLOSED)) <= 0# Or CDbl(z(Z_CLOSED)) >= we Then
+        If HangAt(z, we) Then
+            If True Then
                 totAll = totAll + 1#
                 t = Trim$(CStr(z(Z_TEK)))
                 If StrComp(t, S_CANCEL, vbTextCompare) = 0 _
@@ -5907,18 +6064,20 @@ Public Function OpenOverMonth() As Double
     EnsureZn
     Dim k As Variant, cnt As Double
     cnt = 0#
+    ' v2.15: то же правило «висит», что на слайде 1 (HangAt), на конец снимка.
     For Each k In mZn.Keys
-        If CDbl(mZn(k)(Z_CLOSED)) <= 0# Then
+        If HangAt(mZn(k), SnapshotEnd() + 1#) Then
             If SnapshotEnd() - CDbl(mZn(k)(Z_DATE)) > 30# Then cnt = cnt + 1#
         End If
     Next k
     OpenOverMonth = cnt
 End Function
 
-' Повторных заездов с начала года: возвраты по группе дефекта, окно 7 суток.
+' Повторных заездов с начала года: возвраты по подкатегории дефекта, окно 7 суток (v2.15).
 Public Function RetCount7() As Double
+    ' v2.15: по подкатегории, окно 7 суток - то же определение, что на слайде 6.
     EnsureRet
-    RetCount7 = CDbl(mRetTot7)
+    RetCount7 = CDbl(mFailTot7)
 End Function
 
 Public Function SnapFrom() As Double
@@ -6031,7 +6190,7 @@ Private Function AutoSlide1() As String
                 modContentMTO.FmtInt(hangA(c)) & " против " & modContentMTO.FmtInt(hangA(p)) & ".")
         End If
         If medA(c) > medA(p) * 1.25 And medA(p) > 0# Then
-            s = s & AL("warn", "Медиана срока наряда выросла до " & Hh(medA(c)) & _
+            s = s & AL("warn", "Медиана времени в ремзоне (приёмка - выбытие) выросла до " & Hh(medA(c)) & _
                 " (была " & Hh(medA(p)) & ").")
         End If
     End If
@@ -6042,7 +6201,7 @@ Private Function AutoSlide1() As String
     End If
     If ret7(c) > 0# Then
         s = s & AL("warn", "Возвратов в 7 суток за неделю: " & modContentMTO.FmtInt(ret7(c)) & _
-            " - машины вернулись с той же группой дефекта.")
+            " - машины вернулись с той же подкатегорией дефекта.")
     End If
     If noPost(c) > 0# Then
         s = s & AL("info", "Без поста ремзоны за неделю " & modContentMTO.FmtInt(noPost(c)) & _
