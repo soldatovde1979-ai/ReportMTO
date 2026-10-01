@@ -1,6 +1,18 @@
 Attribute VB_Name = "modContentDisc"
 ' modContentDisc - CONTENT-слой части «Дисциплина» (слайды 2-4) отчёта МТО.
 '
+' Версия 1.9 от 01.10.2026 (владелец, 01.10.2026): слайды 2 и 3 приведены к постановке.
+'   - ВОЗВРАЩЕНА «Таблица 1» (BuildPivot, {{BLOCK_TABLE1_*}}): Всего / ПЛАНШЕТ / ПК /
+'     % планшет по 8 неделям, одна дирекция, ТОЛЬКО СТК и ПРК (REPORT/SLIDE_ZONES). Её
+'     снимали в v1.2 как «дубль матрицы по ремзонам» - матрица другая (строки - ремзоны,
+'     только проценты), и требование «только СТК и ПРК» терялось совсем.
+'   - НОВАЯ «Таблица 2» ({{BLOCK_TABLE2_*}}): тот же вид, но все ремзоны.
+'   - Порядок слайдов 2-3: Таблица 1 -> Таблица 2 -> ремзоны по неделям -> ремзоны за
+'     неделю -> люди -> подразделения -> подписи. Матрица по ремзонам - расшифровка.
+'   - BuildPeople: «% тек. нед.» + три прошлые недели в ОДНОЙ ячейке со стрелкой к
+'     соседней более свежей неделе (вверх - неделя лучше), сортировка от лучшего к
+'     худшему, у трёх лучших и трёх худших пометка, яркая шапка. Отдельных колонок
+'     ПН-1..ПН-3, «Из них планшет», «Приёмка», «Выбытие» больше нет.
 ' Версия 1.8 от 30.09.2026: база слайда 4 и статистики подписания - без видов, которым
 '   подпись не положена (Обслуживание при выпуске, Omnicomm): InBase, NoSignNote.
 ' Версия 1.7 от 29.09.2026: {{BLOCK_HISTORY_DENT}} / {{BLOCK_HISTORY_DGM}} -
@@ -412,6 +424,113 @@ Public Function BuildWeeksTable(ByVal dir As String) As String
     BuildWeeksTable = s
 End Function
 
+' {{BLOCK_TABLE1_*}} / {{BLOCK_TABLE2_*}} - сводная «АРМ по неделям» (постановка владельца:
+' «Таблица 1 только по СТК и ПРК; следующая такая же, но по всем ремзонам»). Строки:
+' Всего / ПЛАНШЕТ / ПК / % планшет; столбцы - последние 8 недель (от старой к свежей) и
+' «Всего»; ОДНА дирекция. Единица счёта - СОБЫТИЕ подписания с известным АРМ.
+' zonesOnly = True  - только ремзоны REPORT/SLIDE_ZONES (по умолчанию СТК+ПРК): Таблица 1;
+' zonesOnly = False - все ремзоны, включая «(пост не указан)»: Таблица 2.
+' Считается из готовых mZoneTot/mZoneTab/mWeekTot/mWeekTab, лишнего прохода по снимку нет.
+Public Function BuildPivot(ByVal dir As String, ByVal zonesOnly As Boolean) As String
+    EnsureDisc
+    Dim wk As Variant
+    wk = modContentZone.WeekWindow(8)
+    Dim n As Long, i As Long
+    n = UBound(wk) + 1
+
+    Dim zones As Object, pz As Variant
+    Set zones = CreateObject("Scripting.Dictionary")
+    For Each pz In Split(Replace$(Trim$(modMain.GetVariableDef("REPORT/SLIDE_ZONES", "СТК+ПРК")), "+", ";"), ";")
+        If Len(Trim$(CStr(pz))) > 0 Then zones(Trim$(CStr(pz))) = True
+    Next pz
+
+    Dim tw() As Double, bw() As Double
+    ReDim tw(0 To n - 1)
+    ReDim bw(0 To n - 1)
+    Dim k As Variant, parts As Variant
+    If zonesOnly Then
+        For Each k In mZoneTot.Keys
+            parts = Split(CStr(k), "|")
+            If CStr(parts(0)) = dir And zones.Exists(CStr(parts(1))) Then
+                For i = 0 To n - 1
+                    If CStr(parts(2)) = CStr(wk(i)) Then
+                        tw(i) = tw(i) + modContentZone.DictVal(mZoneTot, CStr(k))
+                        bw(i) = bw(i) + modContentZone.DictVal(mZoneTab, CStr(k))
+                        Exit For
+                    End If
+                Next i
+            End If
+        Next k
+    Else
+        For i = 0 To n - 1
+            tw(i) = modContentZone.DictVal(mWeekTot, dir & "|" & CStr(wk(i)))
+            bw(i) = modContentZone.DictVal(mWeekTab, dir & "|" & CStr(wk(i)))
+        Next i
+    End If
+
+    Dim hasAny As Boolean, sumT As Double, sumB As Double
+    hasAny = False
+    For i = 0 To n - 1
+        If tw(i) > 0# Then hasAny = True
+        sumT = sumT + tw(i)
+        sumB = sumB + bw(i)
+    Next i
+    If Not hasAny Then BuildPivot = modContentMTO.EmptyNote(): Exit Function
+
+    Dim s As String, r As Long
+    s = "<div class=""scroll""><table><thead><tr><th>Дирекция / АРМ</th>"
+    For i = 0 To n - 1
+        s = s & "<th class=""n"">" & modContentZone.WLab(CLng(wk(i))) & "</th>"
+    Next i
+    s = s & "<th class=""n"">Всего</th></tr></thead><tbody>"
+    For r = 0 To 3
+        Select Case r
+            Case 0
+                s = s & "<tr class=""total""><td class=""head"">" & modContentMTO.Esc(dir) & _
+                    " " & ChrW$(&HB7) & " всего</td>"
+            Case 1
+                s = s & "<tr><td>ПЛАНШЕТ</td>"
+            Case 2
+                s = s & "<tr><td>ПК</td>"
+            Case Else
+                s = s & "<tr><td>% планшет</td>"
+        End Select
+        For i = 0 To n - 1
+            s = s & PivotCell(r, tw(i), bw(i))
+        Next i
+        s = s & PivotCell(r, sumT, sumB) & "</tr>"
+    Next r
+    s = s & "</tbody></table></div>"
+
+    Dim scope As String
+    If zonesOnly Then
+        scope = "только ремзоны <code>REPORT/SLIDE_ZONES</code>: " & _
+            modContentMTO.Esc(Join(zones.Keys, " + "))
+    Else
+        scope = "все ремзоны, включая «" & NOPOST & "»"
+    End If
+    s = s & modContentZone.NoteBlk("События подписания с <code>arm</code> из {ПК, ПЛАНШЕТ} " & _
+        "дирекции <b>" & modContentMTO.Esc(dir) & "</b>, " & scope & ". Недели - последние 8 " & _
+        "по дате статуса (<code>status_date</code>), слева старые, справа свежие. " & _
+        "% планшет = ПЛАНШЕТ / (ПЛАНШЕТ + ПК); «НЕ ПОДПИСАНО» не входит.")
+    BuildPivot = s
+End Function
+
+' Ячейка сводной: r = 0 всего, 1 планшет, 2 ПК, 3 % планшет.
+Private Function PivotCell(ByVal r As Long, ByVal t As Double, ByVal b As Double) As String
+    Select Case r
+        Case 0
+            PivotCell = "<td class=""n"">" & modContentMTO.FmtInt(t) & "</td>"
+        Case 1
+            PivotCell = "<td class=""n"">" & modContentMTO.FmtInt(b) & "</td>"
+        Case 2
+            PivotCell = "<td class=""n"">" & modContentMTO.FmtInt(t - b) & "</td>"
+        Case Else
+            PivotCell = modContentZone.PctTd(modContentZone.SafePct(b, t), t > 0#)
+    End Select
+End Function
+
+' УСТАРЕЛО (v1.9): заменена BuildPivot, не вызывается. Прежнее описание:
 ' {{BLOCK_TABLE1_*}} - Таблица 1 (Б5): события подписания с arm ПК/ПЛАНШЕТ по неделям
 ' окна 8 (неделя даты статуса), ремзоны набора REPORT/SLIDE_ZONES (по умолчанию
 ' «СТК+ПРК», разделитель «+» нормализуется в «;»). Строки: Всего / ПЛАНШЕТ / ПК /
@@ -796,9 +915,11 @@ Public Function BuildPostsTable(ByVal dir As String) As String
     BuildPostsTable = s
 End Function
 
-' {{BLOCK_PEOPLE_*}} - сотрудники дирекции. Слева тренд процента за четыре недели,
-' справа объём и время ЗА ОТЧЁТНУЮ НЕДЕЛЮ: тянуть пять колонок на четыре недели
-' незачем, таблица от этого становится нечитаемой.
+' {{BLOCK_PEOPLE_*}} - сотрудники дирекции (вид по постановке владельца, 01.10.2026):
+' «% тек. нед.» и ТРИ прошлые недели в одной ячейке столбиком. Стрелка у прошлой недели -
+' сравнение с СОСЕДНЕЙ БОЛЕЕ СВЕЖЕЙ неделей: ПН-1 с ПН, ПН-2 с ПН-1, ПН-3 с ПН-2;
+' вверх и зелёная - неделя была лучше, вниз и красная - хуже, «=» - так же; у ПН
+' (текущей) стрелки нет. Сортировка от лучшего к худшему по текущей неделе.
 Public Function BuildPeople(ByVal dir As String) As String
     EnsureDisc
     Dim wk As Variant
@@ -823,33 +944,28 @@ Public Function BuildPeople(ByVal dir As String) As String
     Next k
     If pick.Count = 0 Then BuildPeople = modContentMTO.EmptyNote(): Exit Function
 
+    ' TopKeys отдаёт ключи по убыванию значения: первый - лучший, последний - худший.
     Dim pl As Variant, pv As Variant
     modContentZone.TopKeys pick, 0, pl, pv
+    Dim nP As Long, kMark As Long
+    nP = UBound(pl) + 1
+    kMark = 3
+    If nP < 6 Then kMark = nP \ 2
 
     Dim s As String, i As Long
-    s = "<table><thead><tr><th rowspan=""4"">Сотрудник</th>" & _
-        "<th class=""grp"" colspan=""4"">% планшета по неделям</th>" & _
-        "<th class=""grp sep-l"" colspan=""5"">Отчётная неделя " & _
-        modContentZone.WLab(mRw) & " (" & modContentZone.WeekRange(mRw) & ")</th></tr>"
-    ' Шапка недель лесенкой: ПН-1 в первой строке справа, ПН слева и ПН-2 во второй,
-    ' ПН-3 в третьей (колонки слева направо: ПН, ПН-1, ПН-2, ПН-3).
-    s = s & "<tr><th></th><th class=""n"">ПН-1 " & ChrW$(&HB7) & " " & _
-        modContentZone.WLab(CLng(wk(2))) & "</th><th></th><th></th>" & _
-        "<th class=""n sep-l"" rowspan=""3"">Всего подписей</th>" & _
-        "<th class=""n"" rowspan=""3"">Из них планшет</th>" & _
-        "<th class=""n"" rowspan=""3"">Приёмка</th>" & _
-        "<th class=""n"" rowspan=""3"">Выбытие</th>" & _
-        "<th class=""n"" rowspan=""3"">Приёмка " & ChrW$(&H2192) & " выбытие, медиана</th></tr>"
-    s = s & "<tr><th class=""n"">ПН " & ChrW$(&HB7) & " " & _
-        modContentZone.WLab(CLng(wk(3))) & "</th><th></th><th class=""n"">ПН-2 " & _
-        ChrW$(&HB7) & " " & modContentZone.WLab(CLng(wk(1))) & "</th><th></th></tr>"
-    s = s & "<tr><th></th><th></th><th></th><th class=""n"">ПН-3 " & _
-        ChrW$(&HB7) & " " & modContentZone.WLab(CLng(wk(0))) & "</th></tr></thead><tbody>"
+    s = "<table class=""ppl""><thead><tr><th>Сотрудник</th>" & _
+        "<th class=""n"">% тек. нед.<br>" & modContentZone.WLab(mRw) & "</th>" & _
+        "<th>Прошлые недели<br>ПН-1 " & ChrW$(&HB7) & " ПН-2 " & ChrW$(&HB7) & " ПН-3</th>" & _
+        "<th class=""n"">Подписей за неделю</th>" & _
+        "<th class=""n"">Приёмка " & ChrW$(&H2192) & " выбытие, медиана</th></tr></thead><tbody>"
 
     For i = 0 To UBound(pl)
         Dim emp As String
         emp = CStr(pl(i))
-        s = s & "<tr><td class=""head"">" & modContentMTO.Esc(emp) & "</td>"
+        s = s & "<tr><td class=""head"">" & modContentMTO.Esc(emp)
+        If i < kMark Then s = s & "<span class=""rk"">" & modContentZone.Pill("good", "лучший") & "</span>"
+        If i >= nP - kMark Then s = s & "<span class=""rk"">" & modContentZone.Pill("crit", "худший") & "</span>"
+        s = s & "</td>"
         Dim j As Long
         Dim pj(0 To 3) As Double, hj(0 To 3) As Boolean
         For j = 0 To 3
@@ -860,37 +976,55 @@ Public Function BuildPeople(ByVal dir As String) As String
             pj(j) = modContentZone.SafePct(b, t)
             hj(j) = (t > 0#)
         Next j
-        ' Колонки слева направо: ПН (без стрелки), ПН-1, ПН-2, ПН-3.
+        ' Колонка «% тек. нед.» - последняя неделя окна (индекс 3), без стрелки.
         s = s & modContentZone.PctTd(pj(3), hj(3))
-        s = s & PctArrowTd(pj(2), hj(2), pj(1), hj(1))
-        s = s & PctArrowTd(pj(1), hj(1), pj(0), hj(0))
-        Dim keyP As String, tPrev As Double
-        keyP = dir & "|" & emp & "|" & CStr(modContentZone.PrevWeek(CLng(wk(0))))
-        tPrev = modContentZone.DictVal(mPTot, keyP)
-        s = s & PctArrowTd(pj(0), hj(0), _
-            modContentZone.SafePct(modContentZone.DictVal(mPTab, keyP), tPrev), tPrev > 0#)
-        Dim rk As String, tot As Double, tab1 As Double
-        rk = dir & "|" & emp & "|" & CStr(mRw)
-        tot = modContentZone.DictVal(mPTot, rk)
-        tab1 = modContentZone.DictVal(mPTab, rk)
-        s = s & "<td class=""n sep-l"">" & modContentMTO.FmtInt(tot) & "</td>"
-        s = s & "<td class=""n"">" & modContentMTO.FmtInt(tab1) & "</td>"
+        ' Прошлые недели столбиком: ПН-1 (индекс 2), ПН-2 (1), ПН-3 (0).
+        s = s & "<td class=""stk"">"
+        For j = 2 To 0 Step -1
+            s = s & PplLine("ПН-" & CStr(3 - j), pj(j), hj(j), pj(j + 1), hj(j + 1), CLng(wk(j)))
+        Next j
+        s = s & "</td>"
         s = s & "<td class=""n"">" & modContentMTO.FmtInt( _
-            modContentZone.DictVal(mPAcc, dir & "|" & emp)) & "</td>"
-        s = s & "<td class=""n"">" & modContentMTO.FmtInt( _
-            modContentZone.DictVal(mPLev, dir & "|" & emp)) & "</td>"
+            modContentZone.DictVal(mPTot, dir & "|" & emp & "|" & CStr(mRw))) & "</td>"
         s = s & "<td class=""n"">" & AvgSpan(dir & "|" & emp) & "</td></tr>"
     Next i
     s = s & "</tbody></table>"
 
-    s = s & modContentZone.NoteBlk("% планшета за четыре недели (ПН-3 " & _
-        ChrW$(&H2026) & " ПН) по дате статуса; стрелка " & ChrW$(&H2191) & " / " & _
-        ChrW$(&H2193) & " - рост / падение процента к предыдущей неделе сотрудника. " & _
-        "Справа - объём и время за отчётную неделю " & modContentZone.WLab(mRw) & ". " & _
-        "Порог включения - не менее " & modContentMTO.FmtInt(minRec) & " событий за " & _
-        "отчётную неделю; в списке " & modContentMTO.FmtInt(CDbl(pick.Count)) & _
-        " человек. ФИО во внешнюю модель не уходят. «Приёмка " & ChrW$(&H2192) & " выбытие» - медиана времени между подписями «Готов к приемке» и «Готов к выбытию» по нарядам, выбытие которых сотрудник подписал на отчётной неделе.")
+    s = s & modContentZone.NoteBlk("«% тек. нед.» - % подписей с планшета на отчётной неделе " & _
+        modContentZone.WLab(mRw) & " (" & modContentZone.WeekRange(mRw) & "). Прошлые недели: " & _
+        "ПН-1 = " & modContentZone.WLab(CLng(wk(2))) & ", ПН-2 = " & modContentZone.WLab(CLng(wk(1))) & _
+        ", ПН-3 = " & modContentZone.WLab(CLng(wk(0))) & ". Стрелка у прошлой недели - сравнение с " & _
+        "соседней более свежей: ПН-1 с текущей, ПН-2 с ПН-1, ПН-3 с ПН-2; " & ChrW$(&H25B2) & _
+        " - та неделя была лучше, " & ChrW$(&H25BC) & " - хуже, = - так же.")
+    s = s & modContentZone.NoteBlk("Сортировка - от лучшего к худшему по текущей неделе; пометки " & _
+        "«лучший»/«худший» - у трёх первых и трёх последних. Порог включения - не менее " & _
+        modContentMTO.FmtInt(minRec) & " событий за отчётную неделю; в списке " & _
+        modContentMTO.FmtInt(CDbl(pick.Count)) & " человек. ФИО во внешнюю модель не уходят. " & _
+        "«Приёмка " & ChrW$(&H2192) & " выбытие» - медиана времени между подписями «Готов к " & _
+        "приемке» и «Готов к выбытию» по нарядам, выбытие которых сотрудник подписал на " & _
+        "отчётной неделе.")
     BuildPeople = s
+End Function
+
+' Строка «прошлая неделя» таблицы сотрудников: метка, процент и стрелка к соседней более
+' свежей неделе (q). Вверх - эта неделя лучше, вниз - хуже, «=» - так же. Нет данных за
+' неделю - прочерк без стрелки; нет данных у соседней - процент без стрелки.
+Private Function PplLine(ByVal lab As String, ByVal p As Double, ByVal hasP As Boolean, _
+                         ByVal q As Double, ByVal hasQ As Boolean, ByVal weekNo As Long) As String
+    Dim v As String, a As String
+    If hasP Then v = modContentZone.Pc(p, 0) Else v = modContentZone.Dash()
+    a = ""
+    If hasP And hasQ Then
+        If Abs(p - q) < 0.000000001 Then
+            a = " <span class=""delta flat"">=</span>"
+        ElseIf p > q Then
+            a = " <span class=""delta up"">" & ChrW$(&H25B2) & "</span>"
+        Else
+            a = " <span class=""delta dn"">" & ChrW$(&H25BC) & "</span>"
+        End If
+    End If
+    PplLine = "<div class=""wk"" title=""" & modContentZone.WLab(weekNo) & """><span class=""wl"">" & _
+        lab & "</span><span class=""wv"">" & v & "</span>" & a & "</div>"
 End Function
 
 ' Ячейка процента со стрелкой к предыдущей неделе (Б7): вверх - рост, вниз - падение.
@@ -1552,9 +1686,12 @@ Public Sub FillDiscPlaceholders(ByVal d As Object)
 
     ' Слайды 2 и 3 раскручивают ОДИН показатель - «% подписаний с планшета» - вглубь:
     ' недели -> приёмка против выдачи -> ремзоны -> люди -> подразделения -> подписи.
-    ' Снята «Таблица 1» (BuildBlock1): она повторяла матрицу BLOCK_WEEKS_*, стоявшую
-    ' прямо над ней. Функция BuildBlock1 оставлена в коде невызываемой.
+    ' v1.9: «Таблица 1» (СТК и ПРК) и «Таблица 2» (все ремзоны) возвращены первыми на
+    ' слайдах 2 и 3 (BuildPivot); матрица по ремзонам BLOCK_WEEKS_* - их расшифровка.
+    ' BuildBlock1 заменена BuildPivot и оставлена в коде невызываемой.
     modMain.ShowProgress 78, "слайд 2 из 8: планшет ДЭНТ"
+    d("BLOCK_TABLE1_DENT") = modContentZone.PeriodCap(w8) & BuildPivot("ДЭНТ", True)
+    d("BLOCK_TABLE2_DENT") = modContentZone.PeriodCap(w8) & BuildPivot("ДЭНТ", False)
     d("BLOCK_WEEKS_DENT") = modContentZone.PeriodCap(w8) & BuildWeeksTable("ДЭНТ")
     d("BLOCK_POSTS_DENT") = modContentZone.PeriodCap(wl) & BuildPostsTable("ДЭНТ")
     d("BLOCK_PEOPLE_DENT") = modContentZone.PeriodCap(w4) & BuildPeople("ДЭНТ")
@@ -1565,6 +1702,8 @@ Public Sub FillDiscPlaceholders(ByVal d As Object)
         "Слайд 2 готов: " & Round(Timer - t0, 2) & " c"
 
     modMain.ShowProgress 84, "слайд 3 из 8: планшет ДГМ"
+    d("BLOCK_TABLE1_DGM") = modContentZone.PeriodCap(w8) & BuildPivot("ДГМ", True)
+    d("BLOCK_TABLE2_DGM") = modContentZone.PeriodCap(w8) & BuildPivot("ДГМ", False)
     d("BLOCK_WEEKS_DGM") = modContentZone.PeriodCap(w8) & BuildWeeksTable("ДГМ")
     d("BLOCK_POSTS_DGM") = modContentZone.PeriodCap(wl) & BuildPostsTable("ДГМ")
     d("BLOCK_PEOPLE_DGM") = modContentZone.PeriodCap(w4) & BuildPeople("ДГМ")
