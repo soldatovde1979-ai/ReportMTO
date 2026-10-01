@@ -677,9 +677,11 @@ Text.From([number] ?? "") & "|"
 
 | Плейсхолдер | Назначение | Как получается |
 |---|---|---|
-| `{{BLOCK_WEEKS_DENT}}`, `{{BLOCK_WEEKS_DGM}}` | матрица «% планшета» по ремзонам × 8 недель (события) | `BuildWeeksTable("ДЭНТ"/"ДГМ")` |
+| `{{BLOCK_TABLE1_DENT}}`, `{{BLOCK_TABLE1_DGM}}` | Таблица 1 (v1.9, 01.10.2026): Всего / ПЛАНШЕТ / ПК / % планшет × 8 недель + «Всего», одна дирекция, только ремзоны `REPORT/SLIDE_ZONES` (СТК+ПРК) | `BuildPivot(dir, True)` |
+| `{{BLOCK_TABLE2_DENT}}`, `{{BLOCK_TABLE2_DGM}}` | Таблица 2 (v1.9): тот же вид, все ремзоны | `BuildPivot(dir, False)` |
+| `{{BLOCK_WEEKS_DENT}}`, `{{BLOCK_WEEKS_DGM}}` | матрица «% планшета» по ремзонам × 8 недель (события) — расшифровка Таблиц 1 и 2 | `BuildWeeksTable("ДЭНТ"/"ДГМ")` |
 | `{{BLOCK_POSTS_DENT}}`, `{{BLOCK_POSTS_DGM}}` | площадки за отчётную неделю (единица — наряд) | `BuildPostsTable(dir)` |
-| `{{BLOCK_PEOPLE_DENT}}`, `{{BLOCK_PEOPLE_DGM}}` | сотрудники: тренд % за 4 недели + объём/время за отчётную (порог `REPORT/MIN_RECORDS`) | `BuildPeople(dir)` |
+| `{{BLOCK_PEOPLE_DENT}}`, `{{BLOCK_PEOPLE_DGM}}` | сотрудники (v1.9): «% тек. нед.» + три прошлые недели в одной ячейке со стрелками к более свежей неделе, сортировка от лучшего к худшему, пометки «лучший»/«худший», подписей за неделю, медиана приёмка→выбытие (порог `REPORT/MIN_RECORDS`) | `BuildPeople(dir)` |
 | `{{BLOCK_DEPTS_DENT}}`, `{{BLOCK_DEPTS_DGM}}` | подразделения (`emp_dep`), аналог сотрудников | `BuildDepts(dir)` |
 | `{{BLOCK_SIGNSTAT_DENT}}`, `{{BLOCK_SIGNSTAT_DGM}}` | разбор нарядов по подписанным статусам + неподписанные по возрасту | `BuildSignStat(dir)` |
 | `{{KPI_UNSIGNED}}` | плитки слайда 4: без подписей / событий «НЕ ПОДПИСАНО» / частично / самый старый | `BuildKpiUnsigned` |
@@ -689,6 +691,8 @@ Text.From([number] ?? "") & "|"
 | `{{BLOCK_NOSIGN_TYPE}}` | наряды без единой подписи по `zn_type` (таблица с процентами) | `BuildNoSignSplit(E_TYPE, ...)` |
 | `{{BLOCK_NOSIGN_STATUS}}` | наряды без единой подписи по `TekStatusPoDoc` | `BuildNoSignSplit(E_TEK, ...)` |
 
+> Ревизия 01.10.2026: `BLOCK_TABLE1_*` ВОЗВРАЩЁН и стал первым блоком слайдов 2–3 (владелец:
+> «Таблица 1 только по СТК и ПРК»); добавлен `BLOCK_TABLE2_*`.
 > Ревизия 16.09.2026: `BLOCK_TABLE1_*` снят со слайдов 2–3 (повторял матрицу
 > `BLOCK_WEEKS_*` над собой). `BLOCK_NOSIGN_*_DENT/_DGM` заменены одной парой
 > `BLOCK_NOSIGN_TYPE` / `BLOCK_NOSIGN_STATUS` на слайде 4: отбор от дирекции не
