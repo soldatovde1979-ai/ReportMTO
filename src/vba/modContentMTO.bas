@@ -2,6 +2,12 @@ Attribute VB_Name = "modContentMTO"
 ' modContentMTO - CONTENT SPEC (МТО). Реализует 4 функции по контракту modMain.bas (Core):
 '   BuildPivots, BuildPrompt, ParseAIResponse, BuildPlaceholders(s3, s4, s5).
 '
+' Версия 8.5 от 29.09.2026: мнение по каждому слайду и «Главное за неделю».
+'   Внешний ИИ не ответил - вместо заглушки автовывод по правилам (AutoLines модулей
+'   Zone/Disc), источник подписан под списком. Промпт просит три пункта: наблюдение,
+'   смысл, действие; ИИ получает auto_signals. Период - плашкой на каждом слайде
+'   ({{REPORT_PERIOD_CHIP}}, {{REPORT_WEEK_SHORT}}) и во вкладке ({{REPORT_TITLE_TAG}}).
+'   Явный REPORT/WEEK разбирает modContentZone.ZoneReportWeek для всего отчёта (1.7).
 ' Версия 8.4 от 17.09.2026: обязательное поле «Период» в шапке отчёта.
 '   BuildPeriodLine / {{REPORT_PERIOD}}: отчётная неделя с диапазоном дат, конец недели,
 '   границы «с начала года» (от REPORT/YTD_START до конца снимка), месяц и дата обрыва
@@ -465,6 +471,9 @@ Private Function ReportWeekValue() As Long
 
     Dim raw As String
     raw = Trim$(modMain.GetVariableDef("REPORT/WEEK", "0"))
+    ' v8.5 (задача 1.7): явный REPORT/WEEK теперь разбирает modContentZone.ZoneReportWeek
+    ' для всего отчёта - здесь та же неделя, иначе промпт и слайды снова разойдутся.
+    If modContentZone.ZoneReportWeek() > 0 Then raw = ""
     If raw = "" Or raw = "0" Then
         ' Авто: та же неделя, что на слайдах - последняя завершившаяся к концу снимка
         ' (modContentZone.ZoneReportWeek). Раньше здесь была своя формула «вторая с
@@ -1957,8 +1966,13 @@ Public Function BuildPrompt() As String
         "Ты ведущий аналитик данных. Отчёт состоит из двух частей: слайды 1-4 - дисциплина " & _
         "подписания на планшете (обзор недели, дирекции ДЭНТ и ДГМ, неподписанные наряды), " & _
         "слайды 5-8 - операционка ремзоны (парк и заезды, что ломается и что возвращается, " & _
-        "фазы наряда и хвост незакрытого, материалы и качество учёта). Сформируй краткие " & _
-        "бизнес-выводы (2-3 пункта, каждый одним предложением) для каждого из 8 слайдов. "
+        "фазы наряда и хвост незакрытого, материалы и качество учёта). Сформируй " & _
+        "мнение аналитика по каждому из 8 слайдов - три пункта, каждый одним предложением: " & _
+        "1) главное наблюдение с числом; 2) что это значит - риск или причина; " & _
+        "3) конкретное действие для руководителя ремзоны или дирекции. Значение каждого " & _
+        "ключа - одна строка (не массив), пункты внутри неё разделяй " & _
+        "переводом строки. Блок auto_signals - сигналы, посчитанные правилами по тем же " & _
+        "данным: опирайся на их числа, но формулируй сам. "
     SYSTEM_PROMPT = SYSTEM_PROMPT & _
         "Ничего не вычисляй сам и не делай прогнозов: все числа уже посчитаны, твоя работа - " & _
         "их интерпретация. Не оценивай людей. Не используй данных, которых нет во входном JSON. " & _
@@ -1980,7 +1994,8 @@ Public Function BuildPrompt() As String
                   ",""slide2_dent"":" & slide2 & _
                   ",""slide3_dgm"":" & slide3 & _
                   ",""slide4_unsigned"":" & slide4 & _
-                  ",""part_b_zone"":" & zoneFacts & "}"
+                  ",""part_b_zone"":" & zoneFacts & _
+                  ",""auto_signals"":" & AutoSignalsJson() & "}"
 
     Dim model As String
     model = modMain.GetVariable("AI/MODEL")
@@ -4102,6 +4117,16 @@ Public Function BuildPlaceholders(aiSlide3 As String, aiSlide4 As String, aiSlid
     d("REPORT_WEEK_LABEL") = modContentZone.WeekCaption(rw)
     d("REPORT_LEDE") = BuildLede(rw)
     d("REPORT_PERIOD") = BuildPeriodLine(rw)
+    ' v8.5: период на КАЖДОМ слайде и во вкладке браузера. Раньше он был только в шапке:
+    ' листаешь до слайда 6 - и уже не видно, за какую неделю цифры; а <title> шаблона
+    ' показывал зашитую неделю 2026-13 при любой отчётной.
+    d("REPORT_PERIOD_CHIP") = PeriodChip(rw)
+    d("REPORT_WEEK_SHORT") = Esc("неделя " & modContentZone.WLab(rw) & " " & ChrW$(&HB7) & " " & _
+        Format$(modContentZone.WeekMonday(rw), "dd.mm") & ChrW$(&H2013) & _
+        Format$(modContentZone.WeekMonday(rw) + 6, "dd.mm.yyyy"))
+    d("REPORT_TITLE_TAG") = Esc("Отчёт МТО " & ChrW$(&HB7) & " неделя " & modContentZone.WLab(rw) & _
+        " (" & Format$(modContentZone.WeekMonday(rw), "dd.mm") & ChrW$(&H2013) & _
+        Format$(modContentZone.WeekMonday(rw) + 6, "dd.mm.yyyy") & ")")
     d("FACTS") = BuildFactsRef()
     d("REPORT_FOOTER") = BuildFooter(rw)
 
@@ -4129,10 +4154,38 @@ Public Function BuildPlaceholders(aiSlide3 As String, aiSlide4 As String, aiSlid
         ai("slide3") = aiSlide4
         ai("slide4") = aiSlide5
     End If
+    ' v8.5: мнение есть у КАЖДОГО слайда. Внешний ИИ не ответил по слайду - вместо
+    ' заглушки «ИИ недоступен» ставится автовывод по правилам из чисел этого же слайда
+    ' (modContentZone.AutoLines / modContentDisc.AutoLines). Источник подписан.
+    Dim autoTxt(1 To 8) As String, nAi As Long, nAuto As Long, aiTxt As String
     For i = 1 To 8
-        ' Обратная замена псевдонимов «Сотрудник N» -> ФИО, затем экранирование.
-        d("AI_INSIGHT_SLIDE_" & CStr(i)) = AiList(DeAlias(CStr(ai("slide" & CStr(i)))))
+        autoTxt(i) = AutoFor(i)
     Next i
+    nAi = 0: nAuto = 0
+    For i = 1 To 8
+        aiTxt = CStr(ai("slide" & CStr(i)))
+        If IsAiStub(aiTxt) Then
+            nAuto = nAuto + 1
+            d("AI_INSIGHT_SLIDE_" & CStr(i)) = AutoList(autoTxt(i)) & _
+                "<div class=""src"">автовывод по правилам из чисел слайда " & ChrW$(&H2014) & _
+                " внешний ИИ по этому слайду не ответил</div>"
+        Else
+            nAi = nAi + 1
+            ' Обратная замена псевдонимов «Сотрудник N» -> ФИО, затем экранирование.
+            d("AI_INSIGHT_SLIDE_" & CStr(i)) = AiList(DeAlias(aiTxt)) & _
+                "<div class=""src"">внешний ИИ по готовым числам отчёта</div>"
+        End If
+    Next i
+    If nAuto = 0 Then
+        d("AI_SOURCE") = "внешний ИИ"
+    ElseIf nAi = 0 Then
+        d("AI_SOURCE") = "автовывод по правилам"
+    Else
+        d("AI_SOURCE") = "внешний ИИ или правила"
+    End If
+    d("EXEC_SUMMARY") = ExecSummary(autoTxt)
+    d("EXEC_SOURCE") = "автоматически из чисел отчёта " & ChrW$(&HB7) & _
+        " нажмите на пункт, чтобы открыть его слайд"
 
     modLog.WriteDebug 1, "Формирование отчёта", "BuildPlaceholders", _
         "Готово: " & d.Count & " плейсхолдеров за " & Round(Timer - t0, 2) & " c"
@@ -4150,6 +4203,129 @@ Public Function BuildPlaceholders(aiSlide3 As String, aiSlide4 As String, aiSlid
     End If
 
     Set BuildPlaceholders = d
+End Function
+
+' Плашка периода для закреплённой панели над слайдами: одна строка, видна на любом слайде.
+Private Function PeriodChip(ByVal rw As Long) As String
+    Dim a As Date, snapB As Double, ytdA As Double, s As String
+    a = modContentZone.WeekMonday(rw)
+    snapB = modContentZone.SnapshotEnd()
+    ytdA = modContentZone.YtdStart()
+    s = "<span>отчётная неделя <b>" & Esc(modContentZone.WLab(rw)) & "</b>" & Nbsp() & _
+        Format$(a, "dd.mm.yyyy") & Nbsp() & ChrW$(&H2013) & Nbsp() & Format$(a + 6, "dd.mm.yyyy") & "</span>"
+    If ytdA > 0# And snapB > 0# Then
+        s = s & "<span>с начала года <b>" & Format$(CDate(ytdA), "dd.mm.yyyy") & Nbsp() & _
+            ChrW$(&H2192) & Nbsp() & Format$(CDate(snapB), "dd.mm.yyyy") & "</b></span>"
+    End If
+    If snapB > 0# Then
+        s = s & "<span>данные по <b>" & Format$(CDate(snapB), "dd.mm.yyyy") & "</b></span>"
+    End If
+    PeriodChip = s
+End Function
+
+' Автовыводы слайда i: 2-4 - часть «Дисциплина», остальные - «Техника».
+Private Function AutoFor(ByVal i As Long) As String
+    If i >= 2 And i <= 4 Then
+        AutoFor = modContentDisc.AutoLines(i)
+    Else
+        AutoFor = modContentZone.AutoLines(i)
+    End If
+End Function
+
+' Текст вывода ИИ - заглушка (ответа нет, не распознан, отладочный прогон)?
+Private Function IsAiStub(ByVal t As String) As Boolean
+    Dim x As String
+    x = Trim$(t)
+    IsAiStub = (Len(x) = 0) Or (x = AI_FALLBACK) Or (Left$(x, 9) = "[offline]")
+End Function
+
+' Строки «уровень<TAB>текст» -> список с цветной меткой уровня.
+Private Function AutoList(ByVal lines As String) As String
+    Dim parts As Variant, i As Long, out As String, ln As String, p As Long, sev As String
+    out = ""
+    parts = Split(lines, vbLf)
+    For i = LBound(parts) To UBound(parts)
+        ln = Trim$(CStr(parts(i)))
+        If Len(ln) > 0 Then
+            p = InStr(ln, vbTab)
+            If p > 0 Then
+                sev = Left$(ln, p - 1)
+                ln = Mid$(ln, p + 1)
+            Else
+                sev = "info"
+            End If
+            out = out & "<li>" & SevMark(sev) & Esc(ln) & "</li>"
+        End If
+    Next i
+    If out = "" Then out = "<li>Сигналов по правилам нет " & ChrW$(&H2014) & _
+        " показатели слайда в обычных пределах.</li>"
+    AutoList = "<ul>" & out & "</ul>"
+End Function
+
+Private Function SevMark(ByVal sev As String) As String
+    Select Case sev
+        Case "crit": SevMark = "<span class=""pill crit"">проблема</span> "
+        Case "warn": SevMark = "<span class=""pill warn"">внимание</span> "
+        Case "good": SevMark = "<span class=""pill good"">хорошо</span> "
+        Case Else: SevMark = ""
+    End Select
+End Function
+
+' «Главное за неделю»: до шести сигналов со всех слайдов - сначала проблемы, затем
+' «внимание», затем одно «хорошо». Каждый пункт ведёт на свой слайд (data-s).
+Private Function ExecSummary(ByRef autoTxt() As String) As String
+    Dim topics As Variant, lev As Variant, li As Long, i As Long, j As Long
+    Dim parts As Variant, ln As String, p As Long, sev As String, out As String
+    Dim taken As Long, goodTaken As Long
+    Const MAX_ITEMS As Long = 6
+    topics = Array("", "Обзор недели", "Планшет " & ChrW$(&HB7) & " ДЭНТ", _
+        "Планшет " & ChrW$(&HB7) & " ДГМ", "Не подписано", "Парк и заезды", _
+        "Дефекты и повторы", "Сутки в ремзоне", "Материалы и учёт")
+    lev = Array("crit", "warn", "good")
+    out = "": taken = 0: goodTaken = 0
+    For li = 0 To 2
+        For i = 1 To 8
+            parts = Split(autoTxt(i), vbLf)
+            For j = LBound(parts) To UBound(parts)
+                ln = Trim$(CStr(parts(j)))
+                p = InStr(ln, vbTab)
+                If p > 0 And taken < MAX_ITEMS Then
+                    sev = Left$(ln, p - 1)
+                    If sev = CStr(lev(li)) And Not (sev = "good" And goodTaken >= 1) Then
+                        out = out & "<li class=""" & sev & """ data-s=""" & CStr(i) & """><i>слайд " & _
+                            CStr(i) & " " & ChrW$(&HB7) & " " & Esc(CStr(topics(i))) & "</i>" & _
+                            Esc(Mid$(ln, p + 1)) & "</li>"
+                        taken = taken + 1
+                        If sev = "good" Then goodTaken = goodTaken + 1
+                    End If
+                End If
+            Next j
+        Next i
+    Next li
+    If out = "" Then out = "<li>Сигналов нет " & ChrW$(&H2014) & " показатели недели в обычных пределах.</li>"
+    ExecSummary = "<ul>" & out & "</ul>"
+End Function
+
+' Автовыводы всех слайдов для промпта: ИИ получает их как подсказки с готовыми числами
+' (у части «Техника» собственных фактов в промпте мало).
+Private Function AutoSignalsJson() As String
+    Dim i As Long, j As Long, parts As Variant, ln As String, p As Long, s As String, arr As String
+    s = "{"
+    For i = 1 To 8
+        parts = Split(AutoFor(i), vbLf)
+        arr = ""
+        For j = LBound(parts) To UBound(parts)
+            ln = Trim$(CStr(parts(j)))
+            p = InStr(ln, vbTab)
+            If p > 0 Then
+                If arr <> "" Then arr = arr & ","
+                arr = arr & """" & JsonEscape(Left$(ln, p - 1) & ": " & Mid$(ln, p + 1)) & """"
+            End If
+        Next j
+        If i > 1 Then s = s & ","
+        s = s & """slide" & CStr(i) & """:[" & arr & "]"
+    Next i
+    AutoSignalsJson = s & "}"
 End Function
 
 ' Обязательное поле «Период» в шапке отчёта. Четыре значения, каждое с конкретикой:

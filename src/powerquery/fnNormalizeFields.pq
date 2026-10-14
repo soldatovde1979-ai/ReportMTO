@@ -4,6 +4,9 @@
 // Вход: таблица после разворачивания JSON. Выход: та же таблица + postN + yearWeek + dateWeek +
 // dateMonth + isSigned, с типами.
 //
+// v8 (29.09.2026): yearWeek и dateWeek - настоящая ISO-8601 неделя (год четверга),
+//   как в VBA modContentZone.IsoYearWeek (задача 1.5 docs/task-rep-v3.md).
+//
 // v7 (09.09.2026), задача T1 ТЗ v1.2 — три вычисляемых поля:
 //   dateWeek  = Year(date)*100 + WeekOfYear(date, Monday) — ось по дате создания наряда
 //               для строк без status_date (у них yearWeek = null, слайд 4 и «статистика
@@ -93,12 +96,23 @@
 
         // N-3: компоненты даты статуса. Пустой status_date (строки «НЕ ПОДПИСАНО») -> null:
         // такие строки не попадают в недельные/месячные оси (решение владельца процесса).
+        // v8 (29.09.2026, задача 1.5): настоящая ISO-8601 неделя. Date.WeekOfYear(_, Day.Monday)
+        // считает неделей 1 ту, куда попало 1 января, и на границе года расходился с VBA
+        // (modContentZone.IsoYearWeek) на единицу. ISO: неделя принадлежит году своего
+        // четверга; поэтому и year_status в вычисляемой ветке - ISO-год (он нужен только
+        // для ключа yearWeek, календарный год нигде не читается).
+        IsoThursday = (st as datetime) as date =>
+            let d = DateTime.Date(st) in Date.AddDays(d, 3 - Date.DayOfWeek(d, Day.Monday)),
+        IsoYear = (st as datetime) as number => Date.Year(IsoThursday(st)),
+        IsoWeek = (st as datetime) as number =>
+            let th = IsoThursday(st)
+            in  Number.IntegerDivide(Duration.Days(th - #date(Date.Year(th), 1, 1)), 7) + 1,
         StatusPart = (st as nullable datetime, part as text) as nullable number =>
             if st = null then null
             else if part = "day"   then Date.Day(st)
             else if part = "month" then Date.Month(st)
-            else if part = "year"  then Date.Year(st)
-            else Date.WeekOfYear(st, Day.Monday),   // ISO-8601: неделя с понедельника
+            else if part = "year"  then IsoYear(st)
+            else IsoWeek(st),
 
         WithDay   = Table.AddColumn(Dated,    "day_status",   each StatusPart([status_date], "day"),   Int64.Type),
         WithMonth = Table.AddColumn(WithDay,  "month_status", each StatusPart([status_date], "month"), Int64.Type),
@@ -143,7 +157,7 @@
         // как week_status из 1С; пустой/неразобранный date -> null.
         DateWeekOf = (d as nullable datetime) as nullable number =>
             if d = null then null
-            else try Date.Year(d) * 100 + Date.WeekOfYear(d, Day.Monday) otherwise null,
+            else try IsoYear(d) * 100 + IsoWeek(d) otherwise null,
         DateMonthOf = (d as nullable datetime) as nullable number =>
             if d = null then null
             else try Date.Year(d) * 100 + Date.Month(d) otherwise null,

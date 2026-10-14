@@ -1,7 +1,7 @@
 # modContentMTO
 
 Статус: CLEAN
-Обновлено: 17.09.2026
+Обновлено: 29.09.2026
 
 ## Назначение
 CONTENT SPEC направления МТО. Оркестратор отчёта: реализует 4 контрактные функции Core (`BuildPivots`, `BuildPrompt`, `ParseAIResponse`, `BuildPlaceholders`), шапку/подвал, выводы ИИ, сборку словаря плейсхолдеров; содержимое слайдов 1 и 5–8 отдаёт `modContentZone`, слайдов 2–4 — `modContentDisc`. Плюс старые построители блоков 1–9 (v ≤ 7.4), из `BuildPlaceholders` не вызываемые (постановка §8 — не удалять). Версия 8.4 (17.09.2026): обязательное поле «Период» в шапке отчёта — `BuildPeriodLine` / `{{REPORT_PERIOD}}`.
@@ -84,3 +84,28 @@ CONTENT SPEC направления МТО. Оркестратор отчёта:
 ### DebugCheckPlaceholders(Optional templatePath = "")
 - Назначение: сверка плейсхолдеров: каждый `{{...}}` шаблона есть в словаре и наоборот; результат — в Immediate.
 - Вход: путь шаблона (пусто → `tmp_index.html`). Выход: нет. Побочные эффекты: читает шаблон, собирает словарь.
+
+## Дополнения 29.09.2026 (код v8.5)
+
+### PeriodChip(rw As Long) : String (private)
+- Назначение: `{{REPORT_PERIOD_CHIP}}` — строка периода для закреплённой панели.
+
+### AutoFor(i As Long) : String (private)
+- Назначение: автовыводы слайда `i` (2–4 — `modContentDisc`, остальные — `modContentZone`).
+
+### IsAiStub(t As String) : Boolean (private)
+- Назначение: текст вывода — заглушка (пусто, `AI_FALLBACK`, `[offline]…`).
+
+### AutoList(lines As String) : String, SevMark(sev As String) : String (private)
+- Назначение: строки «уровень<TAB>текст» → `<ul>` с метками «проблема / внимание / хорошо».
+
+### ExecSummary(autoTxt() As String) : String (private)
+- Назначение: `{{EXEC_SUMMARY}}` — до 6 сигналов: проблемы → внимание → одно «хорошо»; `data-s` — номер слайда.
+
+### AutoSignalsJson() : String (private)
+- Назначение: блок `auto_signals` промпта ИИ (сигналы правил по 8 слайдам).
+
+### Изменены
+- `BuildPlaceholders`: `REPORT_PERIOD_CHIP`, `REPORT_WEEK_SHORT`, `REPORT_TITLE_TAG`, `AI_SOURCE`, `EXEC_SUMMARY`, `EXEC_SOURCE`; мнение по слайду — ИИ или автовывод, источник подписан.
+- `BuildPrompt`: мнение из трёх пунктов (наблюдение/смысл/действие), `auto_signals`.
+- `ReportWeekValue`: неделя всегда из `modContentZone.ZoneReportWeek` (явный `REPORT/WEEK` разбирается там).

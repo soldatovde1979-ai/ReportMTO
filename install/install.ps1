@@ -103,6 +103,11 @@ function Read-VersionDescription() {
         if ($l.Trim() -eq "") { continue }
         $out += $l
     }
+    # Шаблонная заготовка, которую install.ps1 сам пишет в VERSION после релиза, —
+    # не описание. Если первая строка после версии — заготовка, описания нет.
+    if ($out.Count -gt 0 -and $out[0].StartsWith("Первая строка этого файла")) {
+        return @()
+    }
     return $out
 }
 

@@ -10,6 +10,9 @@
 //   R-2 - prmSourcePath принимает ПАПКУ: полная пересборка за один проход,
 //         без перечитывания tbDATA (замер: один файл через upsert - 5 ч 12 мин).
 //
+// v9.0 (29.09.2026) - свёртка истории: ретеншн удаляет только строки старше водяного
+//   знака qRollupUntil (история до него уже свёрнута в tbARCHIVE модулем modRollup).
+//
 // v8.2 (13.09.2026) - ТЗ v1.0: однократное чтение папки (буферизация Source)
 //   и очередь файлов по дате/времени из имени (fallback - по Name).
 //
@@ -193,11 +196,21 @@ let
         if KeepWeeks < 1 or MaxDt = null then null
         else Date.AddDays(Date.StartOfWeek(DateTime.Date(MaxDt), Day.Monday), -7 * (KeepWeeks - 1)),
 
+    // v9.0 (29.09.2026) - свёртка истории (modRollup.bas, qRollupUntil.pq). Если на книге
+    // включена свёртка, удалять можно только то, что уже лежит в tbARCHIVE: отсечка
+    // не может быть позже водяного знака. Ключа DATA/ROLLUP_UNTIL нет -> прежнее правило.
+    RollupUntil = qRollupUntil,
+    EffCutoff =
+        if Cutoff = null then null
+        else if RollupUntil = null then Cutoff
+        else if RollupUntil < Cutoff then RollupUntil
+        else Cutoff,
+
     // Строка без распознанной опорной даты СОХРАНЯЕТСЯ. Такая строка не должна появляться
     // (date непуст всегда), но молча удалять то, что не смогли разобрать, нельзя.
     Retained =
-        if Cutoff = null then UpsertedBuf
+        if EffCutoff = null then UpsertedBuf
         else Table.SelectRows(UpsertedBuf, each
-                let a = RowAnchor(_) in a = null or DateTime.Date(a) >= Cutoff)
+                let a = RowAnchor(_) in a = null or DateTime.Date(a) >= EffCutoff)
 in
     Retained

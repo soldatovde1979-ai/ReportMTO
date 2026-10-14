@@ -1,7 +1,7 @@
 # fnNormalizeFields
 
 Статус: CLEAN
-Обновлено: 16.09.2026
+Обновлено: 29.09.2026
 
 ## Назначение
 Power Query Custom Function (CONTENT SPEC, МТО), контракт Core §5.1. Нормализация и типизация таблицы после разворачивания JSON: добавляет `postN`, `yearWeek`, `dateWeek`, `dateMonth`, `isSigned`, типизирует поля. Терпимая к качеству выгрузки: не роняет запрос на русском формате дат, отсутствующих полях `post`/`*_status`/`date`/`arm`.
@@ -17,3 +17,7 @@ Power Query Custom Function (CONTENT SPEC, МТО), контракт Core §5.1.
 ### ToDateTime(v) / StatusPart(st, part) / PostNormalize(p) / DateWeekOf(d) / DateMonthOf(d) / SignedOf(a) (внутренние лямбды)
 - Назначение: терпимое приведение даты (en-US → ru-RU → null); компоненты даты статуса; нормализация поста («стк»→СТК, «прк»→ПРК); неделя/месяц по `date`; признак подписи (`arm` непусто и не «НЕ ПОДПИСАНО»).
 - Вход: соответствующие значения. Выход: см. назначение. Побочные эффекты: нет.
+
+## Дополнения 29.09.2026 (v8)
+
+- `week_status`/`year_status` (вычисляемая ветка) и `dateWeek` — настоящая ISO-8601 неделя (год четверга): `IsoThursday`, `IsoYear`, `IsoWeek` вместо `Date.WeekOfYear(_, Day.Monday)` (задача 1.5).

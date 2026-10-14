@@ -1,7 +1,7 @@
 # Query-ImportJSON
 
 Статус: CLEAN
-Обновлено: 16.09.2026
+Обновлено: 29.09.2026
 
 ## Назначение
 Power Query запрос (CORE, generic ETL-пайплайн, Architecture Core §5/§5.1). Основной импортный запрос: читает выгрузку 1С (файл или папку), нормализует, считает ключи и дельты, сливает с существующей `tbDATA` (upsert), применяет ретеншн и возвращает итоговую таблицу на лист `tbDATA`. Вызывает по фиксированным именам контракта: `fnNormalizeFields`, `fnComputeKey`, `fnDedupByKey`, `fnComputeGroupMetrics`, `fnUpsert`, `qExistingData`, `qKeepWeeks`.
@@ -25,3 +25,7 @@ Power Query запрос (CORE, generic ETL-пайплайн, Architecture Core 
 - Вход: значения/запись/таблица.
 - Выход: nullable datetime / список дат.
 - Побочные эффекты: нет.
+
+## Дополнения 29.09.2026 (v9.0)
+
+- Шаг R-1: `EffCutoff = min(Cutoff, qRollupUntil)`; ключа водяного знака нет — прежнее правило.
