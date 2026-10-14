@@ -71,7 +71,7 @@ Private mLastRolled As Long
 Public Function RollupBeforeLoad() As Long
     Dim keepW As Long, wm As Double, cutoff As Double, maxDt As Double
     Dim lo As ListObject, arr As Variant, hdr As Variant
-    Dim cNum As Long, cDate As Long, cSd As Long, cDir As Long, cRf As Long
+    Dim cNum As Long, cDt As Long, cSd As Long, cDir As Long, cRf As Long
     Dim cArm As Long, cZone As Long, cDep As Long, cEmp As Long, cType As Long, cDelta As Long
     Dim n As Long, r As Long, sd As Double, dt As Double, anc As Double, basis As Double
     Dim grp As Object, ords As Object, key As String, g As Variant, arm As String
@@ -101,7 +101,7 @@ Public Function RollupBeforeLoad() As Long
     arr = lo.DataBodyRange.Value2
     hdr = lo.HeaderRowRange.Value2
     cNum = ColOf(hdr, "number")
-    cDate = ColOf(hdr, "date")
+    cDt = ColOf(hdr, "date")
     cSd = ColOf(hdr, "status_date")
     cDir = ColOf(hdr, "direction")
     cRf = ColOf(hdr, "ready_for")
@@ -111,7 +111,7 @@ Public Function RollupBeforeLoad() As Long
     cEmp = ColOf(hdr, "employee")
     cType = ColOf(hdr, "zn_type")
     cDelta = ColOf(hdr, "deltaHours")
-    If cDate = 0 Or cDir = 0 Or cArm = 0 Then
+    If cDt = 0 Or cDir = 0 Or cArm = 0 Then
         modLog.WriteLogEntry Now, "Предупреждение", "Свёртка", "RollupBeforeLoad", _
             "В tbDATA нет обязательных столбцов date/direction/arm - свёртка пропущена"
         Exit Function
@@ -121,7 +121,7 @@ Public Function RollupBeforeLoad() As Long
     ' Отсечка - тем же правилом, что ретеншн Power Query (R-1).
     maxDt = 0#
     For r = 1 To n
-        anc = Anchor(arr, r, cSd, cDate)
+        anc = Anchor(arr, r, cSd, cDt)
         If anc > maxDt Then maxDt = anc
     Next r
     If maxDt <= 0# Then Exit Function
@@ -139,12 +139,12 @@ Public Function RollupBeforeLoad() As Long
     Set ords = CreateObject("Scripting.Dictionary")
     rolled = 0
     For r = 1 To n
-        anc = Anchor(arr, r, cSd, cDate)
+        anc = Anchor(arr, r, cSd, cDt)
         If anc > 0# Then
             If Int(anc) >= wm And Int(anc) < cutoff Then
                 sd = 0#: dt = 0#
                 If cSd > 0 Then sd = modContentZone.ToSerial(arr(r, cSd))
-                dt = modContentZone.ToSerial(arr(r, cDate))
+                dt = modContentZone.ToSerial(arr(r, cDt))
                 ' Неделя и месяц - по дате подписи, как в недельных осях отчёта;
                 ' у неподписанного события подписи нет - по дате создания наряда.
                 If sd > 0# Then basis = sd Else basis = dt
@@ -352,11 +352,11 @@ End Function
 
 ' Опорная дата строки - как в Query-ImportJSON (R-1): max(status_date, date).
 Private Function Anchor(ByVal arr As Variant, ByVal r As Long, ByVal cSd As Long, _
-                        ByVal cDate As Long) As Double
+                        ByVal cDt As Long) As Double
     Dim s As Double, d As Double
     s = 0#
     If cSd > 0 Then s = modContentZone.ToSerial(arr(r, cSd))
-    d = modContentZone.ToSerial(arr(r, cDate))
+    d = modContentZone.ToSerial(arr(r, cDt))
     If s > d Then Anchor = s Else Anchor = d
 End Function
 
