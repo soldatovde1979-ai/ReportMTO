@@ -131,8 +131,13 @@ tr.total td{background:var(--surface-2);font-weight:600}
 
 /* процентная ячейка: цвет уходит в рамку, фон остаётся фоном темы */
 td.pct{text-align:right;padding:5px 8px}
-td.pct span{display:inline-block;min-width:46px;padding:1px 7px;border:1.5px solid var(--line-strong);
+td.pct>span{display:inline-block;min-width:46px;padding:1px 7px;border:1.5px solid var(--line-strong);
   font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;font-size:13px;text-align:right}
+/* стрелка динамики - НЕ бейдж. Без этого сброса правило td.pct>span выигрывало
+   у .delta по специфичности и рисовало стрелке рамку шириной 46px: рядом с
+   процентом появлялась вторая пустая коробка. Дефект был во всех процентных
+   ячейках отчёта, а не только в таблице по людям. */
+td.pct>span.delta{min-width:0;padding:0;border:0;font-size:12px}
 td.pct.empty{color:var(--muted)}
 table.ppl thead th{background:var(--accent);color:#fff;border-bottom:0;padding:8px 8px;font-weight:600;line-height:1.35}
 :root[data-theme="dark"] table.ppl thead th{color:#14181d}
@@ -142,6 +147,31 @@ table.ppl .wl{color:var(--muted);font-size:10.5px;min-width:34px}
 table.ppl .wv{min-width:38px;text-align:right}
 table.ppl .rk{margin-left:8px}
 @media print{table.ppl thead th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+
+/* таблица «отчётная неделя + стопка предыдущих» (слайды 2-3, блок по людям).
+   Всё выравнивается по центру: значение отчётной недели должно стоять НАПРОТИВ
+   середины стопки, иначе колонки расползаются. nowrap обязателен - без него
+   стрелка не влезает в узкую колонку и переносится под число. */
+table.wk-stack td,table.wk-stack th{vertical-align:middle}
+table.wk-stack td.pct,table.wk-stack td.n,table.wk-stack th.n{white-space:nowrap}
+table.wk-stack td.pct .delta{margin-left:5px}
+/* Прошлые недели - мелким шрифтом: три строки стопки занимают примерно полторы
+   базовые строки таблицы, а не три. Иначе высота таблицы утраивается и список
+   людей перестаёт влезать на слайд. */
+td.stack{padding:1px 8px 1px 0;text-align:right;white-space:nowrap;width:1%}
+/* пара «широкая неделя + стопка» должна читаться как одна колонка: узкую жмём
+   по содержимому (width:1%), у широкой снимаем правый отступ. */
+table.wk-stack td.pct,table.wk-stack td.n{padding-right:2px}
+td.stack .wk{display:flex;align-items:center;justify-content:flex-end;gap:3px;
+  font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;
+  font-size:10px;line-height:12px;height:12px;color:var(--ink-2)}
+td.stack .wk.empty{color:var(--muted)}
+/* слот стрелки фиксированной ширины: числа стоят в колонку и при пустой стрелке */
+td.stack .wk .delta{flex:none;width:8px;text-align:center;font-size:9px;line-height:12px}
+td.stack .wk .v{flex:none}
+th.stack-h{text-align:right;white-space:nowrap}
+th.stack-h .wk{font-family:"IBM Plex Mono",monospace;font-size:9.5px;line-height:12px;
+  height:12px;color:var(--muted);font-weight:400}
 
 .pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-family:"IBM Plex Mono",monospace;
   padding:1px 7px;border:1px solid var(--line-strong);white-space:nowrap}
